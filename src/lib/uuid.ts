@@ -14,3 +14,10 @@ export function requireUuid(value: unknown, field = "id"): string {
   }
   return value;
 }
+
+// Same guard, but for optional query-string filters. Missing / empty values
+// are passed through as null so callers can keep their "no filter" branch.
+export function optionalUuid(value: unknown, field = "id"): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  return requireUuid(value, field);
+}

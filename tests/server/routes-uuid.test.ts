@@ -19,6 +19,9 @@ import { DELETE as clientsDelete, PATCH as clientsPatch } from "@/app/api/client
 import { DELETE as projectsDelete, PATCH as projectsPatch } from "@/app/api/projects/[id]/route";
 import { DELETE as tagsDelete, PATCH as tagsPatch } from "@/app/api/tags/[id]/route";
 import { DELETE as entriesDelete, PATCH as entriesPatch } from "@/app/api/entries/[id]/route";
+import { GET as entriesGet } from "@/app/api/entries/route";
+import { GET as exportCsvGet } from "@/app/api/export/csv/route";
+import { GET as exportPdfGet } from "@/app/api/export/pdf/route";
 
 const MALFORMED_IDS = [
   "not-a-uuid",
@@ -126,5 +129,84 @@ describe("route UUID path param validation", () => {
     const res = await clientsDelete(del("http://x"), { params: { id: unknown } });
     expect(res.status).toBe(404);
     expect((await res.json()).error.code).toBe("NOT_FOUND");
+  });
+});
+
+const UUID_QUERY_KEYS = ["project_id", "client_id", "tag_id"] as const;
+const WELL_FORMED_UNKNOWN = "00000000-0000-4000-8000-000000000000";
+const EXPORT_RANGE = "from=2026-01-01&to=2026-01-08";
+
+function getReq(url: string): Request {
+  return new Request(url, { method: "GET" });
+}
+
+describe("route UUID query filter validation", () => {
+  beforeEach(async () => {
+    await truncateAll();
+    const { session } = await makeUser(`uuidq-${Date.now()}@ex.com`);
+    cookieValue = session.id;
+  });
+
+  describe("GET /api/entries", () => {
+    it.each(UUID_QUERY_KEYS)("returns 400 VALIDATION for malformed %s", async (key) => {
+      for (const bad of MALFORMED_IDS) {
+        const res = await entriesGet(
+          getReq(`http://x/api/entries?${key}=${encodeURIComponent(bad)}`),
+        );
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body).toEqual({
+          error: { code: "VALIDATION", message: expect.stringContaining(key) },
+        });
+      }
+    });
+
+    it("well-formed but unknown UUID filters return 200 with empty list", async () => {
+      for (const key of UUID_QUERY_KEYS) {
+        const res = await entriesGet(
+          getReq(`http://x/api/entries?${key}=${WELL_FORMED_UNKNOWN}`),
+        );
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body).toEqual({ entries: [], next_cursor: null });
+      }
+    });
+
+    it("empty-string filter is treated as absent (200 OK)", async () => {
+      const res = await entriesGet(getReq(`http://x/api/entries?project_id=`));
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe("GET /api/export/csv", () => {
+    it.each(UUID_QUERY_KEYS)("returns 400 VALIDATION for malformed %s", async (key) => {
+      for (const bad of MALFORMED_IDS) {
+        const res = await exportCsvGet(
+          getReq(`http://x/api/export/csv?${EXPORT_RANGE}&${key}=${encodeURIComponent(bad)}`),
+        );
+        expect(res.status).toBe(400);
+        expect((await res.json()).error.code).toBe("VALIDATION");
+      }
+    });
+
+    it("well-formed but unknown UUID returns 200 CSV (header only)", async () => {
+      const res = await exportCsvGet(
+        getReq(`http://x/api/export/csv?${EXPORT_RANGE}&project_id=${WELL_FORMED_UNKNOWN}`),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type") ?? "").toContain("text/csv");
+    });
+  });
+
+  describe("GET /api/export/pdf", () => {
+    it.each(UUID_QUERY_KEYS)("returns 400 VALIDATION for malformed %s", async (key) => {
+      for (const bad of MALFORMED_IDS) {
+        const res = await exportPdfGet(
+          getReq(`http://x/api/export/pdf?${EXPORT_RANGE}&${key}=${encodeURIComponent(bad)}`),
+        );
+        expect(res.status).toBe(400);
+        expect((await res.json()).error.code).toBe("VALIDATION");
+      }
+    });
   });
 });

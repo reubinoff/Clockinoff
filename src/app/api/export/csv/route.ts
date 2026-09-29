@@ -6,6 +6,7 @@ import {
   validateExportRange,
 } from "@/server/services/export";
 import { endOfDayExclusiveInZone, zonedIsoToUtc } from "@/lib/tz";
+import { optionalUuid } from "@/lib/uuid";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,9 +39,9 @@ export async function GET(req: Request): Promise<Response> {
       {
         from: f,
         to: t,
-        project_id: sp.get("project_id"),
-        client_id: sp.get("client_id"),
-        tag_id: sp.get("tag_id"),
+        project_id: optionalUuid(sp.get("project_id"), "project_id"),
+        client_id: optionalUuid(sp.get("client_id"), "client_id"),
+        tag_id: optionalUuid(sp.get("tag_id"), "tag_id"),
         billable: sp.get("billable") == null ? undefined : sp.get("billable") === "true",
       },
       tz,

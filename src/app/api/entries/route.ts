@@ -6,6 +6,7 @@ import {
   type CreateEntryInput,
   type ListEntriesFilters,
 } from "@/server/services/entries";
+import { optionalUuid } from "@/lib/uuid";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,9 +25,9 @@ export async function GET(req: Request): Promise<Response> {
     const filters: ListEntriesFilters = {
       from: parseDateParam(sp.get("from")),
       to: parseDateParam(sp.get("to")),
-      project_id: sp.get("project_id"),
-      client_id: sp.get("client_id"),
-      tag_id: sp.get("tag_id"),
+      project_id: optionalUuid(sp.get("project_id"), "project_id"),
+      client_id: optionalUuid(sp.get("client_id"), "client_id"),
+      tag_id: optionalUuid(sp.get("tag_id"), "tag_id"),
       billable: sp.get("billable") == null ? undefined : sp.get("billable") === "true",
       include_running: sp.get("include_running") !== "false",
       limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,

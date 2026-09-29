@@ -107,3 +107,9 @@ parameters:
 
 These are not exposed as controls in the v1 UI but are respected if you
 call the endpoint directly (for example from a script).
+
+`project_id`, `client_id`, and `tag_id` must be UUIDs. A malformed value
+(for example `?project_id=not-a-uuid`) returns
+`400 { error: { code: "VALIDATION", … } }`. A well-formed but unknown id
+is accepted and simply matches no entries — you get an empty CSV or a
+"No entries" PDF, as with any empty range.

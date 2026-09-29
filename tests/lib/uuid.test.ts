@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isUuid, requireUuid } from "@/lib/uuid";
+import { isUuid, optionalUuid, requireUuid } from "@/lib/uuid";
 
 describe("uuid", () => {
   it("accepts a canonical v4 UUID", () => {
@@ -41,5 +41,28 @@ describe("uuid", () => {
       expect(err).toMatchObject({ code: "VALIDATION", status: 400 });
       expect((err as Error).message).toContain("project_id");
     }
+  });
+
+  describe("optionalUuid", () => {
+    it("passes through null/undefined/empty as null", () => {
+      expect(optionalUuid(null)).toBeNull();
+      expect(optionalUuid(undefined)).toBeNull();
+      expect(optionalUuid("")).toBeNull();
+    });
+
+    it("returns the value when a valid UUID", () => {
+      const v = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
+      expect(optionalUuid(v)).toBe(v);
+    });
+
+    it("throws VALIDATION for malformed values, quoting the field name", () => {
+      try {
+        optionalUuid("not-a-uuid", "tag_id");
+        throw new Error("should have thrown");
+      } catch (err) {
+        expect(err).toMatchObject({ code: "VALIDATION", status: 400 });
+        expect((err as Error).message).toContain("tag_id");
+      }
+    });
   });
 });
