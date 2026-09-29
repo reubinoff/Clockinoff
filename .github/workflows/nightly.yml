@@ -1,0 +1,125 @@
+name: Nightly regression
+
+# Full regression: typecheck + lint + vitest (≥90% coverage gate) + Playwright
+# e2e (register → timer → entries list refresh → CSV/PDF export). This is
+# additive to `ci.yml` — nothing here deploys.
+#
+# Cron: 02:15 UTC daily, i.e. ~05:15 Asia/Jerusalem (04:15 during DST).
+# Kept off-hour so morning triage sees the latest result. Manual runs via
+# the "Run workflow" button (workflow_dispatch) are supported too.
+
+on:
+  schedule:
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  regression:
+    name: Regression (unit + e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: timely
+          POSTGRES_PASSWORD: timely
+          POSTGRES_DB: timely
+        options: >-
+          --health-cmd "pg_isready -U timely -d timely"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgres://timely:timely@localhost:5432/timely
+      DATABASE_URL_TEST: postgres://timely:timely@localhost:5432/timely_test
+      NEXTAUTH_SECRET: nightly-secret-nightly-secret-000000
+      NEXTAUTH_URL: http://localhost:3000
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U timely && break
+            sleep 1
+          done
+
+      - name: Create test database
+        env:
+          PGPASSWORD: timely
+        run: |
+          psql -h localhost -U timely -d postgres -c "CREATE DATABASE timely_test;" || true
+
+      - name: Apply migrations (main + test DB)
+        run: |
+          npm run db:migrate
+          DATABASE_URL=$DATABASE_URL_TEST npm run db:migrate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests with coverage (fails under 90%)
+        run: npm run test:coverage
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage
+          path: coverage
+          if-no-files-found: ignore
+
+      # e2e boots `next start` against the same Postgres, so build first.
+      - name: Build Next.js app
+        env:
+          NODE_ENV: production
+        run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright e2e
+        env:
+          # `next start` runs here in NODE_ENV=production; leave test DB
+          # untouched and use the main dev DB the migrations already prepared.
+          NODE_ENV: production
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-traces
+          path: test-results
+          if-no-files-found: ignore
