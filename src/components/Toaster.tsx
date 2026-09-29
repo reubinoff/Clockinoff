@@ -1,27 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { onToast, type ToastKind } from "@/lib/events";
-
-interface Toast {
-  id: number;
-  kind: ToastKind;
-}
+import { useEffect, useRef, useState } from "react";
+import { onToast, type ToastEvent } from "@/lib/events";
 
 // V2-6 Quiet Pulse: single small toast surface for the whole app. Copy is
 // locked to "Logged" / "Saved" / "Discarded" — Toaster only renders what the
 // event bus emits, it does not pick copy or fire on its own.
+//
+// V2-6b Saved-toast fix (Shaul lock): the module bus carries a stable id per
+// emit and buffers recent events, so a Toaster that remounts inside the same
+// interaction (e.g. sheet close + router.refresh() after an edit) receives
+// the emit again on subscribe. We dedupe by id here so real-time delivery
+// and replay-on-mount never render the same toast twice, and we track ids
+// already rendered so a late replay of an already-dismissed toast doesn't
+// pop back onto the screen.
 export default function Toaster(): JSX.Element {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [toasts, setToasts] = useState<ToastEvent[]>([]);
+  const seenRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
-    return onToast((kind) => {
-      const id = Date.now() + Math.random();
-      setToasts((cur) => [...cur, { id, kind }]);
+    return onToast((evt) => {
+      if (seenRef.current.has(evt.id)) return;
+      seenRef.current.add(evt.id);
+      setToasts((cur) => [...cur, evt]);
       // Auto-dismiss after ~2.4s. Under prefers-reduced-motion the CSS zeroes
       // enter/exit transitions but the toast still fades out on this timer.
       setTimeout(() => {
-        setToasts((cur) => cur.filter((t) => t.id !== id));
+        setToasts((cur) => cur.filter((t) => t.id !== evt.id));
       }, 2400);
     });
   }, []);

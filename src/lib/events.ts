@@ -19,29 +19,67 @@ export function emitProjectsChanged(): void {
   }
 }
 
-// V2-6 Quiet Pulse: minimal toast + entry-added bus. Deliberately in-memory
-// only — no persistence, no queue, no dedupe. The Toaster mounted in the app
-// layout subscribes and renders; TimerBar / EntryList emit.
+// V2-6 Quiet Pulse: minimal toast + entry-added bus. In-memory only — no
+// persistence, no queue beyond the short replay buffer described below. The
+// Toaster mounted in the app layout subscribes and renders; TimerBar /
+// EntryList emit.
 export type ToastKind = "Logged" | "Saved" | "Discarded";
 
-type ToastListener = (kind: ToastKind) => void;
+export interface ToastEvent {
+  id: number;
+  kind: ToastKind;
+}
+
+type ToastListener = (evt: ToastEvent) => void;
 const toastListeners = new Set<ToastListener>();
+
+// V2-6b Saved-toast fix (Shaul lock): buffer recent emits at the module level
+// so a Toaster that remounts inside the same interaction — e.g. because the
+// edit-sheet close + router.refresh() churns the tree between emit and
+// commit — can still replay them on subscribe. Each event carries a stable
+// id; the Toaster dedupes by id, so real-time delivery and replay-on-mount
+// resolve to the same visible toast rather than two.
+const toastBuffer: ToastEvent[] = [];
+const TOAST_BUFFER_TTL_MS = 1500;
+let toastSeq = 0;
 
 export function onToast(cb: ToastListener): () => void {
   toastListeners.add(cb);
+  if (toastBuffer.length > 0) {
+    for (const evt of toastBuffer.slice()) {
+      try {
+        cb(evt);
+      } catch {
+        // never let one bad listener break the rest
+      }
+    }
+  }
   return () => {
     toastListeners.delete(cb);
   };
 }
 
-export function emitToast(kind: ToastKind): void {
+export function emitToast(kind: ToastKind): ToastEvent {
+  toastSeq += 1;
+  const evt: ToastEvent = { id: toastSeq, kind };
+  toastBuffer.push(evt);
+  setTimeout(() => {
+    const idx = toastBuffer.findIndex((e) => e.id === evt.id);
+    if (idx >= 0) toastBuffer.splice(idx, 1);
+  }, TOAST_BUFFER_TTL_MS);
   for (const cb of toastListeners) {
     try {
-      cb(kind);
+      cb(evt);
     } catch {
       // never let one bad listener break the rest
     }
   }
+  return evt;
+}
+
+export function _resetToastBufferForTests(): void {
+  toastBuffer.length = 0;
+  toastSeq = 0;
 }
 
 type EntryAddedListener<T> = (entry: T) => void;
@@ -69,4 +107,5 @@ export function _resetProjectsChangedListenersForTests(): void {
   projectsChangedListeners.clear();
   toastListeners.clear();
   entryAddedListeners.clear();
+  _resetToastBufferForTests();
 }
