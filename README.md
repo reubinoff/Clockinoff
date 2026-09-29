@@ -1,32 +1,51 @@
-# Timely / Clockinoff — v1
+<h1 align="center">Clockinoff</h1>
 
-A tiny, clean, solo time tracker. Manual entries + one running timer + projects/clients/tags + CSV/PDF export. No calendar. No teams. No Clockify sync. No Google auth.
+<p align="center">
+  <em>A tiny, clean, solo time tracker — manual entries, one running timer, CSV/PDF export.</em>
+</p>
 
-Built to the [attached tech design](uploads/timely-tech-design.md).
+<p align="center">
+  <a href="https://github.com/reubinoff/Clockinoff/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/reubinoff/Clockinoff/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Node" src="https://img.shields.io/badge/node-%3E%3D20-brightgreen">
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-14-black">
+  <img alt="Postgres" src="https://img.shields.io/badge/Postgres-16-336791">
+  <img alt="License" src="https://img.shields.io/badge/license-TBD-lightgrey">
+</p>
 
-## Stack
+---
 
-- **Next.js 14** (App Router) + React 18 + TypeScript
-- **Postgres 16** + **Drizzle ORM** + drizzle-kit migrations
-- **Auth**: email + password (argon2id) with **database sessions** and `httpOnly / Secure / SameSite=Lax` cookie
-- **PDF**: `@react-pdf/renderer`
-- **Testing**: Vitest (unit + API) + Playwright (smoke)
-- **CI**: GitHub Actions with a Postgres service container and a **≥90% coverage gate** on `src/server` + `src/lib`
+## Features
 
-## Local development
+- One running timer per user, enforced at the DB layer
+- Manual entries with projects, clients, and tags
+- Billable rates with per-entry override and derived amounts
+- CSV and PDF export over a date range
+- Email + password auth (argon2id) with server-side sessions
+- Per-user timezone (default `Asia/Jerusalem`), UTC storage
+- ≥90% coverage gate on `src/server` + `src/lib`
 
-Prerequisites: Node.js ≥ 20, Docker (or a local Postgres 16).
+## Screenshots
+
+> _Placeholder — drop UI screenshots or a short GIF here._
+
+<!--
+![Timer bar](docs/screenshots/timer-bar.png)
+![Entries](docs/screenshots/entries.png)
+-->
+
+## Quick Start
+
+Prerequisites: **Node.js ≥ 20** and **Docker** (or a local Postgres 16).
 
 ```bash
 # 1. Start Postgres (creates timely + timely_test databases)
 docker compose up -d
 
-# 2. Install
+# 2. Install deps
 npm install
 
-# 3. Configure
+# 3. Configure env (defaults match docker-compose)
 cp .env.example .env
-# edit .env if needed — defaults match docker-compose
 
 # 4. Apply migrations
 npm run db:migrate
@@ -36,102 +55,115 @@ npm run dev
 # → http://localhost:3000
 ```
 
-Register at `/register`, then start a timer from the persistent bar at the top.
+Register at [`/register`](http://localhost:3000/register), then start a timer from the persistent bar at the top.
 
-### Tests
+## Tech Stack
 
-```bash
-# Unit + API tests (Docker Postgres must be up)
-npm test
+- **Next.js 14** (App Router) · **React 18** · **TypeScript**
+- **PostgreSQL 16** · **Drizzle ORM** + `drizzle-kit` migrations
+- **Auth**: email + password (`argon2id`) with DB-backed sessions and `httpOnly / Secure / SameSite=Lax` cookies
+- **PDF**: `@react-pdf/renderer`
+- **Tests**: Vitest (unit + API) · Playwright (smoke)
+- **CI**: GitHub Actions with a Postgres 16 service container
 
-# With coverage gate (≥90% lines on src/server + src/lib)
-npm run test:coverage
+## Environment Variables
 
-# Playwright smoke (register → timer → CSV export)
-# In one terminal:
-npm run dev
-# In another:
-npx playwright install --with-deps chromium
-npm run test:e2e
-```
+Copy `.env.example` to `.env`. All values below are required unless noted.
 
-The Playwright smoke test is not wired into CI by default (kept optional / non-blocking as the design allows) — Vitest suite is the required gate.
+| Variable | Description | Example |
+|---|---|---|
+| `DATABASE_URL` | Postgres connection string | `postgres://timely:timely@localhost:5432/timely` |
+| `DATABASE_URL_TEST` | Test DB (used by CI and `npm test`) | `postgres://timely:timely@localhost:5432/timely_test` |
+| `NEXTAUTH_SECRET` | 32+ byte random secret for cookie/crypto surface | `change-me-please-32-bytes-min-secret-string` |
+| `NEXTAUTH_URL` | Public base URL of the app | `http://localhost:3000` |
+| `NODE_ENV` | Runtime mode | `development` / `production` |
 
-### DB scripts
+## Scripts
 
-```bash
-npm run db:generate   # regenerate Drizzle SQL from schema
-npm run db:migrate    # apply pending migrations from ./drizzle
-npm run db:studio     # open Drizzle Studio
-```
+| Script | What it does |
+|---|---|
+| `npm run dev` | Start Next.js in dev mode |
+| `npm run build` / `npm start` | Production build / server |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Vitest (unit + API) |
+| `npm run test:coverage` | Vitest with ≥90% coverage gate |
+| `npm run test:e2e` | Playwright smoke (register → timer → CSV) |
+| `npm run db:generate` | Regenerate Drizzle SQL from schema |
+| `npm run db:migrate` | Apply pending migrations from `./drizzle` |
+| `npm run db:studio` | Open Drizzle Studio |
 
-## Key API surface (all JSON)
+## API Surface
+
+All JSON. Errors follow `{ error: { code, message } }` with codes:
+`VALIDATION`, `UNAUTHORIZED`, `NOT_FOUND`, `TIMER_ALREADY_RUNNING`, `TIMER_NOT_RUNNING`, `CONFLICT`, `INTERNAL`.
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/api/auth/register` | `{ email, password, timezone? }` → 201 + session cookie |
-| POST | `/api/auth/login` | `{ email, password }` → 200 |
-| POST | `/api/auth/logout` | 204, clears cookie |
-| GET / PATCH | `/api/auth/me` | current user; PATCH `{ timezone }` |
-| CRUD | `/api/clients`, `/api/projects`, `/api/tags` | `?archived=true` shows archived |
-| GET | `/api/timer` | running entry or `null` |
-| POST | `/api/timer/start` | 201 running entry; 409 `TIMER_ALREADY_RUNNING` with `entry_id` |
-| POST | `/api/timer/stop` | 200 closed entry; 404 when nothing running |
-| PATCH | `/api/timer` | metadata only |
-| DELETE | `/api/timer` | discards running entry |
-| GET / POST | `/api/entries` | list + filters + cursor pagination |
-| PATCH / DELETE | `/api/entries/:id` | closed entries only (running → use `/api/timer`) |
-| GET | `/api/export/csv?from&to` | **from/to required**; empty → header row only, 200 |
-| GET | `/api/export/pdf?from&to` | **from/to required**; empty → “No entries” page, 200 |
+| `POST` | `/api/auth/register` | `{ email, password, timezone? }` → 201 + session cookie |
+| `POST` | `/api/auth/login` / `/logout` | login / logout |
+| `GET` / `PATCH` | `/api/auth/me` | current user; PATCH `{ timezone }` |
+| CRUD | `/api/clients`, `/api/projects`, `/api/tags` | `?archived=true` includes archived |
+| `GET` | `/api/timer` | running entry or `null` |
+| `POST` | `/api/timer/start` \| `/stop` | 409 `TIMER_ALREADY_RUNNING` when a timer is live |
+| `PATCH` / `DELETE` | `/api/timer` | edit metadata / discard running entry |
+| `GET` / `POST` | `/api/entries` | filters + cursor pagination |
+| `PATCH` / `DELETE` | `/api/entries/:id` | closed entries only |
+| `GET` | `/api/export/csv?from&to` | `from`/`to` required |
+| `GET` | `/api/export/pdf?from&to` | `from`/`to` required |
 
-All errors follow `{ error: { code, message } }`; codes: `VALIDATION`, `UNAUTHORIZED`, `NOT_FOUND`, `TIMER_ALREADY_RUNNING`, `TIMER_NOT_RUNNING`, `CONFLICT`, `INTERNAL`.
+## Deployment
 
-## Data model highlights
+Target: **single Azure Web App** + **Azure Database for PostgreSQL Flexible Server**.
 
-- **One running timer per user** — enforced by `CREATE UNIQUE INDEX ... WHERE end_at IS NULL`. Second running-start attempts get 409 by DB constraint (see `tests/server/timer.test.ts` for the parallel race test).
-- **Overlaps between closed entries are allowed by design.**
-- **`start_at < end_at`** — enforced by CHECK constraint whenever `end_at IS NOT NULL`.
-- **`amount` is derived**: `billable ? duration_hours * effective_rate : null`, where `effective_rate = entry.rate ?? project.default_rate`.
-- All rows scoped by `user_id`; every service verifies ownership.
+1. Create a Flexible Server (Postgres 16) and grab the connection string.
+2. Create a Web App (Linux, Node 20). The app runs `next start`.
+3. Set application settings:
 
-## Timezones
-
-User TZ defaults to **Asia/Jerusalem**, overridable per user. Timestamps are stored as UTC (`timestamptz`); the export and UI render in the user's TZ. See `src/lib/tz.ts` and the boundary test in `tests/server/export.test.ts`.
-
-## Authentication
-
-The tech design calls for "Auth.js Credentials + database sessions". Auth.js Credentials only supports JWT sessions upstream; to honor the design's *database sessions* requirement without stubs we implement a self-contained credentials + DB-session layer in `src/server/auth/`:
-
-- `POST /api/auth/register` and `/login` argon2id-hash passwords and create a row in `sessions` (`id`, `user_id`, `expires_at`).
-- The session id is sent as an `httpOnly / SameSite=Lax` cookie named `timely_session` (`Secure` in production).
-- `middleware.ts` gates `/app/*` and every `/api/*` except the auth routes; server helpers use `getSessionUser(cookie)` to load the current user.
-
-No Google or OAuth provider is wired in — v1 is email + password only.
-
-## CI
-
-`.github/workflows/ci.yml` boots a Postgres 16 service container, runs `npm ci`, migrates both DBs, type-checks, lints, and runs `npm run test:coverage`. Coverage thresholds are enforced by Vitest (`vitest.config.ts`) on `src/server` + `src/lib`: ≥90% lines / statements / functions and ≥80% branches.
-
-The build job compiles `next build` to catch runtime regressions.
-
-## Deploy to Azure
-
-Target: **single Azure Web App (Node 20)** + **Azure Database for PostgreSQL Flexible Server**.
-
-1. Create a Flexible Server (Postgres 16). Note the connection string.
-2. Create a Web App (Linux, Node 20). Deployment: GitHub Actions or Oryx builds. The app runs `next start`.
-3. In **Configuration → Application settings**, set:
-
-   | App Setting | Value |
+   | Setting | Value |
    |---|---|
    | `DATABASE_URL` | `postgres://<user>:<pw>@<host>:5432/<db>?sslmode=require` |
-   | `NEXTAUTH_SECRET` | 32+ byte random secret (used for cookie signing surface / crypto) |
+   | `NEXTAUTH_SECRET` | 32+ byte random secret |
    | `NEXTAUTH_URL` | Public URL of your Web App |
    | `NODE_ENV` | `production` |
    | `WEBSITE_NODE_DEFAULT_VERSION` | `~20` |
 
-4. In your GH Actions deploy job (post-CI), run `npm run db:migrate` against the production DB before starting the app. There is nothing else — no Clockify, no Google, no calendar callbacks. Outbound only.
+4. In your deploy job (post-CI), run `npm run db:migrate` against the production DB before starting the app.
 
-## Out of scope (v1)
+### Custom domain
+
+Bind your domain to the Web App, add the TLS binding (Azure Managed Certificate works), and update `NEXTAUTH_URL` to match — cookies are `Secure` in production.
+
+> **Node version:** the app requires Node **≥ 20**. CI currently pins Node 20 in `.github/workflows/ci.yml` and is planned to move to Node 22 — bump the workflow, the Web App runtime, and `WEBSITE_NODE_DEFAULT_VERSION` together.
+
+## Data Model Highlights
+
+- **One running timer per user** — enforced by `CREATE UNIQUE INDEX ... WHERE end_at IS NULL`. Parallel start attempts get 409 by DB constraint.
+- Overlaps between **closed** entries are allowed by design.
+- `start_at < end_at` — enforced by CHECK constraint whenever `end_at IS NOT NULL`.
+- `amount` is derived: `billable ? duration_hours * effective_rate : null`, where `effective_rate = entry.rate ?? project.default_rate`.
+- All rows are scoped by `user_id`; every service verifies ownership.
+
+## Out of Scope (v1)
 
 Calendar, teams, Clockify sync, Google auth, dashboards beyond entry list + export.
+
+## Contributing
+
+Contributions are welcome. To get started:
+
+1. Fork and create a feature branch.
+2. Run `npm install`, `docker compose up -d`, then `npm run db:migrate`.
+3. Before opening a PR, make sure the following pass:
+   ```bash
+   npm run lint
+   npm run typecheck
+   npm run test:coverage
+   ```
+4. Keep changes small and focused; follow existing code style.
+
+Bug reports and feature ideas: please open a [GitHub issue](https://github.com/reubinoff/Clockinoff/issues).
+
+## License
+
+License TBD — a `LICENSE` file will be added. Until then, all rights reserved by the repository owner.
