@@ -141,3 +141,14 @@ export const IconSearch = makeIcon(
 export const IconChevronDown = makeIcon(<path d="M6 9l6 6 6-6" />);
 
 export const IconX = makeIcon(<path d="M6 6l12 12M18 6L6 18" />);
+
+export const IconEdit = makeIcon(
+  <>
+    <path d="M4 20h4l10.5-10.5a2.121 2.121 0 0 0-3-3L5 17v3Z" />
+    <path d="M13.5 6.5l3 3" />
+  </>,
+);
+
+export const IconPlus = makeIcon(<path d="M12 5v14M5 12h14" />);
+
+export const IconMinus = makeIcon(<path d="M5 12h14" />);

@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDate, formatDurationHours, formatTime } from "@/lib/tz";
-import { IconBillable } from "@/components/icons";
+import { IconBillable, IconEdit } from "@/components/icons";
+import EditEntrySheet, { type EditableEntry } from "@/components/EditEntrySheet";
 
 interface Entry {
   id: string;
@@ -44,6 +45,7 @@ export default function EntryList({
   const [filterProject, setFilterProject] = useState("");
   const [filterBillable, setFilterBillable] = useState<"" | "true" | "false">("");
   const [filterQ, setFilterQ] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return entries.filter((e) => {
@@ -55,6 +57,11 @@ export default function EntryList({
     });
   }, [entries, filterProject, filterBillable, filterQ]);
 
+  const editing = useMemo(
+    () => entries.find((e) => e.id === editingId) ?? null,
+    [entries, editingId],
+  );
+
   async function remove(id: string): Promise<void> {
     if (!confirm("Delete this entry?")) return;
     const res = await fetch(`/api/entries/${id}`, { method: "DELETE" });
@@ -62,6 +69,19 @@ export default function EntryList({
       setEntries((cur) => cur.filter((e) => e.id !== id));
       router.refresh();
     }
+  }
+
+  function beginEdit(e: Entry): void {
+    if (e.running) return;
+    setEditingId(e.id);
+  }
+
+  function onSaved(updated: EditableEntry): void {
+    setEntries((cur) =>
+      cur.map((e) => (e.id === updated.id ? ({ ...e, ...(updated as Partial<Entry>) } as Entry) : e)),
+    );
+    setEditingId(null);
+    router.refresh();
   }
 
   return (
@@ -149,7 +169,17 @@ export default function EntryList({
                   </span>
                 )}
               </div>
-              <div className="flex justify-end pt-1">
+              <div className="flex justify-end gap-2 pt-1">
+                {!e.running && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => beginEdit(e)}
+                    aria-label="Edit entry"
+                  >
+                    <IconEdit size={16} aria-hidden />
+                    <span>Edit</span>
+                  </button>
+                )}
                 <button
                   className="btn btn-danger btn-sm"
                   onClick={() => remove(e.id)}
@@ -218,10 +248,26 @@ export default function EntryList({
                   <td className="px-3 py-2 text-right tabular-nums">
                     {e.billable && e.amount != null ? e.amount.toFixed(2) : ""}
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <button className="btn btn-danger btn-sm" onClick={() => remove(e.id)}>
-                      Delete
-                    </button>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <div className="inline-flex gap-1.5">
+                      {!e.running && (
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => beginEdit(e)}
+                          aria-label="Edit entry"
+                        >
+                          <IconEdit size={14} aria-hidden />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => remove(e.id)}
+                        aria-label="Delete entry"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -230,6 +276,16 @@ export default function EntryList({
         </table>
       </div>
       <p className="text-xs text-muted">Tags available: {tags.length}</p>
+      {editing && (
+        <EditEntrySheet
+          entry={editing}
+          projects={projects}
+          tags={tags}
+          timezone={timezone}
+          onClose={() => setEditingId(null)}
+          onSaved={onSaved}
+        />
+      )}
     </div>
   );
 }
