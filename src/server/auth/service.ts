@@ -1,0 +1,110 @@
+import { eq, sql } from "drizzle-orm";
+import { getDb } from "@/server/db/client";
+import { users } from "@/server/db/schema";
+import { errors } from "@/lib/errors";
+import { hashPassword, verifyPassword } from "./passwords";
+import { createSession, type CreatedSession, type SessionUser } from "./session";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD = 8;
+const MAX_PASSWORD = 200;
+
+function validEmail(email: unknown): email is string {
+  return typeof email === "string" && email.length <= 254 && EMAIL_RE.test(email);
+}
+
+function validPassword(pw: unknown): pw is string {
+  return typeof pw === "string" && pw.length >= MIN_PASSWORD && pw.length <= MAX_PASSWORD;
+}
+
+function validTimezone(tz: unknown): tz is string | undefined {
+  if (tz === undefined || tz === null) return true;
+  if (typeof tz !== "string" || tz.length > 64) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface RegisterInput {
+  email: string;
+  password: string;
+  timezone?: string;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+export interface AuthResult {
+  user: SessionUser;
+  session: CreatedSession;
+}
+
+export async function register(input: RegisterInput): Promise<AuthResult> {
+  if (!validEmail(input.email)) throw errors.validation("Invalid email");
+  if (!validPassword(input.password))
+    throw errors.validation("Password must be at least 8 characters");
+  if (!validTimezone(input.timezone)) throw errors.validation("Invalid timezone");
+
+  const email = input.email.trim();
+  const timezone = input.timezone?.trim() || "Asia/Jerusalem";
+  const passwordHash = await hashPassword(input.password);
+
+  const db = getDb();
+  try {
+    const [row] = await db
+      .insert(users)
+      .values({ email, passwordHash, timezone })
+      .returning({ id: users.id, email: users.email, timezone: users.timezone });
+    const session = await createSession(row.id);
+    return { user: row, session };
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === "23505") {
+      throw errors.conflict("Email already registered");
+    }
+    throw err;
+  }
+}
+
+export async function login(input: LoginInput): Promise<AuthResult> {
+  if (!validEmail(input.email) || typeof input.password !== "string") {
+    throw errors.validation("Invalid credentials");
+  }
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      timezone: users.timezone,
+      passwordHash: users.passwordHash,
+    })
+    .from(users)
+    .where(sql`lower(${users.email}) = lower(${input.email})`)
+    .limit(1);
+  const row = rows[0];
+  if (!row) throw errors.unauthorized("Invalid email or password");
+  const ok = await verifyPassword(row.passwordHash, input.password);
+  if (!ok) throw errors.unauthorized("Invalid email or password");
+  const session = await createSession(row.id);
+  return {
+    user: { id: row.id, email: row.email, timezone: row.timezone },
+    session,
+  };
+}
+
+export async function updateTimezone(userId: string, timezone: string): Promise<SessionUser> {
+  if (!validTimezone(timezone) || !timezone) throw errors.validation("Invalid timezone");
+  const db = getDb();
+  const [row] = await db
+    .update(users)
+    .set({ timezone })
+    .where(eq(users.id, userId))
+    .returning({ id: users.id, email: users.email, timezone: users.timezone });
+  if (!row) throw errors.notFound("User not found");
+  return row;
+}
