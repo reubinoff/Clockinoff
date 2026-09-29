@@ -135,3 +135,10 @@ Target: **single Azure Web App (Node 20)** + **Azure Database for PostgreSQL Fle
 ## Out of scope (v1)
 
 Calendar, teams, Clockify sync, Google auth, dashboards beyond entry list + export.
+
+## For AI coding agents
+
+Cursor, GitHub Copilot, Claude Code, Codex, Aider, and friends should read
+[`AGENTS.md`](AGENTS.md) before proposing changes. Tool-specific pointers
+(`.cursor/rules/project.mdc`, `.github/copilot-instructions.md`) all defer
+to that single file.
