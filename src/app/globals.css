@@ -5,6 +5,30 @@
 @layer base {
   :root {
     color-scheme: light;
+
+    /* V2-3 Quiet Pulse motion tokens (§5.1). Every animation/transition in the
+       app must reference these via var(...) so `prefers-reduced-motion: reduce`
+       can zero durations in one place (§5.3) without touching call sites. */
+    --duration-instant: 80ms;
+    --duration-fast: 160ms;
+    --duration-moderate: 280ms;
+    --duration-sheet: 360ms;
+    --duration-breath: 2400ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in: cubic-bezier(0.4, 0, 1, 1);
+    --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    /* CSS approximation of the spring-soft spring (stiffness 420, damping 32)
+       from §5.1 — used for press release. */
+    --ease-spring-soft: cubic-bezier(0.34, 1.2, 0.64, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --duration-instant: 0ms;
+      --duration-fast: 0ms;
+      --duration-moderate: 0ms;
+      --duration-sheet: 0ms;
+      --duration-breath: 0ms;
+    }
   }
   html, body {
     height: 100%;
@@ -103,20 +127,45 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.55; }
   }
-  @keyframes start-idle-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(109,40,217,0.35); }
-    50% { box-shadow: 0 0 0 6px rgba(109,40,217,0); }
+  /* V2-3 §5.2 idle Start breath: scale 1 → 1.02 → 1 with an accent-soft glow
+     0 → ~8% → 0 over --duration-breath. Only runs on the idle Start button;
+     stops as soon as the timer transitions to running (class removed by the
+     TimerBar) and — via the reduced-motion token override above — becomes a
+     0ms no-op when the user prefers reduced motion. */
+  @keyframes start-idle-breath {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0 rgba(109, 40, 217, 0);
+    }
+    50% {
+      transform: scale(1.02);
+      box-shadow: 0 0 16px 2px rgba(109, 40, 217, 0.08);
+    }
   }
   .timer-running-pulse {
     color: #6d28d9;
     animation: timer-pulse 2s ease-in-out infinite;
   }
   .timer-start-idle {
-    animation: start-idle-pulse 2s ease-in-out infinite;
+    animation: start-idle-breath var(--duration-breath) var(--ease-standard) infinite;
+  }
+  /* V2-3 §5.2 press feedback: scale 0.97 on press (--duration-instant), spring
+     back on release (--ease-spring-soft). Applied to Start/Stop only per the
+     Shaul-locked V2-3 scope. `!important` on :active is needed to override the
+     transform coming from the idle-breath animation while the button is held;
+     as soon as :active drops the breath animation resumes ownership of
+     `transform`. */
+  .press-scale {
+    transition: transform var(--duration-fast) var(--ease-spring-soft);
+    will-change: transform;
+  }
+  .press-scale:active {
+    transform: scale(0.97) !important;
+    transition-duration: var(--duration-instant);
+    transition-timing-function: var(--ease-in);
   }
   @media (prefers-reduced-motion: reduce) {
-    .timer-running-pulse,
-    .timer-start-idle {
+    .timer-running-pulse {
       animation: none;
     }
   }

@@ -238,7 +238,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
                 <span className="hidden sm:inline">Discard</span>
               </button>
               <button
-                className="btn btn-primary flex-1 md:flex-none"
+                className="btn btn-primary press-scale flex-1 md:flex-none"
                 disabled={pending}
                 onClick={stop}
                 aria-label="Stop timer"
@@ -249,7 +249,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
             </>
           ) : (
             <button
-              className="btn btn-primary timer-start-idle flex-1 md:flex-none"
+              className="btn btn-primary timer-start-idle press-scale flex-1 md:flex-none"
               disabled={pending}
               onClick={start}
               aria-label="Start timer"
