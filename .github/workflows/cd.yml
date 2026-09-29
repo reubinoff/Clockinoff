@@ -1,0 +1,117 @@
+name: CD (Azure Web App)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cd-azure-webapp
+  cancel-in-progress: false
+
+env:
+  AZURE_WEBAPP_NAME: clockinoff-prod
+  AZURE_RESOURCE_GROUP: rg-clockinoff-prod
+  NODE_VERSION: "22"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-deploy:
+    name: Build & deploy to Azure Web App
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js (standalone output)
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          # Placeholder values so that build-time env validation (if any) passes.
+          # Real values are configured on the Azure Web App via App Settings / Key Vault refs.
+          NEXTAUTH_SECRET: build-time-placeholder-build-time-placeholder
+          NEXTAUTH_URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net
+        run: npm run build
+
+      - name: Assemble deployment package
+        run: |
+          set -euo pipefail
+          mkdir -p deploy
+          # Standalone server bundle (includes minimal node_modules).
+          cp -R .next/standalone/. deploy/
+          # Static assets Next needs at runtime.
+          mkdir -p deploy/.next
+          cp -R .next/static deploy/.next/static
+          # Public assets.
+          if [ -d public ]; then
+            cp -R public deploy/public
+          fi
+          # Drizzle migrations + the tsx runner used by the startup command.
+          mkdir -p deploy/drizzle
+          cp -R drizzle/. deploy/drizzle/
+          cp drizzle.config.ts deploy/ 2>/dev/null || true
+          # tsx is required by the App Service startup command to run migrations.
+          # Install it (and its deps) into the deployed node_modules alongside the standalone bundle.
+          npm install --omit=dev --no-save --prefix deploy tsx
+          # Ensure the migrate script is present in the deployed package.
+          mkdir -p deploy/src/server/db
+          cp src/server/db/migrate.ts deploy/src/server/db/migrate.ts
+          cp src/server/db/client.ts deploy/src/server/db/client.ts 2>/dev/null || true
+          # tsconfig helps tsx resolve paths if needed.
+          cp tsconfig.json deploy/ 2>/dev/null || true
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Configure App Service startup command
+        uses: azure/cli@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            set -euo pipefail
+            az webapp config set \
+              --name "${AZURE_WEBAPP_NAME}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --linux-fx-version "NODE|22-lts" \
+              --startup-file "node node_modules/tsx/dist/cli.mjs src/server/db/migrate.ts && node server.js"
+            az webapp config appsettings set \
+              --name "${AZURE_WEBAPP_NAME}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --settings \
+                WEBSITES_PORT=3000 \
+                PORT=3000 \
+                SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+                WEBSITE_NODE_DEFAULT_VERSION=~22 \
+                NEXT_TELEMETRY_DISABLED=1 \
+              --output none
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          package: deploy
+          clean: true
+          restart: true
+
+      - name: Azure logout
+        if: always()
+        run: az logout || true
