@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/reubinoff/Clockinoff/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/reubinoff/Clockinoff/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Node" src="https://img.shields.io/badge/node-%3E%3D20-brightgreen">
+  <img alt="Node" src="https://img.shields.io/badge/node-%3E%3D22-brightgreen">
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-14-black">
   <img alt="Postgres" src="https://img.shields.io/badge/Postgres-16-336791">
   <img alt="License" src="https://img.shields.io/badge/license-TBD-lightgrey">
@@ -35,7 +35,7 @@
 
 ## Quick Start
 
-Prerequisites: **Node.js ≥ 20** and **Docker** (or a local Postgres 16).
+Prerequisites: **Node.js ≥ 22** and **Docker** (or a local Postgres 16).
 
 ```bash
 # 1. Start Postgres (creates timely + timely_test databases)
@@ -74,8 +74,8 @@ Copy `.env.example` to `.env`. All values below are required unless noted.
 |---|---|---|
 | `DATABASE_URL` | Postgres connection string | `postgres://timely:timely@localhost:5432/timely` |
 | `DATABASE_URL_TEST` | Test DB (used by CI and `npm test`) | `postgres://timely:timely@localhost:5432/timely_test` |
-| `NEXTAUTH_SECRET` | 32+ byte random secret for cookie/crypto surface | `change-me-please-32-bytes-min-secret-string` |
-| `NEXTAUTH_URL` | Public base URL of the app | `http://localhost:3000` |
+| `NEXTAUTH_SECRET` | Session secret — 32+ byte random string used by the server crypto surface. _Legacy name; sessions themselves are DB-backed (`timely_session` cookie), not Auth.js._ | `change-me-please-32-bytes-min-secret-string` |
+| `NEXTAUTH_URL` | Public base URL of the app. _Legacy name kept for compatibility — not required by Auth.js._ | `http://localhost:3000` |
 | `NODE_ENV` | Runtime mode | `development` / `production` |
 
 ## Scripts
@@ -117,24 +117,23 @@ All JSON. Errors follow `{ error: { code, message } }` with codes:
 Target: **single Azure Web App** + **Azure Database for PostgreSQL Flexible Server**.
 
 1. Create a Flexible Server (Postgres 16) and grab the connection string.
-2. Create a Web App (Linux, Node 20). The app runs `next start`.
+2. Create a Web App (Linux, runtime `NODE|22-lts`). The app runs `next start`.
 3. Set application settings:
 
    | Setting | Value |
    |---|---|
    | `DATABASE_URL` | `postgres://<user>:<pw>@<host>:5432/<db>?sslmode=require` |
-   | `NEXTAUTH_SECRET` | 32+ byte random secret |
+   | `NEXTAUTH_SECRET` | 32+ byte random session secret |
    | `NEXTAUTH_URL` | Public URL of your Web App |
    | `NODE_ENV` | `production` |
-   | `WEBSITE_NODE_DEFAULT_VERSION` | `~20` |
 
 4. In your deploy job (post-CI), run `npm run db:migrate` against the production DB before starting the app.
 
 ### Custom domain
 
-Bind your domain to the Web App, add the TLS binding (Azure Managed Certificate works), and update `NEXTAUTH_URL` to match — cookies are `Secure` in production.
+Bind your domain to the Web App, add the TLS binding (Azure Managed Certificate works), and update `NEXTAUTH_URL` to match the public URL — cookies are `Secure` in production.
 
-> **Node version:** the app requires Node **≥ 20**. CI currently pins Node 20 in `.github/workflows/ci.yml` and is planned to move to Node 22 — bump the workflow, the Web App runtime, and `WEBSITE_NODE_DEFAULT_VERSION` together.
+> **Node version:** the app targets Node **22**. CI, CD, and the Azure Web App runtime (`NODE|22-lts`) are all aligned on Node 22.
 
 ## Data Model Highlights
 
