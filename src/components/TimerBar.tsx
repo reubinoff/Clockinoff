@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDurationHms } from "@/lib/tz";
+import { onProjectsChanged } from "@/lib/events";
 
 interface Entry {
   id: string;
@@ -32,6 +33,14 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
   const [pending, setPending] = useState(false);
   const patchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const loadProjects = useCallback(async () => {
+    const res = await fetch("/api/projects", { cache: "no-store" });
+    if (res.ok) {
+      const data = (await res.json()) as { projects: Project[] };
+      setProjects(data.projects);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     const [tRes, pRes] = await Promise.all([
       fetch("/api/timer", { cache: "no-store" }),
@@ -59,6 +68,23 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Keep the project dropdown in sync when projects are created/archived/deleted
+  // elsewhere in the app (e.g. from ProjectsPanel), and when the tab regains
+  // focus after edits in another tab.
+  useEffect(() => {
+    const unsubscribe = onProjectsChanged(() => {
+      void loadProjects();
+    });
+    const onVisibility = (): void => {
+      if (document.visibilityState === "visible") void loadProjects();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [loadProjects]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);

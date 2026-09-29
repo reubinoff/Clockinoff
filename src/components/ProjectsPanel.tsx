@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { emitProjectsChanged } from "@/lib/events";
 
 interface Project {
   id: string;
@@ -67,6 +68,7 @@ export default function ProjectsPanel({
     setClientId("");
     setBillable(false);
     setRate("");
+    emitProjectsChanged();
     router.refresh();
   }
 
@@ -83,6 +85,7 @@ export default function ProjectsPanel({
           x.id === p.id ? { ...x, archived: upd.archivedAt !== null } : x,
         ),
       );
+      emitProjectsChanged();
       router.refresh();
     }
   }
@@ -92,6 +95,7 @@ export default function ProjectsPanel({
     const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
     if (res.ok) {
       setProjects((cur) => cur.filter((x) => x.id !== id));
+      emitProjectsChanged();
       router.refresh();
     }
   }
