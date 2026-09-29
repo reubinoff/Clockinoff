@@ -132,6 +132,59 @@ Target: **single Azure Web App (Node 20)** + **Azure Database for PostgreSQL Fle
 
 4. In your GH Actions deploy job (post-CI), run `npm run db:migrate` against the production DB before starting the app. There is nothing else — no Clockify, no Google, no calendar callbacks. Outbound only.
 
+### Standalone bundle pitfalls (argon2 + PDF export)
+
+The Azure deploy uses `output: "standalone"` and ships the traced
+`.next/standalone` tree, not the full `node_modules`. Next.js traces reachable
+`require()`s statically, so it misses assets that are loaded dynamically at
+runtime. Two packages we depend on need explicit inclusion (see
+`next.config.mjs → experimental.outputFileTracingIncludes` and the
+belt-and-suspenders overlay in `.github/workflows/cd.yml`):
+
+- **argon2** loads a prebuilt `.node` binary via `node-gyp-build`. Without the
+  `prebuilds/` tree the app throws "No native build was found ..." at startup
+  (fixed in #24).
+- **@react-pdf/renderer → pdfkit** resolves the Standard 14 fonts through a
+  subpath-imports template `require('#standard-fonts/<Name>')` and reads
+  `pdfkit/js/data/sRGB_IEC61966_2_1.icc` at runtime. Without those files
+  `GET /api/export/pdf` throws `MODULE_NOT_FOUND` for
+  `pdfkit/js/standard-fonts/Helvetica.cjs` and returns HTTP 500 while CSV export
+  keeps working.
+
+The CD workflow has two pre-deploy verify steps that fail the pipeline before
+`azure/webapps-deploy` runs if either of these regresses:
+
+- "Verify argon2 native module is loadable in deploy bundle" — hashes and
+  verifies a password against the deploy bundle.
+- "Verify PDF export can render in deploy bundle" — renders a tiny PDF from
+  `deploy/` and asserts the `%PDF` header.
+
+To reproduce / verify locally:
+
+```bash
+npm ci
+NEXT_TELEMETRY_DISABLED=1 \
+  NEXTAUTH_SECRET=build-time-placeholder-build-time-placeholder \
+  NEXTAUTH_URL=https://example.com \
+  npm run build
+
+# argon2 smoke test
+( cd .next/standalone && node -e "const a=require('argon2'); \
+  a.hash('smoke',{type:a.argon2id}).then(h=>a.verify(h,'smoke')) \
+  .then(ok=>console.log('argon2',ok?'OK':'FAIL'))" )
+
+# PDF render smoke test
+( cd .next/standalone && node -e "
+  const React=require('react');
+  const {Document,Page,Text,renderToStream}=require('@react-pdf/renderer');
+  const doc=React.createElement(Document,null,
+    React.createElement(Page,{size:'A4'},React.createElement(Text,null,'hi')));
+  renderToStream(doc).then(s=>{const c=[]; s.on('data',x=>c.push(x));
+    s.on('end',()=>console.log('PDF',Buffer.concat(c).slice(0,4).toString()));})" )
+```
+
+Both smoke tests must print `argon2 OK` and `PDF %PDF`.
+
 ## Out of scope (v1)
 
 Calendar, teams, Clockify sync, Google auth, dashboards beyond entry list + export.
