@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Unit + API tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: timely
+          POSTGRES_PASSWORD: timely
+          POSTGRES_DB: timely
+        options: >-
+          --health-cmd "pg_isready -U timely -d timely"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgres://timely:timely@localhost:5432/timely
+      DATABASE_URL_TEST: postgres://timely:timely@localhost:5432/timely_test
+      NEXTAUTH_SECRET: ci-secret-ci-secret-ci-secret-000000
+      NEXTAUTH_URL: http://localhost:3000
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U timely && break
+            sleep 1
+          done
+
+      - name: Create test database
+        env:
+          PGPASSWORD: timely
+        run: |
+          psql -h localhost -U timely -d postgres -c "CREATE DATABASE timely_test;" || true
+
+      - name: Apply migrations (main + test DB)
+        run: |
+          npm run db:migrate
+          DATABASE_URL=$DATABASE_URL_TEST npm run db:migrate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests with coverage (fails under 90%)
+        run: npm run test:coverage
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage
+          if-no-files-found: ignore
+
+  build:
+    name: Build (Next.js)
+    runs-on: ubuntu-latest
+    needs: test
+    env:
+      DATABASE_URL: postgres://timely:timely@localhost:5432/timely
+      NEXTAUTH_SECRET: build-secret-build-secret-build-000000
+      NEXTAUTH_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
