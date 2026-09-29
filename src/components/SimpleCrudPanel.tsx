@@ -78,15 +78,57 @@ export default function SimpleCrudPanel({
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="text-sm text-muted">{subtitle}</p>
       </div>
-      <form onSubmit={create} className="card p-4 flex gap-3 items-end">
+      <form
+        onSubmit={create}
+        className="card p-4 flex flex-col sm:flex-row gap-3 sm:items-end"
+      >
         <div className="flex-1">
           <label className="label">Name</label>
           <input className="input" required value={name} onChange={(e) => setName(e.target.value)} />
         </div>
-        <button className="btn btn-primary">Add</button>
+        <button className="btn btn-primary w-full sm:w-auto">Add</button>
       </form>
       {error && <p className="text-sm text-red-700">{error}</p>}
-      <div className="card overflow-x-auto">
+
+      {/* Mobile: card rows */}
+      <ul className="md:hidden space-y-2">
+        {items.length === 0 && (
+          <li className="card p-6 text-center text-sm text-muted">
+            Nothing yet.
+          </li>
+        )}
+        {items.map((item) => (
+          <li key={item.id} className="card p-3 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-ink truncate">{item.name}</p>
+              {supportsArchive && (
+                <p className="text-xs text-muted">
+                  {item.archived ? "Archived" : "Active"}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {supportsArchive && (
+                <button
+                  className="btn btn-sm"
+                  onClick={() => toggleArchive(item)}
+                >
+                  {item.archived ? "Unarchive" : "Archive"}
+                </button>
+              )}
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={() => remove(item.id)}
+              >
+                Delete
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop: table */}
+      <div className="card overflow-x-auto hidden md:block">
         <table className="w-full text-sm">
           <thead className="bg-canvas-2 text-xs text-muted">
             <tr>
@@ -113,11 +155,11 @@ export default function SimpleCrudPanel({
                 )}
                 <td className="px-3 py-2 text-right space-x-2">
                   {supportsArchive && (
-                    <button className="btn text-xs" onClick={() => toggleArchive(item)}>
+                    <button className="btn btn-sm" onClick={() => toggleArchive(item)}>
                       {item.archived ? "Unarchive" : "Archive"}
                     </button>
                   )}
-                  <button className="btn btn-danger text-xs" onClick={() => remove(item.id)}>
+                  <button className="btn btn-danger btn-sm" onClick={() => remove(item.id)}>
                     Delete
                   </button>
                 </td>

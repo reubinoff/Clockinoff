@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDate, formatDurationHours, formatTime } from "@/lib/tz";
+import { IconBillable } from "@/components/icons";
 
 interface Entry {
   id: string;
@@ -67,15 +68,16 @@ export default function EntryList({
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2 items-center">
         <input
-          className="input max-w-xs"
+          className="input w-full sm:w-auto sm:max-w-xs"
           placeholder="Search description…"
           value={filterQ}
           onChange={(e) => setFilterQ(e.target.value)}
         />
         <select
-          className="input max-w-[180px]"
+          className="input flex-1 sm:flex-none sm:max-w-[180px]"
           value={filterProject}
           onChange={(e) => setFilterProject(e.target.value)}
+          aria-label="Filter by project"
         >
           <option value="">All projects</option>
           {projects.map((p) => (
@@ -85,11 +87,12 @@ export default function EntryList({
           ))}
         </select>
         <select
-          className="input max-w-[140px]"
+          className="input flex-1 sm:flex-none sm:max-w-[140px]"
           value={filterBillable}
           onChange={(e) =>
             setFilterBillable(e.target.value as "" | "true" | "false")
           }
+          aria-label="Filter by billable"
         >
           <option value="">Billable: any</option>
           <option value="true">Billable</option>
@@ -100,7 +103,68 @@ export default function EntryList({
         </span>
       </div>
 
-      <div className="card overflow-x-auto">
+      {/* Mobile: card rows */}
+      <ul className="md:hidden space-y-2">
+        {filtered.length === 0 && (
+          <li className="card p-6 text-center text-muted text-sm">
+            No entries yet. Start the timer above or add one manually.
+          </li>
+        )}
+        {filtered.map((e) => {
+          const s = new Date(e.start_at);
+          const en = e.end_at ? new Date(e.end_at) : null;
+          return (
+            <li key={e.id} className="card p-3 space-y-1.5">
+              <p className="text-sm text-ink line-clamp-2">
+                {e.description || (
+                  <span className="text-muted">(no description)</span>
+                )}
+              </p>
+              <p className="text-xs text-muted tabular-nums">
+                <span className="font-mono text-ink">
+                  {formatDurationHours(e.duration_seconds)}h
+                </span>
+                <span className="mx-1.5">·</span>
+                {formatDate(s, timezone)}
+                <span className="mx-1.5">·</span>
+                {formatTime(s, timezone)}–{en ? formatTime(en, timezone) : "…"}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                {e.project_name ? (
+                  <span className="chip">{e.project_name}</span>
+                ) : null}
+                {e.tag_names.map((t) => (
+                  <span key={t} className="tag">
+                    {t}
+                  </span>
+                ))}
+                {e.billable && (
+                  <span
+                    className="inline-flex items-center gap-1 text-xs text-accent"
+                    title="Billable"
+                    aria-label="Billable"
+                  >
+                    <IconBillable size={14} aria-hidden />
+                    {e.amount != null ? e.amount.toFixed(2) : ""}
+                  </span>
+                )}
+              </div>
+              <div className="flex justify-end pt-1">
+                <button
+                  className="btn btn-danger btn-sm"
+                  onClick={() => remove(e.id)}
+                  aria-label="Delete entry"
+                >
+                  Delete
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Desktop: table */}
+      <div className="card overflow-x-auto hidden md:block">
         <table className="w-full text-sm">
           <thead className="bg-canvas-2 text-xs text-muted">
             <tr>

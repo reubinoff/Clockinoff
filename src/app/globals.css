@@ -68,6 +68,13 @@
   .chip-on {
     @apply border-accent/40 bg-accent-soft text-accent;
   }
+  .tab-link {
+    @apply flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 py-1.5
+           text-muted hover:text-ink transition-colors;
+  }
+  .tab-link-active {
+    @apply text-accent;
+  }
 }
 
 @layer utilities {

@@ -6,6 +6,7 @@ import { SESSION_COOKIE, getSessionUser } from "@/server/auth/session";
 import TimerBar from "@/components/TimerBar";
 import LogoutButton from "@/components/LogoutButton";
 import AppNav from "@/components/AppNav";
+import BottomTabBar from "@/components/BottomTabBar";
 import { Mark } from "@/components/brand/Mark";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,9 @@ export default async function AppLayout({
             <Mark size={24} />
             <span className="text-sm">Timely</span>
           </Link>
-          <AppNav />
+          <div className="hidden md:block">
+            <AppNav />
+          </div>
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span
               className="text-muted max-w-[180px] truncate hidden sm:inline"
@@ -42,12 +45,32 @@ export default async function AppLayout({
             <LogoutButton />
           </div>
         </div>
-        <TimerBar timezone={user.timezone} />
+        <div
+          className={
+            // Docked bottom on mobile (above tab bar), inline in header on desktop.
+            // safe-area-inset-bottom only lives on the tab bar; the dock sits
+            // exactly above it so the inset is not applied twice.
+            "md:static md:z-auto md:inset-x-auto md:bottom-auto " +
+            "fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 " +
+            "shadow-[0_-1px_2px_rgba(17,24,39,0.04)] md:shadow-none"
+          }
+        >
+          <TimerBar timezone={user.timezone} />
+        </div>
       </header>
-      <main className="flex-1 mx-auto max-w-6xl w-full px-4 py-6">{children}</main>
-      <footer className="border-t border-border py-4 text-center text-xs text-muted">
+      <main
+        className={
+          "flex-1 mx-auto max-w-6xl w-full px-4 py-6 " +
+          // Reserve room for docked timer + bottom tab bar on mobile.
+          "pb-[calc(16rem+env(safe-area-inset-bottom))] md:pb-6"
+        }
+      >
+        {children}
+      </main>
+      <footer className="hidden md:block border-t border-border py-4 text-center text-xs text-muted">
         Timely · {user.timezone}
       </footer>
+      <BottomTabBar />
     </div>
   );
 }

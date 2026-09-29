@@ -175,81 +175,90 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
 
   return (
     <div className="border-t border-border bg-canvas-2">
-      <div className="mx-auto max-w-6xl px-4 py-2 flex flex-wrap items-center gap-2 md:gap-3">
+      <div className="mx-auto max-w-6xl px-4 py-2 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3">
+        {/* Row 1 (base): description — full width */}
         <input
-          className="input flex-1 min-w-[200px] md:min-w-[280px]"
+          className="input w-full md:flex-1 md:w-auto md:min-w-[280px]"
           placeholder="What are you working on?"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           data-timer-description="true"
           aria-label="Timer description"
         />
-        <select
-          className="input w-full md:w-auto md:max-w-[200px]"
-          value={projectId}
-          onChange={(e) => setProjectId(e.target.value)}
-          aria-label="Project"
-        >
-          <option value="">No project</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={billable}
-          onClick={() => setBillable((b) => !b)}
-          className={"chip" + (billable ? " chip-on" : "")}
-          title={billable ? "Billable" : "Not billable"}
-        >
-          <IconBillable size={14} aria-hidden />
-          <span>Billable</span>
-        </button>
-        <span
-          className={
-            "tabular-nums font-mono text-lg md:text-xl w-[92px] text-right text-ink" +
-            (running ? " timer-running-pulse" : "")
-          }
-          aria-live="polite"
-          aria-label={running ? "Elapsed time" : "Timer idle"}
-        >
-          {running ? formatDurationHms(seconds) : "00:00:00"}
-        </span>
-        {running ? (
-          <>
-            <button
-              className="btn btn-danger"
-              disabled={pending}
-              onClick={discard}
-              aria-label="Discard running timer"
-            >
-              <IconDiscard size={16} aria-hidden />
-              <span className="hidden sm:inline">Discard</span>
-            </button>
-            <button
-              className="btn btn-primary"
-              disabled={pending}
-              onClick={stop}
-              aria-label="Stop timer"
-            >
-              <IconStop size={16} aria-hidden />
-              <span>Stop</span>
-            </button>
-          </>
-        ) : (
-          <button
-            className="btn btn-primary timer-start-idle"
-            disabled={pending}
-            onClick={start}
-            aria-label="Start timer"
+        {/* Row 2 (base): project select + billable chip */}
+        <div className="flex items-center gap-2 md:contents">
+          <select
+            className="input flex-1 md:flex-none md:w-auto md:max-w-[200px]"
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            aria-label="Project"
           >
-            <IconPlay size={16} aria-hidden />
-            <span>Start</span>
+            <option value="">No project</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={billable}
+            onClick={() => setBillable((b) => !b)}
+            className={
+              "chip min-h-[44px] shrink-0" + (billable ? " chip-on" : "")
+            }
+            title={billable ? "Billable" : "Not billable"}
+          >
+            <IconBillable size={14} aria-hidden />
+            <span>Billable</span>
           </button>
-        )}
+        </div>
+        {/* Row 3 (base): duration + Start/Stop (+ Discard when running) */}
+        <div className="flex items-center gap-2 md:contents">
+          <span
+            className={
+              "tabular-nums font-mono text-lg md:text-xl flex-1 md:flex-none md:w-[92px] text-right text-ink" +
+              (running ? " timer-running-pulse" : "")
+            }
+            aria-live="polite"
+            aria-label={running ? "Elapsed time" : "Timer idle"}
+          >
+            {running ? formatDurationHms(seconds) : "00:00:00"}
+          </span>
+          {running ? (
+            <>
+              <button
+                className="btn btn-danger shrink-0"
+                disabled={pending}
+                onClick={discard}
+                aria-label="Discard running timer"
+              >
+                <IconDiscard size={16} aria-hidden />
+                <span className="hidden sm:inline">Discard</span>
+              </button>
+              <button
+                className="btn btn-primary flex-1 md:flex-none"
+                disabled={pending}
+                onClick={stop}
+                aria-label="Stop timer"
+              >
+                <IconStop size={16} aria-hidden />
+                <span>Stop</span>
+              </button>
+            </>
+          ) : (
+            <button
+              className="btn btn-primary timer-start-idle flex-1 md:flex-none"
+              disabled={pending}
+              onClick={start}
+              aria-label="Start timer"
+            >
+              <IconPlay size={16} aria-hidden />
+              <span>Start</span>
+            </button>
+          )}
+        </div>
         <span className="text-xs text-muted hidden md:inline shrink-0">
           {timezone}
         </span>
