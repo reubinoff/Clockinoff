@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDate, formatDurationHours, formatTime } from "@/lib/tz";
 import { IconBillable, IconEdit } from "@/components/icons";
@@ -46,6 +46,14 @@ export default function EntryList({
   const [filterBillable, setFilterBillable] = useState<"" | "true" | "false">("");
   const [filterQ, setFilterQ] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Slice D (#47): after TimerBar Stop/Discard (or any timer→entry mutation)
+  // the server component re-runs via router.refresh() and passes a fresh
+  // `initial` prop, but useState only reads it on mount. Sync it so the list
+  // reflects the just-stopped row without a hard reload.
+  useEffect(() => {
+    setEntries(initial);
+  }, [initial]);
 
   const filtered = useMemo(() => {
     return entries.filter((e) => {
