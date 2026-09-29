@@ -4,6 +4,7 @@ import {
   endOfDayExclusiveInZone,
   formatDate,
   formatDateTime,
+  formatDayLabel,
   formatDurationHms,
   formatDurationHours,
   formatTime,
@@ -64,5 +65,27 @@ describe("tz", () => {
 
   it("throws on invalid date string", () => {
     expect(() => zonedIsoToUtc("garbage!")).toThrow();
+  });
+
+  describe("formatDayLabel (V2-7 entries day groups)", () => {
+    it("returns Today for a date matching now in the zone", () => {
+      const now = new Date("2026-09-29T10:00:00Z");
+      const d = new Date("2026-09-29T18:00:00Z");
+      expect(formatDayLabel(d, "Asia/Jerusalem", now)).toBe("Today");
+    });
+
+    it("returns Yesterday for the previous day in the zone", () => {
+      const now = new Date("2026-09-29T10:00:00Z");
+      const d = new Date("2026-09-28T18:00:00Z");
+      expect(formatDayLabel(d, "Asia/Jerusalem", now)).toBe("Yesterday");
+    });
+
+    it("returns weekday + month + day for older dates", () => {
+      const now = new Date("2026-09-30T10:00:00Z");
+      const d = new Date("2026-09-28T18:00:00Z");
+      expect(formatDayLabel(d, "UTC", now)).toBe("Mon, Sep 28");
+      const older = new Date("2026-09-20T12:00:00Z");
+      expect(formatDayLabel(older, "UTC", now)).toBe("Sun, Sep 20");
+    });
   });
 });

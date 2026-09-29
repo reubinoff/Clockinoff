@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatDate, formatDurationHours, formatTime } from "@/lib/tz";
+import {
+  formatDate,
+  formatDayLabel,
+  formatDurationHours,
+  formatTime,
+} from "@/lib/tz";
 import { emitToast, onEntryAdded } from "@/lib/events";
 import { IconBillable, IconEdit } from "@/components/icons";
 import EditEntrySheet, { type EditableEntry } from "@/components/EditEntrySheet";
@@ -28,6 +33,40 @@ interface Entry {
 interface Option {
   id: string;
   name: string;
+}
+
+interface DayGroup {
+  key: string;
+  label: string;
+  totalSeconds: number;
+  entries: Entry[];
+}
+
+// V2-7 §Day groups: bucket the filtered list by zoned day-key, preserving the
+// server's newest-first order. `now` is passed in so Today/Yesterday labels
+// track the user's clock without re-rendering every second — the daily
+// boundary is stable within a session for practical purposes.
+function groupByDay(entries: Entry[], timezone: string, now: Date): DayGroup[] {
+  const groups: DayGroup[] = [];
+  const byKey = new Map<string, DayGroup>();
+  for (const e of entries) {
+    const start = new Date(e.start_at);
+    const key = formatDate(start, timezone);
+    let g = byKey.get(key);
+    if (!g) {
+      g = {
+        key,
+        label: formatDayLabel(start, timezone, now),
+        totalSeconds: 0,
+        entries: [],
+      };
+      byKey.set(key, g);
+      groups.push(g);
+    }
+    g.entries.push(e);
+    g.totalSeconds += e.duration_seconds;
+  }
+  return groups;
 }
 
 export default function EntryList({
@@ -94,6 +133,14 @@ export default function EntryList({
     });
   }, [entries, filterProject, filterBillable, filterQ]);
 
+  // Recompute Today/Yesterday labels on mount so a client whose clock advances
+  // past midnight since SSR still sees the correct label after hydration.
+  const now = useMemo(() => new Date(), []);
+  const groups = useMemo(
+    () => groupByDay(filtered, timezone, now),
+    [filtered, timezone, now],
+  );
+
   const editing = useMemo(
     () => entries.find((e) => e.id === editingId) ?? null,
     [entries, editingId],
@@ -124,7 +171,7 @@ export default function EntryList({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex flex-wrap gap-2 items-center">
         <input
           className="input w-full sm:w-auto sm:max-w-xs"
@@ -162,170 +209,111 @@ export default function EntryList({
         </span>
       </div>
 
-      {/* Mobile: card rows */}
-      <ul className="md:hidden space-y-2">
-        {filtered.length === 0 && (
-          <li className="card p-6 text-center text-muted text-sm">
-            No entries yet. Start the timer above or add one manually.
-          </li>
-        )}
-        {filtered.map((e) => {
-          const s = new Date(e.start_at);
-          const en = e.end_at ? new Date(e.end_at) : null;
-          return (
-            <li
-              key={e.id}
-              className={
-                "card p-3 space-y-1.5" +
-                (springIds.has(e.id) ? " entry-spring-in" : "")
-              }
-            >
-              <p className="text-sm text-ink line-clamp-2">
-                {e.description || (
-                  <span className="text-muted">(no description)</span>
-                )}
-              </p>
-              <p className="text-xs text-muted tabular-nums">
-                <span className="timer-digits text-ink">
-                  {formatDurationHours(e.duration_seconds)}h
+      {filtered.length === 0 ? (
+        <div className="card p-6 text-center text-muted text-sm">
+          No entries yet. Start the timer above or add one manually.
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {groups.map((g) => (
+            <section key={g.key} aria-label={g.label} className="space-y-2">
+              <header className="flex items-baseline justify-between px-1">
+                <h3 className="text-body-sm font-semibold text-ink">
+                  {g.label}
+                </h3>
+                <span className="text-xs text-muted tabular-nums">
+                  <span className="timer-digits">
+                    {formatDurationHours(g.totalSeconds)}
+                  </span>
+                  h total
                 </span>
-                <span className="mx-1.5">·</span>
-                {formatDate(s, timezone)}
-                <span className="mx-1.5">·</span>
-                {formatTime(s, timezone)}–{en ? formatTime(en, timezone) : "…"}
-              </p>
-              <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                {e.project_name ? (
-                  <span className="chip">{e.project_name}</span>
-                ) : null}
-                {e.tag_names.map((t) => (
-                  <span key={t} className="tag">
-                    {t}
-                  </span>
-                ))}
-                {e.billable && (
-                  <span
-                    className="inline-flex items-center gap-1 text-xs text-accent"
-                    title="Billable"
-                    aria-label="Billable"
-                  >
-                    <IconBillable size={14} aria-hidden />
-                    {e.amount != null ? e.amount.toFixed(2) : ""}
-                  </span>
-                )}
-              </div>
-              <div className="flex justify-end gap-2 pt-1">
-                {!e.running && (
-                  <button
-                    className="btn"
-                    onClick={() => beginEdit(e)}
-                    aria-label="Edit entry"
-                  >
-                    <IconEdit size={16} aria-hidden />
-                    <span>Edit</span>
-                  </button>
-                )}
-                <button
-                  className="btn btn-danger"
-                  onClick={() => remove(e.id)}
-                  aria-label="Delete entry"
-                >
-                  Delete
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              </header>
+              <ul className="space-y-1.5">
+                {g.entries.map((e) => {
+                  const s = new Date(e.start_at);
+                  const en = e.end_at ? new Date(e.end_at) : null;
+                  return (
+                    <li
+                      key={e.id}
+                      className={
+                        "card px-3 py-2.5" +
+                        (springIds.has(e.id) ? " entry-spring-in" : "")
+                      }
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="text-body-sm text-ink line-clamp-2 break-words">
+                            {e.description || (
+                              <span className="text-muted">
+                                (no description)
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted tabular-nums">
+                            <span className="timer-digits text-ink">
+                              {formatDurationHours(e.duration_seconds)}h
+                            </span>
+                            <span className="mx-1.5">·</span>
+                            {formatTime(s, timezone)}–
+                            {en ? formatTime(en, timezone) : "…"}
+                          </p>
+                          {(e.project_name ||
+                            e.tag_names.length > 0 ||
+                            e.billable) && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                              {e.project_name ? (
+                                <span className="chip">{e.project_name}</span>
+                              ) : null}
+                              {e.tag_names.map((t) => (
+                                <span key={t} className="tag">
+                                  {t}
+                                </span>
+                              ))}
+                              {e.billable && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-xs text-accent"
+                                  title="Billable"
+                                  aria-label="Billable"
+                                >
+                                  <IconBillable size={14} aria-hidden />
+                                  {e.amount != null ? e.amount.toFixed(2) : ""}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1.5">
+                          {!e.running && (
+                            <button
+                              className="btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0"
+                              onClick={() => beginEdit(e)}
+                              aria-label="Edit entry"
+                              title="Edit"
+                            >
+                              <IconEdit size={16} aria-hidden />
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0 text-danger hover:bg-danger-soft"
+                            onClick={() => remove(e.id)}
+                            aria-label="Delete entry"
+                            title="Delete"
+                          >
+                            <span aria-hidden className="text-lg leading-none">
+                              ×
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
 
-      {/* Desktop: table */}
-      <div className="card overflow-x-auto hidden md:block">
-        <table className="w-full text-sm">
-          <thead className="bg-canvas-2 text-xs text-muted">
-            <tr>
-              <th className="text-left px-3 py-2">Date</th>
-              <th className="text-left px-3 py-2">Start</th>
-              <th className="text-left px-3 py-2">End</th>
-              <th className="text-right px-3 py-2">Hours</th>
-              <th className="text-left px-3 py-2">Description</th>
-              <th className="text-left px-3 py-2">Project</th>
-              <th className="text-left px-3 py-2">Tags</th>
-              <th className="text-right px-3 py-2">Amount</th>
-              <th className="px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={9} className="text-center py-10 text-muted">
-                  No entries yet. Start the timer above or add one manually.
-                </td>
-              </tr>
-            )}
-            {filtered.map((e) => {
-              const s = new Date(e.start_at);
-              const en = e.end_at ? new Date(e.end_at) : null;
-              return (
-                <tr
-                  key={e.id}
-                  className={
-                    "border-t border-border h-12" +
-                    (springIds.has(e.id) ? " entry-spring-in" : "")
-                  }
-                >
-                  <td className="px-3 py-2">{formatDate(s, timezone)}</td>
-                  <td className="px-3 py-2 tabular-nums">{formatTime(s, timezone)}</td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {en ? formatTime(en, timezone) : "…"}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {formatDurationHours(e.duration_seconds)}
-                  </td>
-                  <td className="px-3 py-2">{e.description || <span className="text-muted">(no description)</span>}</td>
-                  <td className="px-3 py-2">
-                    {e.project_name ? (
-                      <span className="chip">{e.project_name}</span>
-                    ) : (
-                      <span className="text-muted">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 space-x-1">
-                    {e.tag_names.map((t) => (
-                      <span key={t} className="tag">
-                        {t}
-                      </span>
-                    ))}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {e.billable && e.amount != null ? e.amount.toFixed(2) : ""}
-                  </td>
-                  <td className="px-3 py-2 text-right whitespace-nowrap">
-                    <div className="inline-flex gap-1.5">
-                      {!e.running && (
-                        <button
-                          className="btn btn-sm"
-                          onClick={() => beginEdit(e)}
-                          aria-label="Edit entry"
-                        >
-                          <IconEdit size={14} aria-hidden />
-                          <span>Edit</span>
-                        </button>
-                      )}
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => remove(e.id)}
-                        aria-label="Delete entry"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
       <p className="text-xs text-muted">Tags available: {tags.length}</p>
       {editing && (
         <EditEntrySheet

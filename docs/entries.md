@@ -16,33 +16,49 @@ nav_order: 4
 
 ---
 
-The main page at `/app` shows your closed time entries — one row per
-finished timer, most recent first.
+The main page at `/app` shows your closed time entries — one card per
+finished timer, most recent first, grouped by day.
 
 The currently running timer, if any, lives in the timer bar and is *not*
 shown in this list until you stop it.
 
 When you press **Stop** on the timer bar the new entry springs into the
 top of this list (and a **Logged** toast confirms it). If you press
-**Discard** instead, no row is added and a **Discarded** toast is shown.
+**Discard** instead, no card is added and a **Discarded** toast is shown.
 Saving an edit on an existing entry shows a **Saved** toast.
 
 ---
 
-## Columns
+## Day groups
 
-| Column | Meaning |
-|---|---|
-| Date | The start date of the entry, in your timezone. |
-| Start | Start time (HH:MM in your timezone). |
-| End | End time in your timezone; `…` for a running entry (only visible if you filter it in). |
-| Hours | Duration formatted as hours (e.g. `1.25`). |
-| Description | Whatever you typed in the timer bar. |
-| Project | Project name if the entry has one, or `—`. |
-| Tags | Tag pills for tags attached to the entry. |
-| Amount | Billable amount = duration × effective rate. Blank if not billable or no rate. |
+Entries are bucketed into a section per day, using the start date in
+your timezone. Each section has a header with the day label and a
+muted total showing the sum of all durations for that day (in hours).
 
-The **Amount** column uses the *effective rate* stored on the entry —
+Day labels use this format:
+
+- **Today** — for entries that started today in your timezone.
+- **Yesterday** — for entries that started the previous day.
+- **`Mon, Sep 28`** — weekday + month + day (short forms) for anything
+  older.
+
+---
+
+## Card rows
+
+Each entry renders as a card with:
+
+- A **two-line description** (whatever you typed in the timer bar; long
+  text is clamped to two lines).
+- A meta line with the **duration** (hours, e.g. `1.25h`) followed by
+  the **time range** (start–end in your timezone; end is `…` for a
+  running entry, only visible if you filter it in).
+- Chips for the entry's **project**, **tags**, and, if billable, a
+  **billable** marker with the computed amount.
+- An **edit** control (pencil icon, 44 × 44 px tap target) that opens
+  the edit sheet, and a delete control (×) to remove the entry.
+
+The billable amount uses the *effective rate* stored on the entry —
 either the entry's own rate or, if that is null, the project's
 `default_rate` at the time the entry was closed.
 
@@ -64,12 +80,12 @@ right shows *N of M* matching rows.
 
 ## Delete an entry
 
-Each row has a red **Delete** button on the far right.
+Each card has a red delete (×) button.
 
-1. Click **Delete**.
+1. Click the × button.
 2. Confirm in the browser prompt.
 
-The row is removed. Any tags attached to the entry are detached, but the
+The card is removed. Any tags attached to the entry are detached, but the
 tags themselves are kept. Projects and clients are never deleted by
 deleting an entry.
 
@@ -78,18 +94,15 @@ use **Discard** on the timer bar (see [Using the timer]({{ '/timer' | relative_u
 
 ---
 
-## What is *not* editable from this page
+## Editing an entry
 
-The v1 UI intentionally keeps the entries table read-only apart from
-delete. To change an entry's description, project, tags, billable flag,
-or times you would need to:
+Tap the pencil icon on a card to open the edit sheet. From there you
+can change the entry's description, project, tags, billable flag, and
+start/end times, then save. The list updates in place and a **Saved**
+toast confirms the change.
 
-- Delete the entry, or
-- Use the API (the UI does not currently expose an editor for closed
-  entries).
-
-This keeps the workflow "timer + occasional cleanup" rather than a general
-time-sheet editor.
+Editing is not available for the currently running entry — stop it
+first, or use the timer bar to change its description and project.
 
 ---
 

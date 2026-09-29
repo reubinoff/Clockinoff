@@ -100,6 +100,24 @@ export function zonedIsoToUtc(input: string, tz: string = DEFAULT_TZ): Date {
   return new Date(guess - offset * 60_000);
 }
 
+export function formatDayLabel(
+  d: Date,
+  tz: string = DEFAULT_TZ,
+  now: Date = new Date(),
+): string {
+  const dKey = formatDate(d, tz);
+  const todayKey = formatDate(now, tz);
+  if (dKey === todayKey) return "Today";
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  if (formatDate(yesterday, tz) === dKey) return "Yesterday";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(d);
+}
+
 export function startOfDayInZone(input: string, tz: string = DEFAULT_TZ): Date {
   return zonedIsoToUtc(`${input.slice(0, 10)}T00:00:00`, tz);
 }
