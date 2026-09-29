@@ -15,22 +15,19 @@ export function AuthShell({
 }): JSX.Element {
   return (
     <main
-      className="min-h-screen w-full px-4 py-10 flex items-center justify-center"
+      className="min-h-dvh w-full px-4 py-10 flex items-center justify-center"
       style={{
         background:
-          "linear-gradient(180deg, #f7f6f3 0%, rgba(237,233,254,0.5) 100%)",
+          "linear-gradient(180deg, #f7f6f3 0%, rgba(237,233,254,0.12) 100%)",
       }}
     >
       <div className="w-full max-w-md">
-        <div className="rounded-2xl border border-border bg-surface shadow-card-lg p-6 md:p-8 space-y-6">
+        <div className="rounded-[20px] border border-border bg-surface shadow-card-lg p-6 md:p-8 space-y-6">
           <div className="flex items-center gap-3">
             <Mark size={40} />
-            <div>
-              <div className="text-lg font-semibold leading-tight text-ink">
-                Timely
-              </div>
-              <div className="text-xs text-muted">Solo time tracker</div>
-            </div>
+            <span className="text-lg font-semibold leading-none tracking-[-0.01em] text-ink">
+              Timely
+            </span>
           </div>
           <div className="space-y-1">
             <h1 className="text-title text-ink">{title}</h1>

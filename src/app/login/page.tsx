@@ -11,7 +11,7 @@ export default function LoginPage(): JSX.Element {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen grid place-items-center bg-canvas" />
+        <main className="min-h-dvh grid place-items-center bg-canvas" />
       }
     >
       <LoginForm />
@@ -64,7 +64,7 @@ function LoginForm(): JSX.Element {
   return (
     <AuthShell
       title="Welcome back"
-      subtitle="Sign in to Timely"
+      subtitle="Sign in to keep your pulse going."
       footer={
         <>
           New here?{" "}
