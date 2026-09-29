@@ -119,6 +119,28 @@ The tech design calls for "Auth.js Credentials + database sessions". Auth.js Cre
 
 No Google or OAuth provider is wired in — v1 is email + password only.
 
+## Ops scripts
+
+One-shot maintenance helpers live under [`scripts/`](./scripts/) and speak
+directly to Postgres via `DATABASE_URL`.
+
+- **Delete users by email** (e.g. leftover pentest accounts). Owned rows —
+  sessions, clients, projects, tags, entries, entry↔tag rows — cascade
+  automatically via the `ON DELETE CASCADE` on `user_id`.
+
+  ```bash
+  # Dry-run: show what would be deleted.
+  DATABASE_URL=postgres://... npm run ops:delete-users -- \
+    pentest-ariel-a@example.com pentest-ariel-b@example.com
+
+  # Confirm and actually delete.
+  DATABASE_URL=postgres://... npm run ops:delete-users -- --yes \
+    pentest-ariel-a@example.com pentest-ariel-b@example.com
+  ```
+
+  Emails are matched case-insensitively. Never pass a password on the
+  command line — this script only needs the email.
+
 ## CI
 
 `.github/workflows/ci.yml` boots a Postgres 16 service container, runs `npm ci`, migrates both DBs, type-checks, lints, and runs `npm run test:coverage`. Coverage thresholds are enforced by Vitest (`vitest.config.ts`) on `src/server` + `src/lib`: ≥90% lines / statements / functions and ≥80% branches.
