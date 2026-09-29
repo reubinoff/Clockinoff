@@ -69,3 +69,27 @@
     @apply border-accent/40 bg-accent-soft text-accent;
   }
 }
+
+@layer utilities {
+  @keyframes timer-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+  @keyframes start-idle-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(109,40,217,0.35); }
+    50% { box-shadow: 0 0 0 6px rgba(109,40,217,0); }
+  }
+  .timer-running-pulse {
+    color: #6d28d9;
+    animation: timer-pulse 2s ease-in-out infinite;
+  }
+  .timer-start-idle {
+    animation: start-idle-pulse 2s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .timer-running-pulse,
+    .timer-start-idle {
+      animation: none;
+    }
+  }
+}

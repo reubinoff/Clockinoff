@@ -5,17 +5,10 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE, getSessionUser } from "@/server/auth/session";
 import TimerBar from "@/components/TimerBar";
 import LogoutButton from "@/components/LogoutButton";
+import AppNav from "@/components/AppNav";
 import { Mark } from "@/components/brand/Mark";
 
 export const dynamic = "force-dynamic";
-
-const NAV: { href: string; label: string }[] = [
-  { href: "/app", label: "Timer" },
-  { href: "/app/projects", label: "Projects" },
-  { href: "/app/clients", label: "Clients" },
-  { href: "/app/tags", label: "Tags" },
-  { href: "/app/export", label: "Export" },
-];
 
 export default async function AppLayout({
   children,
@@ -27,25 +20,25 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-canvas">
       <header className="border-b border-border bg-surface sticky top-0 z-20">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-6">
+        <div className="mx-auto max-w-6xl px-4 py-2.5 flex items-center gap-6">
           <Link
             href="/app"
-            className="inline-flex items-center gap-2 font-semibold tracking-tight text-ink"
+            className="inline-flex items-center gap-2 font-semibold tracking-tight text-ink shrink-0"
+            aria-label="Timely home"
           >
             <Mark size={24} />
-            <span>Timely</span>
+            <span className="text-sm">Timely</span>
           </Link>
-          <nav className="flex items-center gap-4 text-sm text-muted">
-            {NAV.map((n) => (
-              <Link key={n.href} className="hover:text-ink" href={n.href}>
-                {n.label}
-              </Link>
-            ))}
-          </nav>
+          <AppNav />
           <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="text-muted">{user.email}</span>
+            <span
+              className="text-muted max-w-[180px] truncate hidden sm:inline"
+              title={user.email}
+            >
+              {user.email}
+            </span>
             <LogoutButton />
           </div>
         </div>

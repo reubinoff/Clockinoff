@@ -127,7 +127,7 @@ export default function EntryList({
               const s = new Date(e.start_at);
               const en = e.end_at ? new Date(e.end_at) : null;
               return (
-                <tr key={e.id} className="border-t border-border">
+                <tr key={e.id} className="border-t border-border h-12">
                   <td className="px-3 py-2">{formatDate(s, timezone)}</td>
                   <td className="px-3 py-2 tabular-nums">{formatTime(s, timezone)}</td>
                   <td className="px-3 py-2 tabular-nums">
@@ -137,7 +137,13 @@ export default function EntryList({
                     {formatDurationHours(e.duration_seconds)}
                   </td>
                   <td className="px-3 py-2">{e.description || <span className="text-muted">(no description)</span>}</td>
-                  <td className="px-3 py-2">{e.project_name ?? <span className="text-muted">—</span>}</td>
+                  <td className="px-3 py-2">
+                    {e.project_name ? (
+                      <span className="chip">{e.project_name}</span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 space-x-1">
                     {e.tag_names.map((t) => (
                       <span key={t} className="tag">
@@ -149,7 +155,7 @@ export default function EntryList({
                     {e.billable && e.amount != null ? e.amount.toFixed(2) : ""}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <button className="btn btn-danger text-xs" onClick={() => remove(e.id)}>
+                    <button className="btn btn-danger btn-sm" onClick={() => remove(e.id)}>
                       Delete
                     </button>
                   </td>

@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDurationHms } from "@/lib/tz";
 import { onProjectsChanged } from "@/lib/events";
+import {
+  IconPlay,
+  IconStop,
+  IconDiscard,
+  IconBillable,
+} from "@/components/icons";
 
 interface Entry {
   id: string;
@@ -148,7 +154,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
   }
 
   async function discard(): Promise<void> {
-    if (!confirm("Discard the running timer?")) return;
+    if (!confirm("Discard this running timer? This can’t be undone.")) return;
     setPending(true);
     try {
       await fetch("/api/timer", { method: "DELETE" });
@@ -165,12 +171,13 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
   const seconds = entry
     ? Math.max(0, Math.floor((now - new Date(entry.start_at).getTime()) / 1000))
     : 0;
+  const running = entry !== null;
 
   return (
     <div className="border-t border-border bg-canvas-2">
-      <div className="mx-auto max-w-6xl px-4 py-2 flex items-center gap-3">
+      <div className="mx-auto max-w-6xl px-4 py-2 flex flex-wrap items-center gap-2 md:gap-3">
         <input
-          className="input flex-1"
+          className="input flex-1 min-w-[200px] md:min-w-[280px]"
           placeholder="What are you working on?"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -178,7 +185,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
           aria-label="Timer description"
         />
         <select
-          className="input max-w-[180px]"
+          className="input w-full md:w-auto md:max-w-[200px]"
           value={projectId}
           onChange={(e) => setProjectId(e.target.value)}
           aria-label="Project"
@@ -190,32 +197,62 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
             </option>
           ))}
         </select>
-        <label className="text-sm flex items-center gap-1 text-muted">
-          <input
-            type="checkbox"
-            checked={billable}
-            onChange={(e) => setBillable(e.target.checked)}
-          />
-          $
-        </label>
-        <span className="tabular-nums font-mono text-sm w-24 text-right">
-          {entry ? formatDurationHms(seconds) : "00:00:00"}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={billable}
+          onClick={() => setBillable((b) => !b)}
+          className={"chip" + (billable ? " chip-on" : "")}
+          title={billable ? "Billable" : "Not billable"}
+        >
+          <IconBillable size={14} aria-hidden />
+          <span>Billable</span>
+        </button>
+        <span
+          className={
+            "tabular-nums font-mono text-lg md:text-xl w-[92px] text-right text-ink" +
+            (running ? " timer-running-pulse" : "")
+          }
+          aria-live="polite"
+          aria-label={running ? "Elapsed time" : "Timer idle"}
+        >
+          {running ? formatDurationHms(seconds) : "00:00:00"}
         </span>
-        {entry ? (
+        {running ? (
           <>
-            <button className="btn btn-danger" disabled={pending} onClick={discard}>
-              Discard
+            <button
+              className="btn btn-danger"
+              disabled={pending}
+              onClick={discard}
+              aria-label="Discard running timer"
+            >
+              <IconDiscard size={16} aria-hidden />
+              <span className="hidden sm:inline">Discard</span>
             </button>
-            <button className="btn btn-primary" disabled={pending} onClick={stop}>
-              Stop
+            <button
+              className="btn btn-primary"
+              disabled={pending}
+              onClick={stop}
+              aria-label="Stop timer"
+            >
+              <IconStop size={16} aria-hidden />
+              <span>Stop</span>
             </button>
           </>
         ) : (
-          <button className="btn btn-primary" disabled={pending} onClick={start}>
-            Start
+          <button
+            className="btn btn-primary timer-start-idle"
+            disabled={pending}
+            onClick={start}
+            aria-label="Start timer"
+          >
+            <IconPlay size={16} aria-hidden />
+            <span>Start</span>
           </button>
         )}
-        <span className="text-xs text-muted hidden md:inline">TZ: {timezone}</span>
+        <span className="text-xs text-muted hidden md:inline shrink-0">
+          {timezone}
+        </span>
       </div>
     </div>
   );
