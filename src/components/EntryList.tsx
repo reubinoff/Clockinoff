@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDate, formatDurationHours, formatTime } from "@/lib/tz";
+import { emitToast, onEntryAdded } from "@/lib/events";
 import { IconBillable, IconEdit } from "@/components/icons";
 import EditEntrySheet, { type EditableEntry } from "@/components/EditEntrySheet";
 
@@ -46,6 +47,10 @@ export default function EntryList({
   const [filterBillable, setFilterBillable] = useState<"" | "true" | "false">("");
   const [filterQ, setFilterQ] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  // V2-6 §1: entry ids whose row should render with the spring-in class.
+  // Cleared shortly after the animation duration so subsequent renders
+  // (e.g. filter changes) don't re-play the animation on the same row.
+  const [springIds, setSpringIds] = useState<Set<string>>(() => new Set());
 
   // Slice D (#47): after TimerBar Stop/Discard (or any timer→entry mutation)
   // the server component re-runs via router.refresh() and passes a fresh
@@ -54,6 +59,30 @@ export default function EntryList({
   useEffect(() => {
     setEntries(initial);
   }, [initial]);
+
+  useEffect(() => {
+    return onEntryAdded<Entry>((added) => {
+      setEntries((cur) =>
+        cur.some((e) => e.id === added.id) ? cur : [added, ...cur],
+      );
+      setSpringIds((cur) => {
+        const next = new Set(cur);
+        next.add(added.id);
+        return next;
+      });
+      // Match the moderate motion token (~280ms) plus a small slack. The class
+      // only controls a one-shot enter animation; removing it after the fact
+      // keeps subsequent re-renders quiet.
+      setTimeout(() => {
+        setSpringIds((cur) => {
+          if (!cur.has(added.id)) return cur;
+          const next = new Set(cur);
+          next.delete(added.id);
+          return next;
+        });
+      }, 400);
+    });
+  }, []);
 
   const filtered = useMemo(() => {
     return entries.filter((e) => {
@@ -89,6 +118,8 @@ export default function EntryList({
       cur.map((e) => (e.id === updated.id ? ({ ...e, ...(updated as Partial<Entry>) } as Entry) : e)),
     );
     setEditingId(null);
+    // V2-6 §2: locked copy — "Saved" fires on successful entry edit.
+    emitToast("Saved");
     router.refresh();
   }
 
@@ -142,7 +173,13 @@ export default function EntryList({
           const s = new Date(e.start_at);
           const en = e.end_at ? new Date(e.end_at) : null;
           return (
-            <li key={e.id} className="card p-3 space-y-1.5">
+            <li
+              key={e.id}
+              className={
+                "card p-3 space-y-1.5" +
+                (springIds.has(e.id) ? " entry-spring-in" : "")
+              }
+            >
               <p className="text-sm text-ink line-clamp-2">
                 {e.description || (
                   <span className="text-muted">(no description)</span>
@@ -229,7 +266,13 @@ export default function EntryList({
               const s = new Date(e.start_at);
               const en = e.end_at ? new Date(e.end_at) : null;
               return (
-                <tr key={e.id} className="border-t border-border h-12">
+                <tr
+                  key={e.id}
+                  className={
+                    "border-t border-border h-12" +
+                    (springIds.has(e.id) ? " entry-spring-in" : "")
+                  }
+                >
                   <td className="px-3 py-2">{formatDate(s, timezone)}</td>
                   <td className="px-3 py-2 tabular-nums">{formatTime(s, timezone)}</td>
                   <td className="px-3 py-2 tabular-nums">

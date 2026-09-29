@@ -177,12 +177,58 @@
     transition-duration: var(--duration-instant);
     transition-timing-function: var(--ease-in);
   }
+  /* V2-6 §1 stop → list spring: newly inserted entry rows scale/translate in
+     on a soft spring. CSS-only (no Framer Motion) per the Shaul lock. The
+     ease is the same --ease-spring-soft used for press feedback. Under
+     prefers-reduced-motion the keyframe is suppressed below so the row
+     appears instantly. */
+  @keyframes entry-spring-in {
+    0% {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.985);
+    }
+    60% {
+      opacity: 1;
+      transform: translateY(1px) scale(1.005);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  .entry-spring-in {
+    animation: entry-spring-in var(--duration-moderate) var(--ease-spring-soft) both;
+    transform-origin: center top;
+  }
+  /* V2-6 §2 toasts: quiet fade + tiny rise, using the moderate motion token.
+     One toast at a time is the common case; multiple stack via flex-gap. */
+  @keyframes toast-in {
+    0% {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .toast {
+    animation: toast-in var(--duration-moderate) var(--ease-out) both;
+  }
   @media (prefers-reduced-motion: reduce) {
     /* Zeroing --duration-breath is not enough for an infinite keyframe
        animation — the animation still runs, just with a 0ms cycle. Kill the
        decorative motion outright, same as .timer-running-pulse. */
     .timer-running-pulse,
     .timer-start-idle {
+      animation: none;
+    }
+    /* V2-6 rule: spring insert and toast enter must be instant under
+       reduced-motion (Shaul lock). --duration-moderate is already 0ms in
+       reduce, but keep an explicit `animation: none` so the row/toast never
+       flashes a mid-keyframe state before settling. */
+    .entry-spring-in,
+    .toast {
       animation: none;
     }
   }

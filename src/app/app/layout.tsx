@@ -8,6 +8,7 @@ import LogoutButton from "@/components/LogoutButton";
 import AppNav from "@/components/AppNav";
 import BottomTabBar from "@/components/BottomTabBar";
 import HeaderUserMenu from "@/components/HeaderUserMenu";
+import Toaster from "@/components/Toaster";
 import { Mark } from "@/components/brand/Mark";
 import { DOCS_URL } from "@/lib/docs";
 
@@ -94,6 +95,7 @@ export default async function AppLayout({
         </a>
       </footer>
       <BottomTabBar />
+      <Toaster />
     </div>
   );
 }

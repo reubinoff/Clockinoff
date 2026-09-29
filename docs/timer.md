@@ -110,7 +110,8 @@ Click **Stop**. Clockinoff:
 1. Sets the entry's `end_at` to the current server time.
 2. Computes the duration and, if the entry is billable, the amount using
    the effective rate.
-3. Adds the entry to your [entries list]({{ '/entries' | relative_url }}).
+3. Springs the new entry into your [entries list]({{ '/entries' | relative_url }}) and shows a small
+   **Logged** toast.
 
 The timer bar returns to its idle state (empty description, no project,
 billable off, `00:00:00`, **Start** button).
@@ -123,7 +124,8 @@ Click **Discard** if you started a timer by mistake. Clockinoff will:
 
 1. Ask you to confirm.
 2. If confirmed, delete the running entry outright — it never appears in
-   the entries list, exports, or totals.
+   the entries list, exports, or totals. A small **Discarded** toast
+   confirms the action.
 
 Use **Discard** for typos and false starts. Use **Stop** followed by
 **Delete** (on the entries list) if you already finished the entry and

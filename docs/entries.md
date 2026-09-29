@@ -22,6 +22,11 @@ finished timer, most recent first.
 The currently running timer, if any, lives in the timer bar and is *not*
 shown in this list until you stop it.
 
+When you press **Stop** on the timer bar the new entry springs into the
+top of this list (and a **Logged** toast confirms it). If you press
+**Discard** instead, no row is added and a **Discarded** toast is shown.
+Saving an edit on an existing entry shows a **Saved** toast.
+
 ---
 
 ## Columns

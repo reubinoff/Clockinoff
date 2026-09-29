@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDurationHms } from "@/lib/tz";
-import { onProjectsChanged } from "@/lib/events";
+import { emitEntryAdded, emitToast, onProjectsChanged } from "@/lib/events";
 import {
   IconPlay,
   IconStop,
@@ -146,10 +146,15 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
     try {
       const res = await fetch("/api/timer/stop", { method: "POST" });
       if (res.ok) {
+        // V2-6 §1: hand the just-stopped entry to EntryList so it can spring
+        // the new row in before router.refresh() reconciles the server list.
+        const stopped = (await res.json()) as Entry;
         setEntry(null);
         setDescription("");
         setProjectId("");
         setBillable(false);
+        emitEntryAdded(stopped);
+        emitToast("Logged");
         router.refresh();
       }
     } finally {
@@ -161,12 +166,16 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
     if (!confirm("Discard this running timer? This can’t be undone.")) return;
     setPending(true);
     try {
-      await fetch("/api/timer", { method: "DELETE" });
-      setEntry(null);
-      setDescription("");
-      setProjectId("");
-      setBillable(false);
-      router.refresh();
+      const res = await fetch("/api/timer", { method: "DELETE" });
+      if (res.ok) {
+        setEntry(null);
+        setDescription("");
+        setProjectId("");
+        setBillable(false);
+        // V2-6 §3: discard produces no list row — toast only.
+        emitToast("Discarded");
+        router.refresh();
+      }
     } finally {
       setPending(false);
     }
