@@ -69,6 +69,30 @@ jobs:
           # No `tsx` / TypeScript toolchain is required at runtime.
           mkdir -p deploy/scripts
           cp scripts/migrate.mjs deploy/scripts/migrate.mjs
+          # Belt-and-suspenders: Next.js standalone tracing has historically
+          # missed argon2's dynamically-loaded `.node` prebuilds. next.config.mjs
+          # forces them into the trace via outputFileTracingIncludes, but we also
+          # overlay the source-installed argon2 (with its linux-x64/glibc prebuild
+          # from `npm ci` on this ubuntu-latest runner) to guarantee the correct
+          # native binary is present in the deployed bundle.
+          rm -rf deploy/node_modules/argon2
+          mkdir -p deploy/node_modules/argon2
+          cp -R node_modules/argon2/. deploy/node_modules/argon2/
+          for dep in node-gyp-build node-addon-api @phc/format; do
+            if [ -d "node_modules/${dep}" ] && [ ! -d "deploy/node_modules/${dep}" ]; then
+              mkdir -p "deploy/node_modules/$(dirname "${dep}")"
+              cp -R "node_modules/${dep}" "deploy/node_modules/${dep}"
+            fi
+          done
+
+      - name: Verify argon2 native module is loadable in deploy bundle
+        run: |
+          set -euo pipefail
+          echo "Checking prebuild presence..."
+          ls -la deploy/node_modules/argon2/prebuilds/linux-x64
+          test -f deploy/node_modules/argon2/prebuilds/linux-x64/argon2.glibc.node
+          echo "Loading argon2 from deploy/ under Node $(node -v)..."
+          ( cd deploy && node -e "const a=require('argon2'); a.hash('smoketest',{type:a.argon2id}).then(h=>a.verify(h,'smoketest')).then(ok=>{if(!ok)throw new Error('verify failed');console.log('argon2 OK');}).catch(e=>{console.error(e);process.exit(1);});" )
 
       - name: Azure login (OIDC)
         uses: azure/login@v3
