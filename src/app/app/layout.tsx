@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE, getSessionUser } from "@/server/auth/session";
 import TimerBar from "@/components/TimerBar";
 import LogoutButton from "@/components/LogoutButton";
+import { Mark } from "@/components/brand/Mark";
 
 export const dynamic = "force-dynamic";
 
@@ -29,8 +30,12 @@ export default async function AppLayout({
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-border bg-surface sticky top-0 z-20">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-6">
-          <Link href="/app" className="font-semibold tracking-tight">
-            Timely
+          <Link
+            href="/app"
+            className="inline-flex items-center gap-2 font-semibold tracking-tight text-ink"
+          >
+            <Mark size={24} />
+            <span>Timely</span>
           </Link>
           <nav className="flex items-center gap-4 text-sm text-muted">
             {NAV.map((n) => (

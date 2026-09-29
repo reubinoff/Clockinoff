@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Mark } from "@/components/brand/Mark";
 
 export default function LoginPage(): JSX.Element {
   return (
@@ -46,9 +47,12 @@ function LoginForm(): JSX.Element {
   return (
     <main className="min-h-screen grid place-items-center px-4">
       <form onSubmit={submit} className="card w-full max-w-sm p-6 space-y-4">
-        <div>
-          <h1 className="text-lg font-semibold">Sign in</h1>
-          <p className="text-sm text-muted">Timely — solo time tracker</p>
+        <div className="flex items-center gap-3">
+          <Mark size={40} />
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Sign in</h1>
+            <p className="text-sm text-muted">Timely — solo time tracker</p>
+          </div>
         </div>
         <div>
           <label className="label" htmlFor="email">Email</label>

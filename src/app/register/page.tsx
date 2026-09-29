@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Mark } from "@/components/brand/Mark";
 
 const DEFAULT_TZ = "Asia/Jerusalem";
 
@@ -39,9 +40,12 @@ export default function RegisterPage(): JSX.Element {
   return (
     <main className="min-h-screen grid place-items-center px-4">
       <form onSubmit={submit} className="card w-full max-w-sm p-6 space-y-4">
-        <div>
-          <h1 className="text-lg font-semibold">Create your account</h1>
-          <p className="text-sm text-muted">One account, one running timer.</p>
+        <div className="flex items-center gap-3">
+          <Mark size={40} />
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Create your account</h1>
+            <p className="text-sm text-muted">One account, one running timer.</p>
+          </div>
         </div>
         <div>
           <label className="label" htmlFor="email">Email</label>
