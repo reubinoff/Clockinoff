@@ -1,0 +1,91 @@
+---
+title: Account & timezone
+layout: default
+nav_order: 9
+---
+
+# Account & timezone
+{: .no_toc }
+
+<details open markdown="block">
+  <summary>On this page</summary>
+
+- TOC
+{:toc}
+</details>
+
+---
+
+Clockinoff keeps account management deliberately thin. There is one user
+per account, no roles, no invitations, no billing.
+
+---
+
+## Your email
+
+The email you registered with is your login and appears in the top-right
+of every `/app/*` page.
+
+The v1 UI does not include a "change email" flow. Support for that is a
+future improvement.
+
+---
+
+## Password
+
+Passwords are stored as argon2id hashes. The plaintext is never written
+to the database or logs.
+
+The v1 UI does not include a password-change or password-reset flow. If
+you lose your password, either:
+
+- Recover access via the database directly (see the repository README
+  for local dev setup), or
+- Ask the operator of your instance to reset your session.
+
+---
+
+## Timezone
+
+Your timezone controls:
+
+- How dates and times are shown in the [entries]({{ '/entries' | relative_url }})
+  list.
+- How the export form interprets **From** / **To** and formats the
+  `date`, `start`, and `end` columns.
+- The timezone label in the timer bar.
+
+You set your timezone during [registration]({{ '/getting-started' | relative_url }}#create-an-account);
+the default is `Asia/Jerusalem`.
+
+To change it later, `PATCH /api/auth/me` with `{ "timezone": "Area/City" }`
+using an IANA timezone name. A UI control for this may be added in a
+future release.
+
+Timestamps themselves are always stored in UTC, so switching timezones
+does not corrupt existing entries — it just changes how they are
+displayed.
+
+---
+
+## Sign out
+
+Click **Sign out** in the top-right of `/app/*`. Clockinoff:
+
+1. Deletes your session row in the database.
+2. Clears the `timely_session` cookie in your browser.
+
+You are redirected back to `/login`.
+
+Any other browsers or devices where you were signed in with a *different*
+session cookie remain signed in — signing out only affects the current
+device.
+
+---
+
+## Deleting your account
+
+The v1 UI does not offer self-service account deletion. If you need to
+remove an account, the operator of your instance can delete the row in
+the `users` table; the cascading foreign keys will clean up your
+sessions, projects, clients, tags, entries, and tag links.

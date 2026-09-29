@@ -4,6 +4,17 @@ A tiny, clean, solo time tracker. Manual entries + one running timer + projects/
 
 Built to the [attached tech design](uploads/timely-tech-design.md).
 
+## Documentation
+
+End-user documentation (how to register, use the timer, manage projects/clients/tags, and export CSV/PDF) lives in [`/docs`](./docs) and is published as a GitHub Pages site.
+
+- Live docs: <https://reubinoff.github.io/Clockinoff/>
+- Source markdown: [`/docs`](./docs/index.md)
+
+The `/docs` folder is a Jekyll site (using the `just-the-docs` remote theme) that GitHub Pages builds automatically. It is completely independent of the Next.js app and does not affect the Azure Web App CD workflow.
+
+To enable Pages on a fork: in the GitHub repo, go to **Settings → Pages → Build and deployment** and select **Source: Deploy from a branch**, **Branch: `main`**, **Folder: `/docs`**.
+
 ## Stack
 
 - **Next.js 14** (App Router) + React 18 + TypeScript

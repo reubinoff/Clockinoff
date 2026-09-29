@@ -1,0 +1,33 @@
+title: Clockinoff
+description: >-
+  User guide for Clockinoff (a.k.a. Timely) — a tiny, clean, solo time tracker.
+  Manual entries via a single running timer, projects & clients, tags,
+  and CSV / PDF export.
+
+remote_theme: just-the-docs/just-the-docs
+
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+
+# just-the-docs settings
+color_scheme: light
+search_enabled: true
+heading_anchors: true
+aux_links:
+  "GitHub repository":
+    - "https://github.com/reubinoff/Clockinoff"
+aux_links_new_tab: true
+
+# Footer
+footer_content: >-
+  Clockinoff user docs · <a href="https://github.com/reubinoff/Clockinoff">source on GitHub</a>.
+  Content matches the v1 UI; no calendar, no teams, no third-party sync.
+
+# Sanity: keep drafts / node_modules out of the build.
+exclude:
+  - README.md
+  - node_modules
+  - vendor
+  - Gemfile
+  - Gemfile.lock
