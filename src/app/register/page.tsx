@@ -1,19 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mark } from "@/components/brand/Mark";
-
-const DEFAULT_TZ = "Asia/Jerusalem";
+import { AuthShell } from "@/components/auth/AuthShell";
+import { PasswordField } from "@/components/auth/PasswordField";
+import { TimezoneSelect } from "@/components/auth/TimezoneSelect";
+import { IconAlert } from "@/components/icons";
+import { DEFAULT_TIMEZONE, detectTimezone } from "@/lib/timezones";
 
 export default function RegisterPage(): JSX.Element {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [timezone, setTimezone] = useState(DEFAULT_TZ);
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setTimezone(detectTimezone());
+    emailRef.current?.focus();
+  }, []);
 
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -26,72 +34,90 @@ export default function RegisterPage(): JSX.Element {
         body: JSON.stringify({ email, password, timezone }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data?.error?.message ?? "Registration failed");
+        const data = await res.json().catch(() => null);
+        const msg =
+          data && typeof data === "object" && data.error?.message
+            ? String(data.error.message)
+            : "Something went wrong. Try again.";
+        setError(msg);
         return;
       }
-      router.push("/app");
+      router.push("/app?welcome=1");
       router.refresh();
+    } catch {
+      setError("Something went wrong. Try again.");
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <main className="min-h-screen grid place-items-center px-4">
-      <form onSubmit={submit} className="card w-full max-w-sm p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <Mark size={40} />
-          <div>
-            <h1 className="text-lg font-semibold leading-tight">Create your account</h1>
-            <p className="text-sm text-muted">One account, one running timer.</p>
-          </div>
-        </div>
-        <div>
-          <label className="label" htmlFor="email">Email</label>
+    <AuthShell
+      title="Start tracking"
+      subtitle="One account. One running timer."
+      footer={
+        <>
+          Already tracking?{" "}
+          <Link className="text-accent hover:underline" href="/login">
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-1">
+          <label htmlFor="email" className="block text-sm font-medium text-ink">
+            Email
+          </label>
           <input
             id="email"
+            ref={emailRef}
             className="input"
             type="email"
             autoComplete="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "auth-error" : undefined}
           />
         </div>
-        <div>
-          <label className="label" htmlFor="password">Password (min 8 chars)</label>
-          <input
-            id="password"
-            className="input"
-            type="password"
-            autoComplete="new-password"
-            minLength={8}
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="label" htmlFor="tz">Timezone</label>
-          <input
-            id="tz"
-            className="input"
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
-          />
-        </div>
-        {error && <p className="text-sm text-red-700">{error}</p>}
-        <button type="submit" className="btn btn-primary w-full" disabled={pending}>
+        <PasswordField
+          id="password"
+          label="Password"
+          value={password}
+          onChange={setPassword}
+          autoComplete="new-password"
+          minLength={8}
+          required
+          helper="At least 8 characters"
+          describedById={error ? "auth-error" : undefined}
+        />
+        <TimezoneSelect
+          id="timezone"
+          label="Timezone"
+          value={timezone}
+          onChange={setTimezone}
+          required
+        />
+        {error ? (
+          <p
+            id="auth-error"
+            role="alert"
+            className="flex items-start gap-2 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger"
+          >
+            <IconAlert size={16} className="mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </p>
+        ) : null}
+        <button
+          type="submit"
+          className="btn btn-primary w-full h-11"
+          disabled={pending}
+        >
           {pending ? "Creating…" : "Create account"}
         </button>
-        <p className="text-sm text-muted text-center">
-          Have an account?{" "}
-          <Link className="text-accent hover:underline" href="/login">
-            Sign in
-          </Link>
-        </p>
       </form>
-    </main>
+    </AuthShell>
   );
 }

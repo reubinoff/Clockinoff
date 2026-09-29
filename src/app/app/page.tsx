@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import EntryList from "@/components/EntryList";
+import WelcomePanel from "@/components/onboarding/WelcomePanel";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, getSessionUser } from "@/server/auth/session";
 import { listEntries } from "@/server/services/entries";
@@ -16,8 +18,12 @@ export default async function AppHomePage(): Promise<JSX.Element> {
     listProjects(user.id),
     listTags(user.id),
   ]);
+  const hasEntries = entries.length > 0;
   return (
-    <section className="space-y-4">
+    <section className="space-y-6">
+      <Suspense fallback={null}>
+        <WelcomePanel hasEntries={hasEntries} />
+      </Suspense>
       <div>
         <h2 className="text-lg font-semibold">Entries</h2>
         <p className="text-sm text-muted">Your recent time entries.</p>

@@ -1,13 +1,19 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Mark } from "@/components/brand/Mark";
+import { AuthShell } from "@/components/auth/AuthShell";
+import { PasswordField } from "@/components/auth/PasswordField";
+import { IconAlert } from "@/components/icons";
 
 export default function LoginPage(): JSX.Element {
   return (
-    <Suspense fallback={<main className="min-h-screen grid place-items-center" />}>
+    <Suspense
+      fallback={
+        <main className="min-h-screen grid place-items-center bg-canvas" />
+      }
+    >
       <LoginForm />
     </Suspense>
   );
@@ -21,6 +27,11 @@ function LoginForm(): JSX.Element {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    emailRef.current?.focus();
+  }, []);
 
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -33,63 +44,82 @@ function LoginForm(): JSX.Element {
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data?.error?.message ?? "Login failed");
+        const data = await res.json().catch(() => null);
+        const msg =
+          data && typeof data === "object" && data.error?.message
+            ? String(data.error.message)
+            : "Something went wrong. Try again.";
+        setError(msg);
         return;
       }
       router.push(next);
       router.refresh();
+    } catch {
+      setError("Something went wrong. Try again.");
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <main className="min-h-screen grid place-items-center px-4">
-      <form onSubmit={submit} className="card w-full max-w-sm p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <Mark size={40} />
-          <div>
-            <h1 className="text-lg font-semibold leading-tight">Sign in</h1>
-            <p className="text-sm text-muted">Timely — solo time tracker</p>
-          </div>
-        </div>
-        <div>
-          <label className="label" htmlFor="email">Email</label>
+    <AuthShell
+      title="Welcome back"
+      subtitle="Sign in to Timely"
+      footer={
+        <>
+          New here?{" "}
+          <Link className="text-accent hover:underline" href="/register">
+            Create an account
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-1">
+          <label htmlFor="email" className="block text-sm font-medium text-ink">
+            Email
+          </label>
           <input
             id="email"
+            ref={emailRef}
             className="input"
             type="email"
             autoComplete="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "auth-error" : undefined}
           />
         </div>
-        <div>
-          <label className="label" htmlFor="password">Password</label>
-          <input
-            id="password"
-            className="input"
-            type="password"
-            autoComplete="current-password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        {error && <p className="text-sm text-red-700">{error}</p>}
-        <button type="submit" className="btn btn-primary w-full" disabled={pending}>
+        <PasswordField
+          id="password"
+          label="Password"
+          value={password}
+          onChange={setPassword}
+          autoComplete="current-password"
+          minLength={8}
+          required
+          describedById={error ? "auth-error" : undefined}
+        />
+        {error ? (
+          <p
+            id="auth-error"
+            role="alert"
+            className="flex items-start gap-2 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger"
+          >
+            <IconAlert size={16} className="mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </p>
+        ) : null}
+        <button
+          type="submit"
+          className="btn btn-primary w-full h-11"
+          disabled={pending}
+        >
           {pending ? "Signing in…" : "Sign in"}
         </button>
-        <p className="text-sm text-muted text-center">
-          No account?{" "}
-          <Link className="text-accent hover:underline" href="/register">
-            Create one
-          </Link>
-        </p>
       </form>
-    </main>
+    </AuthShell>
   );
 }

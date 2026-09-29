@@ -171,9 +171,11 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
       <div className="mx-auto max-w-6xl px-4 py-2 flex items-center gap-3">
         <input
           className="input flex-1"
-          placeholder={entry ? "What are you working on?" : "Start a new timer…"}
+          placeholder="What are you working on?"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
+          data-timer-description="true"
+          aria-label="Timer description"
         />
         <select
           className="input max-w-[180px]"
