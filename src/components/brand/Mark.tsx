@@ -42,7 +42,7 @@ export function Wordmark({
           fontWeight: 600,
           letterSpacing: "-0.01em",
           fontSize: Math.round(Number(markSize) * 0.75),
-          color: "#111827",
+          color: "#0f172a",
           lineHeight: 1,
         }}
       >

@@ -18,7 +18,7 @@ export default function OpengraphImage(): ImageResponse {
           justifyContent: "center",
           padding: "80px",
           background:
-            "linear-gradient(180deg, #fafaf9 0%, #ede9fe 100%)",
+            "linear-gradient(180deg, #f7f6f3 0%, #ede9fe 100%)",
           fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
         }}
       >
@@ -45,7 +45,7 @@ export default function OpengraphImage(): ImageResponse {
             style={{
               fontSize: 120,
               fontWeight: 700,
-              color: "#111827",
+              color: "#0f172a",
               letterSpacing: "-3px",
             }}
           >
@@ -56,7 +56,7 @@ export default function OpengraphImage(): ImageResponse {
           style={{
             marginTop: "40px",
             fontSize: 48,
-            color: "#111827",
+            color: "#0f172a",
             fontWeight: 600,
           }}
         >
@@ -66,7 +66,7 @@ export default function OpengraphImage(): ImageResponse {
           style={{
             marginTop: "16px",
             fontSize: 32,
-            color: "#6b7280",
+            color: "#64748b",
           }}
         >
           One running timer. That&apos;s it.

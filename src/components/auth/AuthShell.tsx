@@ -18,7 +18,7 @@ export function AuthShell({
       className="min-h-screen w-full px-4 py-10 flex items-center justify-center"
       style={{
         background:
-          "linear-gradient(180deg, #fafaf9 0%, rgba(237,233,254,0.5) 100%)",
+          "linear-gradient(180deg, #f7f6f3 0%, rgba(237,233,254,0.5) 100%)",
       }}
     >
       <div className="w-full max-w-md">
