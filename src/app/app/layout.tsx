@@ -8,6 +8,7 @@ import LogoutButton from "@/components/LogoutButton";
 import AppNav from "@/components/AppNav";
 import BottomTabBar from "@/components/BottomTabBar";
 import { Mark } from "@/components/brand/Mark";
+import { DOCS_URL } from "@/lib/docs";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,15 @@ export default async function AppLayout({
             >
               {user.email}
             </span>
+            <a
+              className="text-muted hover:text-ink underline underline-offset-2"
+              href={DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open user documentation in a new tab"
+            >
+              Docs
+            </a>
             <LogoutButton />
           </div>
         </div>
@@ -68,7 +78,16 @@ export default async function AppLayout({
         {children}
       </main>
       <footer className="hidden md:block border-t border-border py-4 text-center text-xs text-muted">
-        Timely · {user.timezone}
+        <span>Timely · {user.timezone}</span>
+        <span aria-hidden="true"> · </span>
+        <a
+          className="hover:text-ink underline underline-offset-2"
+          href={DOCS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Docs
+        </a>
       </footer>
       <BottomTabBar />
     </div>

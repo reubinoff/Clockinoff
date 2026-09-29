@@ -55,6 +55,17 @@ tests/
 
 ### Invariants an agent must not silently break
 
+- **User documentation is part of the surface area.** The end-user site
+  lives in [`/docs`](./docs) (published from GitHub Pages) and is linked
+  from the authenticated app shell (top header on all sizes, plus the
+  desktop footer) and from the login/register screens via
+  `src/lib/docs.ts`. Any change
+  that alters user-visible behaviour — new UI, new/renamed page, new
+  filter, new export column, changed defaults, changed error text —
+  **must update the matching page under `/docs` in the same commit**.
+  If you cannot update the docs in the same commit, open a follow-up
+  issue and link it from the commit body. See §10 for the mapping from
+  code to doc page.
 - **One running timer per user** — enforced by a partial unique index
   (`WHERE end_at IS NULL`). Second start returns HTTP 409
   `TIMER_ALREADY_RUNNING` with `entry_id`. Do not drop the index.
@@ -294,3 +305,48 @@ document remains the source of truth.
 
 For higher-level onboarding aimed at humans, see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md), which is a thin pointer to this file.
+
+---
+
+## 10. User docs — keep them in sync
+
+Clockinoff ships an end-user documentation site at
+<https://reubinoff.github.io/Clockinoff/>, built from Markdown under
+[`/docs`](./docs) by GitHub Pages (Jekyll + `just-the-docs` remote theme).
+The web app links to it from the app-shell header (visible on both
+mobile and desktop) and the desktop footer, plus the login/register
+screens, via `src/lib/docs.ts` (`DOCS_URL`, override with
+`NEXT_PUBLIC_DOCS_URL`).
+
+**Whenever you change user-visible behaviour, update the matching doc
+page in the same commit.** Use this mapping:
+
+| Change | Update this page |
+|---|---|
+| Registration form, timezone default, auth cookie behaviour | [`docs/getting-started.md`](./docs/getting-started.md) |
+| Timer bar (start / stop / discard, editing running entry, one-timer rule) | [`docs/timer.md`](./docs/timer.md) |
+| Entries list (columns, filters, delete flow) | [`docs/entries.md`](./docs/entries.md) |
+| Projects UI (default rate/billable, archive/delete) | [`docs/projects.md`](./docs/projects.md) |
+| Clients UI (archive/delete) | [`docs/clients.md`](./docs/clients.md) |
+| Tags UI | [`docs/tags.md`](./docs/tags.md) |
+| Export page or CSV/PDF format, empty-range behaviour | [`docs/export.md`](./docs/export.md) |
+| Account / timezone / sign-out flow | [`docs/account.md`](./docs/account.md) |
+| One-timer rule, overlaps, currency, "not in v1" list | [`docs/faq.md`](./docs/faq.md) |
+| Product intro, principles, top-level "what Clockinoff is" | [`docs/index.md`](./docs/index.md) |
+
+Rules of the road for `/docs`:
+
+- The docs describe **actual v1 UI behaviour**, not roadmap items. If a
+  feature only exists in the API, say so explicitly (see the tags and
+  entries pages for the current tone).
+- Do not add build steps to `/docs`. GitHub Pages builds it for free —
+  keep it that way so the Azure App Service CD workflow is not affected.
+- Do not link back into the running app from `/docs` with absolute
+  URLs; use relative paths (`/register`, `/app`, …) so the docs work
+  against any instance.
+- If you rename or delete a doc page, update the internal cross-links
+  and the mapping table above.
+
+If a change is genuinely docs-only (typo, wording, screenshot), a
+docs-only commit straight to `main` is fine — CD will re-run but is a
+no-op because no application code changed.

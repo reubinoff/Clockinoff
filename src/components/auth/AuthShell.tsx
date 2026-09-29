@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Mark } from "@/components/brand/Mark";
+import { DOCS_URL } from "@/lib/docs";
 
 export function AuthShell({
   title,
@@ -40,6 +41,16 @@ export function AuthShell({
         {footer ? (
           <p className="mt-4 text-center text-sm text-muted">{footer}</p>
         ) : null}
+        <p className="mt-3 text-center text-xs text-muted">
+          <a
+            className="hover:text-ink underline underline-offset-2"
+            href={DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Read the user docs
+          </a>
+        </p>
       </div>
     </main>
   );
