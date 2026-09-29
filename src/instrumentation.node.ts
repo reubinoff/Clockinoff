@@ -8,6 +8,9 @@
 //   - Never emit the full `DATABASE_URL` or a bare `postgres://` connection
 //     string in any log body / span attribute.
 //   - Never emit anything under a `password` key.
+//   - Post-#12 residual (#37): also match attribute *keys* like
+//     `db.connection_string` / `DATABASE_URL` (value may not be URL-shaped),
+//     and deep-scrub object args passed to `console.*` (not just strings/Errors).
 //
 // We do the scrub in two places:
 //   1. A span processor that rewrites request/response header attributes on
@@ -18,8 +21,7 @@
 //      terminals).
 import { useAzureMonitor } from "@azure/monitor-opentelemetry";
 import type { ReadableSpan, SpanProcessor } from "@opentelemetry/sdk-trace-base";
-
-const REDACTED = "[REDACTED]";
+import { REDACTED, redactDeep, redactString } from "@/lib/scrub";
 
 const SENSITIVE_ATTRIBUTE_MATCHERS: Array<(key: string) => boolean> = [
   (k) => /authorization/i.test(k),
@@ -27,15 +29,14 @@ const SENSITIVE_ATTRIBUTE_MATCHERS: Array<(key: string) => boolean> = [
   (k) => /set-cookie/i.test(k),
   (k) => /timely_session/i.test(k),
   (k) => /password/i.test(k),
+  // #37: DB DSN attribute keys, incl. values that aren't URL-shaped
+  // (e.g. `Server=...;User Id=...;Password=...`).
+  (k) => /database.?url/i.test(k),
+  (k) => /connection.?string/i.test(k),
 ];
 
-function redactString(input: string): string {
-  let s = input;
-  s = s.replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/gi, "[REDACTED_DATABASE_URL]");
-  s = s.replace(/(["']?password["']?\s*[:=]\s*["'])([^"']*)(["'])/gi, `$1${REDACTED}$3`);
-  s = s.replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`);
-  s = s.replace(/timely_session=[^;\s"']+/gi, `timely_session=${REDACTED}`);
-  return s;
+function isSensitiveAttributeKey(key: string): boolean {
+  return SENSITIVE_ATTRIBUTE_MATCHERS.some((match) => match(key));
 }
 
 class RedactingSpanProcessor implements SpanProcessor {
@@ -50,7 +51,7 @@ class RedactingSpanProcessor implements SpanProcessor {
     const attrs = span.attributes as Record<string, unknown> | undefined;
     if (!attrs) return;
     for (const key of Object.keys(attrs)) {
-      if (SENSITIVE_ATTRIBUTE_MATCHERS.some((match) => match(key))) {
+      if (isSensitiveAttributeKey(key)) {
         attrs[key] = REDACTED;
         continue;
       }
@@ -68,16 +69,9 @@ function wrapConsole(): void {
   for (const method of methods) {
     const original = console[method].bind(console);
     console[method] = (...args: unknown[]): void => {
-      const scrubbed = args.map((arg) => {
-        if (typeof arg === "string") return redactString(arg);
-        if (arg instanceof Error) {
-          const clone = new Error(redactString(arg.message));
-          clone.name = arg.name;
-          clone.stack = arg.stack ? redactString(arg.stack) : undefined;
-          return clone;
-        }
-        return arg;
-      });
+      const scrubbed = args.map((arg) =>
+        redactDeep(arg, { isSensitiveKey: isSensitiveAttributeKey }),
+      );
       original(...scrubbed);
     };
   }

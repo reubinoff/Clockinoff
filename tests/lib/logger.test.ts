@@ -58,6 +58,22 @@ describe("logger / redactValue", () => {
     });
   });
 
+  // #37: attribute key matchers must cover DB DSN shapes even when the value
+  // isn't URL-shaped (e.g. ODBC-style connection strings).
+  it.each([
+    "database_url",
+    "DATABASE_URL",
+    "databaseUrl",
+    "database.url",
+    "connection_string",
+    "connectionString",
+    "db.connection_string",
+    "postgres.connection.string",
+  ])("redacts DB DSN attribute key %s regardless of value shape", (key) => {
+    const out = redactValue({ [key]: "Server=x;User Id=y;Password=z" }) as Record<string, unknown>;
+    expect(out[key]).toBe("[REDACTED]");
+  });
+
   it("recursively redacts arrays and nested objects", () => {
     expect(
       redactValue({

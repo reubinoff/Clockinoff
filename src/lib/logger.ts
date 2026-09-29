@@ -9,41 +9,34 @@
 // through this logger never carries `Authorization` / `Cookie` /
 // `timely_session` / `password` / a full `postgres://` URL, even when
 // instrumentation is disabled (local dev, CI, or before it has loaded).
+//
+// Post-#12 residual (#37): also match keys like `db.connection_string` /
+// `DATABASE_URL` where the value isn't a full URL (e.g. ODBC-style DSN).
 
-const REDACTED = "[REDACTED]";
+import { REDACTED, redactDeep, redactString } from "@/lib/scrub";
 
-const SENSITIVE_KEY = /password|authorization|cookie|session|secret|token|database_url/i;
+const SENSITIVE_KEY =
+  /password|authorization|cookie|session|secret|token|database.?url|connection.?string/i;
 
-function redactString(input: string): string {
-  let s = input;
-  s = s.replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/gi, "[REDACTED_DATABASE_URL]");
-  s = s.replace(/(["']?password["']?\s*[:=]\s*["'])([^"']*)(["'])/gi, `$1${REDACTED}$3`);
-  s = s.replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`);
-  s = s.replace(/timely_session=[^;\s"']+/gi, `timely_session=${REDACTED}`);
-  return s;
+function isSensitiveKey(key: string): boolean {
+  return SENSITIVE_KEY.test(key);
 }
 
-function redactValue(value: unknown, depth = 0): unknown {
-  if (depth > 4) return "[TRUNCATED]";
-  if (value === null || value === undefined) return value;
-  if (typeof value === "string") return redactString(value);
-  if (typeof value === "number" || typeof value === "boolean") return value;
-  if (value instanceof Error) {
-    return {
-      name: value.name,
-      message: redactString(value.message),
-      stack: value.stack ? redactString(value.stack) : undefined,
-    };
-  }
-  if (Array.isArray(value)) return value.map((v) => redactValue(v, depth + 1));
-  if (typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = SENSITIVE_KEY.test(k) ? REDACTED : redactValue(v, depth + 1);
-    }
-    return out;
-  }
-  return String(value);
+function errorToPlainObject(err: Error): Record<string, unknown> {
+  return {
+    name: err.name,
+    message: redactString(err.message),
+    stack: err.stack ? redactString(err.stack) : undefined,
+  };
+}
+
+function redactValue(value: unknown): unknown {
+  return redactDeep(value, {
+    isSensitiveKey,
+    maxDepth: 5,
+    onError: errorToPlainObject,
+    onOther: (v) => String(v),
+  });
 }
 
 type Extra = Record<string, unknown> | undefined;
@@ -72,4 +65,4 @@ export const logger = {
   },
 };
 
-export const __testing = { redactString, redactValue };
+export const __testing = { redactString, redactValue, isSensitiveKey, REDACTED };
