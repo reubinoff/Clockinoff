@@ -13,6 +13,12 @@ describe("errors", () => {
     expect(errors.conflict().status).toBe(409);
     expect(errors.internal().status).toBe(500);
     expect(errors.timerNotRunning().status).toBe(404);
+    const rl = errors.rateLimited();
+    expect(rl.status).toBe(429);
+    expect(rl.code).toBe("RATE_LIMITED");
+    expect(rl.message).toMatch(/too many login attempts/i);
+    expect(rl.message).not.toMatch(/email|account|exist/i);
+    expect(errors.rateLimited("custom").message).toBe("custom");
   });
 
   it("timer-already-running attaches entry_id", () => {

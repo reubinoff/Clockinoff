@@ -59,6 +59,15 @@ If you see an error like *"email already registered"*, use the
 You will be sent to `/app` unless you followed a link deeper in the app; in
 that case Clockinoff returns you to the page you were trying to reach.
 
+### Too many failed sign-ins
+
+After a handful of failed login attempts for the same email from the same
+network within a short window, Clockinoff temporarily blocks further
+attempts and responds with `429 Too many login attempts. Please try again
+later.` Wait a few minutes and try again — a successful sign-in clears the
+counter immediately. The message is deliberately generic and does not
+reveal whether the email is registered.
+
 ### Session lifetime
 
 - Your session is stored in the database and referenced by an

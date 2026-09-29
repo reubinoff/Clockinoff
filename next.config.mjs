@@ -1,7 +1,36 @@
+// Baseline security headers applied to every response (issues #34 + #35).
+//
+// - `X-Content-Type-Options: nosniff` blocks MIME sniffing.
+// - `X-Frame-Options: DENY` + `Content-Security-Policy: frame-ancestors 'none'`
+//   are two overlapping clickjacking mitigations; modern browsers honour the
+//   CSP directive, older ones fall back to the legacy header.
+// - `Strict-Transport-Security` pins clients to HTTPS in production. The
+//   header is harmless over HTTP (browsers ignore it) so we send it
+//   unconditionally rather than depending on runtime env-checks in the config.
+//
+// Intentionally *not* setting `default-src` / `script-src` / `style-src`: a
+// stricter CSP would need nonces threaded through the Next.js runtime, and
+// v1 does not have that plumbing yet — a broken login page is worse than a
+// missing script-src directive.
+const SECURITY_HEADERS = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload",
+  },
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
+  // Drop the `X-Powered-By: Next.js` framework banner (issue #35).
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+  },
   experimental: {
     // Enables `src/instrumentation.ts` (Azure Monitor / Application Insights
     // bootstrap). Stable in Next 15; opt-in on 14.

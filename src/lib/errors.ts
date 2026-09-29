@@ -5,6 +5,7 @@ export type ErrorCode =
   | "TIMER_ALREADY_RUNNING"
   | "TIMER_NOT_RUNNING"
   | "CONFLICT"
+  | "RATE_LIMITED"
   | "INTERNAL";
 
 export interface ErrorBody {
@@ -51,5 +52,7 @@ export const errors = {
       extra: { entry_id: entryId },
     }),
   timerNotRunning: () => new ApiError(404, "TIMER_NOT_RUNNING", "No running timer"),
+  rateLimited: (message = "Too many login attempts. Please try again later.") =>
+    new ApiError(429, "RATE_LIMITED", message),
   internal: (message = "Internal server error") => new ApiError(500, "INTERNAL", message),
 };
