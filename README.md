@@ -58,15 +58,22 @@ npm test
 # With coverage gate (≥90% lines on src/server + src/lib)
 npm run test:coverage
 
-# Playwright smoke (register → timer → CSV export)
-# In one terminal:
+# Playwright smoke (register → timer → entries refresh → CSV/PDF export)
+# Option A — point at an already-running dev server:
 npm run dev
-# In another:
+PLAYWRIGHT_BASE_URL=http://localhost:3000 npm run test:e2e
+
+# Option B — let Playwright build and start `next start` itself:
+npm run build
 npx playwright install --with-deps chromium
 npm run test:e2e
 ```
 
-The Playwright smoke test is not wired into CI by default (kept optional / non-blocking as the design allows) — Vitest suite is the required gate.
+Push/PR CI (`.github/workflows/ci.yml`) is the required gate and runs the
+Vitest suite with the ≥90% coverage bar. The Playwright suite runs nightly
+(and on demand) via `.github/workflows/nightly.yml` — see that file for the
+cron time and env; the workflow can also be triggered manually from the
+Actions tab ("Run workflow" on the "Nightly regression" workflow).
 
 ### DB scripts
 
