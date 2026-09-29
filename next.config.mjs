@@ -32,6 +32,16 @@ const nextConfig = {
       ],
     },
   },
+  async rewrites() {
+    return [
+      // Pretty URLs for the static, dependency-free unavailable page shipped
+      // in `public/unavailable.html`. Useful for status links, upstream
+      // health checks, or Front Door / App Gateway custom error rules.
+      { source: "/unavailable", destination: "/unavailable.html" },
+      { source: "/maintenance", destination: "/unavailable.html" },
+      { source: "/503", destination: "/unavailable.html" },
+    ];
+  },
 };
 
 export default nextConfig;
