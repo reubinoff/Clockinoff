@@ -1,0 +1,25 @@
+# Canonical owner-label roster for Clockinoff issues and PRs.
+#
+# The label IS the assignment for bot owners (GitHub's `assignees`
+# field is not used for bots on this repo). Every issue must carry
+# exactly one of these labels; PRs carry the same label as the issue
+# they close.
+#
+# See AGENTS.md §9 for the full convention. This file is the source
+# of truth for the roster — keep AGENTS.md §9 and any automation
+# in sync when it changes.
+#
+# Human collaborators may still be added via GitHub's `assignees`
+# field; that is orthogonal to these labels.
+
+labels:
+  - name: dude
+    description: "Owner: dude"
+  - name: shaul
+    description: "Owner: shaul"
+  - name: gabi
+    description: "Owner: gabi"
+  - name: nati
+    description: "Owner: nati"
+  - name: ariel
+    description: "Owner: ariel"

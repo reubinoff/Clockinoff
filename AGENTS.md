@@ -212,7 +212,45 @@ pass.
 
 ---
 
-## 9. Git & PR workflow for agents
+## 9. Issue triage — owner labels (MANDATORY)
+
+Clockinoff assigns **bot** owners with a **label**, not with GitHub's
+`assignees` field (bots historically cannot be assigned via that field
+on this repo, so we standardized on labels).
+
+**Every issue must carry exactly one owner label.** The label *is* the
+assignment.
+
+| Owner label | Meaning                     |
+|-------------|-----------------------------|
+| `dude`      | Owner: dude                 |
+| `shaul`     | Owner: shaul                |
+| `gabi`      | Owner: gabi                 |
+| `nati`      | Owner: nati                 |
+| `ariel`     | Owner: ariel                |
+
+Rules for agents:
+
+1. When you **open** an issue, set exactly one of the labels above
+   before you submit. If you don't know the owner, ask Moshe rather
+   than guessing.
+2. When you **triage** an existing issue with no owner label, add the
+   correct one; don't silently start work on an unowned issue.
+3. If you **pick up an existing issue** whose owner label already
+   points at a different bot, **stop and ask** — don't reassign by
+   swapping labels.
+4. Do **not** use GitHub's `assignees` field for bots. Human
+   collaborators may still be added there.
+5. Never invent new owner labels. The five above are the whole set;
+   changes go through Moshe.
+6. Never remove or rename owner labels, and never edit their
+   description away from `Owner: <name>`.
+
+The canonical list also lives, machine-readable, at
+[`.github/owner-labels.yml`](.github/owner-labels.yml) — keep the two
+in sync when the roster changes.
+
+## 10. Git & PR workflow for agents
 
 1. **Branch off `main`.** Prefer a short, kebab-case name, e.g.
    `agent/<short-topic>` or the auto-generated `cursor/<slug>-<id>` when
@@ -226,12 +264,16 @@ pass.
    - One logical change per commit; imperative-mood subject lines
      (e.g. `docs: add AGENTS.md`).
 3. **Push and open a PR to `main`.** Draft by default. Base branch is
-   always `main`; **never push directly to `main`.**
+   always `main`; **never push directly to `main`.** Carry the same
+   owner label as the linked issue onto the PR so ownership is
+   obvious in the PR list.
 4. **PR description must include:**
    - The GitHub issue number it addresses (e.g. `Closes #14`).
    - A short summary of the change and any follow-ups.
    - Confirmation that `npm run typecheck && npm run lint && npm run test:coverage`
      passed locally.
+   - The owner label the PR is filed under (matches the issue's
+     owner label from §9).
 5. **If the automated PR-creation tool fails** with a
    collaborator / validation error, leave the branch pushed and report the
    compare link
@@ -243,7 +285,7 @@ pass.
 
 ---
 
-## 10. What agents should NOT touch without an explicit human ask
+## 11. What agents should NOT touch without an explicit human ask
 
 - The locked stack in §1 (framework, ORM, auth scheme, PDF library).
 - `.github/workflows/*.yml`, `next.config.mjs`, `drizzle.config.ts`,
@@ -251,10 +293,12 @@ pass.
 - Existing DB migrations under `./drizzle/` (always add a new one).
 - The `timely_session` cookie name, `SESSION_COOKIE`, or session TTL.
 - Anything under §8 (security / secrets).
+- Owner labels in §9 (`dude` / `shaul` / `gabi` / `nati` / `ariel`) —
+  don't rename, delete, or add to that set.
 
 ---
 
-## 11. Backlog pointers
+## 12. Backlog pointers
 
 - **User-facing docs on GitHub Pages** (tracked separately in
   [`#13`](https://github.com/reubinoff/Clockinoff/issues/13)) will
@@ -265,7 +309,7 @@ pass.
 
 ---
 
-## 12. Agent-tool-specific pointers
+## 13. Agent-tool-specific pointers
 
 The following files exist purely to route their respective tools at this
 `AGENTS.md`. Keep any duplicated guidance to a minimum — edit this file

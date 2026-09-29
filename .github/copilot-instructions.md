@@ -26,6 +26,11 @@ Fast recap so you never forget the highest-risk items:
 - **Commit as `cursoragent <cursoragent@cursor.com>`.** Never author as
   `reubinoff` / `reubinoff-prime` or `moshe@primesec.ai`. Branch off
   `main`, open a draft PR to `main`, never push directly to `main`.
+- **Owner labels are the assignment for bots.** Every issue must
+  carry exactly one of `dude` / `shaul` / `gabi` / `nati` / `ariel`.
+  PRs inherit the same label as the issue they close. Do not use
+  GitHub's `assignees` field for bots; do not invent new owner
+  labels. Source of truth: [`.github/owner-labels.yml`](owner-labels.yml).
 
 For anything not covered above — architecture invariants, error
 codes, deploy steps, the full "do not touch" list — see
