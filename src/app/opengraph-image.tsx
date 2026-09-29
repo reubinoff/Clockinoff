@@ -18,13 +18,13 @@ export default function OpengraphImage(): ImageResponse {
           justifyContent: "center",
           padding: "80px",
           background:
-            "linear-gradient(180deg, #fafaf9 0%, #ecfdf5 100%)",
+            "linear-gradient(180deg, #fafaf9 0%, #ede9fe 100%)",
           fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
           <svg width="120" height="120" viewBox="0 0 64 64">
-            <rect width="64" height="64" rx="15" fill="#0f766e" />
+            <rect width="64" height="64" rx="15" fill="#6d28d9" />
             <circle
               cx="32"
               cy="32"

@@ -14,7 +14,7 @@ export function Mark({ size = 40, title = "Timely", ...rest }: Props): JSX.Eleme
       {...rest}
     >
       <title>{title}</title>
-      <rect width="64" height="64" rx="15" fill="#0f766e" />
+      <rect width="64" height="64" rx="15" fill="#6d28d9" />
       <circle cx="32" cy="32" r="18" fill="none" stroke="#ffffff" strokeWidth="3" />
       <path
         d="M28.5 23.5 L44 32 L28.5 40.5 Z"

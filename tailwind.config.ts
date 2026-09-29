@@ -5,9 +5,9 @@ export default {
   theme: {
     extend: {
       colors: {
-        accent: "#0f766e",
+        accent: "#6d28d9",
         "accent-fg": "#ffffff",
-        "accent-soft": "#ccfbf1",
+        "accent-soft": "#ede9fe",
         surface: "#ffffff",
         canvas: "#fafaf9",
         "canvas-2": "#f4f4f2",
