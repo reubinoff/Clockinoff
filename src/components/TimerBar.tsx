@@ -218,7 +218,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
         <div className="flex items-center gap-2 md:contents">
           <span
             className={
-              "tabular-nums font-mono text-lg md:text-xl flex-1 md:flex-none md:w-[92px] text-right text-ink" +
+              "timer-digits text-timer-md flex-1 md:flex-none md:w-[92px] text-right text-ink" +
               (running ? " timer-running-pulse" : "")
             }
             aria-live="polite"

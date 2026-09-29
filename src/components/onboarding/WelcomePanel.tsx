@@ -80,11 +80,11 @@ export default function WelcomePanel({
             <div className="flex-1">
               <h2
                 id="welcome-title"
-                className="text-2xl font-semibold text-ink leading-tight"
+                className="text-display text-ink"
               >
                 Your timer is ready
               </h2>
-              <p className="mt-1 text-sm text-muted">
+              <p className="mt-1 text-body-sm text-muted">
                 Describe what you&rsquo;re doing and hit Start. One timer at a
                 time — keep it simple.
               </p>

@@ -39,7 +39,7 @@ export function PasswordField({
         <input
           id={id}
           type={visible ? "text" : "password"}
-          className="input pr-11"
+          className="input pr-12"
           value={value}
           autoComplete={autoComplete}
           minLength={minLength}
@@ -52,7 +52,7 @@ export function PasswordField({
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? "Hide password" : "Show password"}
           aria-pressed={visible}
-          className="absolute inset-y-0 right-0 flex items-center px-3 text-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 rounded-r-md"
+          className="password-toggle"
         >
           {visible ? <IconEyeOff size={18} /> : <IconEye size={18} />}
         </button>

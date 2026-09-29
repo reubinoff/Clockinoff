@@ -293,13 +293,13 @@ export default function EditEntrySheet({
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border">
-          <h2 id="edit-entry-title" className="text-base font-semibold text-ink">
+          <h2 id="edit-entry-title" className="text-title-sm text-ink">
             Edit entry
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="btn btn-ghost btn-sm !min-h-[36px] !px-2"
+            className="btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2"
             aria-label="Close"
           >
             <IconX size={18} aria-hidden />
@@ -384,7 +384,7 @@ export default function EditEntrySheet({
                 <button
                   type="button"
                   onClick={() => bumpHours(-1)}
-                  className="btn btn-sm !min-h-[40px] !w-10 !px-0"
+                  className="btn btn-sm !min-h-[44px] !w-11 !min-w-[44px] !px-0"
                   aria-label="Decrease hours"
                 >
                   <IconMinus size={14} aria-hidden />
@@ -394,7 +394,7 @@ export default function EditEntrySheet({
                   inputMode="numeric"
                   min={0}
                   max={999}
-                  className="input !min-h-[40px] w-16 text-center tabular-nums"
+                  className="input !min-h-[44px] w-16 text-center tabular-nums"
                   value={hh}
                   onChange={(e) => onHoursChange(e.target.value)}
                   aria-label="Hours"
@@ -402,7 +402,7 @@ export default function EditEntrySheet({
                 <button
                   type="button"
                   onClick={() => bumpHours(1)}
-                  className="btn btn-sm !min-h-[40px] !w-10 !px-0"
+                  className="btn btn-sm !min-h-[44px] !w-11 !min-w-[44px] !px-0"
                   aria-label="Increase hours"
                 >
                   <IconPlus size={14} aria-hidden />
@@ -413,7 +413,7 @@ export default function EditEntrySheet({
                 <button
                   type="button"
                   onClick={() => bumpMinutes(-5)}
-                  className="btn btn-sm !min-h-[40px] !w-10 !px-0"
+                  className="btn btn-sm !min-h-[44px] !w-11 !min-w-[44px] !px-0"
                   aria-label="Decrease minutes"
                 >
                   <IconMinus size={14} aria-hidden />
@@ -423,7 +423,7 @@ export default function EditEntrySheet({
                   inputMode="numeric"
                   min={0}
                   max={59}
-                  className="input !min-h-[40px] w-16 text-center tabular-nums"
+                  className="input !min-h-[44px] w-16 text-center tabular-nums"
                   value={mm}
                   onChange={(e) => onMinutesChange(e.target.value)}
                   aria-label="Minutes"
@@ -431,7 +431,7 @@ export default function EditEntrySheet({
                 <button
                   type="button"
                   onClick={() => bumpMinutes(5)}
-                  className="btn btn-sm !min-h-[40px] !w-10 !px-0"
+                  className="btn btn-sm !min-h-[44px] !w-11 !min-w-[44px] !px-0"
                   aria-label="Increase minutes"
                 >
                   <IconPlus size={14} aria-hidden />
@@ -439,7 +439,7 @@ export default function EditEntrySheet({
               </div>
               <span className="text-muted text-sm">m</span>
               <span
-                className="ml-auto tabular-nums font-mono text-lg text-ink"
+                className="ml-auto timer-digits text-timer-md text-ink"
                 aria-live="polite"
               >
                 {formatHm({ hours: hh, minutes: mm })}

@@ -61,8 +61,8 @@ export default function ExportPage(): JSX.Element {
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Export</h2>
-        <p className="text-sm text-muted">CSV or PDF. Date range required.</p>
+        <h2 className="text-title text-ink">Export</h2>
+        <p className="text-body-sm text-muted">CSV or PDF. Date range required.</p>
       </div>
       <div className="card p-6 space-y-4 md:max-w-md">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

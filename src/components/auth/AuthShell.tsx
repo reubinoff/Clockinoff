@@ -33,8 +33,8 @@ export function AuthShell({
             </div>
           </div>
           <div className="space-y-1">
-            <h1 className="text-xl font-semibold text-ink leading-tight">{title}</h1>
-            <p className="text-sm text-muted">{subtitle}</p>
+            <h1 className="text-title text-ink">{title}</h1>
+            <p className="text-body-sm text-muted">{subtitle}</p>
           </div>
           {children}
         </div>

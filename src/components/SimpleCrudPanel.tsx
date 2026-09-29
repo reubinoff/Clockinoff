@@ -75,8 +75,8 @@ export default function SimpleCrudPanel({
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <p className="text-sm text-muted">{subtitle}</p>
+        <h2 className="text-title text-ink">{title}</h2>
+        <p className="text-body-sm text-muted">{subtitle}</p>
       </div>
       <form
         onSubmit={create}

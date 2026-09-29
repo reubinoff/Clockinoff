@@ -108,8 +108,8 @@ export default function ProjectsPanel({
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Projects</h2>
-        <p className="text-sm text-muted">Group your entries. Default billable + rate optional.</p>
+        <h2 className="text-title text-ink">Projects</h2>
+        <p className="text-body-sm text-muted">Group your entries. Default billable + rate optional.</p>
       </div>
 
       <form

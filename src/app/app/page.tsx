@@ -25,8 +25,8 @@ export default async function AppHomePage(): Promise<JSX.Element> {
         <WelcomePanel hasEntries={hasEntries} />
       </Suspense>
       <div>
-        <h2 className="text-lg font-semibold">Entries</h2>
-        <p className="text-sm text-muted">Your recent time entries.</p>
+        <h2 className="text-title text-ink">Entries</h2>
+        <p className="text-body-sm text-muted">Your recent time entries.</p>
       </div>
       <EntryList
         initial={entries}

@@ -114,7 +114,7 @@ function LoginForm(): JSX.Element {
         ) : null}
         <button
           type="submit"
-          className="btn btn-primary w-full h-11"
+          className="btn btn-primary w-full"
           disabled={pending}
         >
           {pending ? "Signing in…" : "Sign in"}

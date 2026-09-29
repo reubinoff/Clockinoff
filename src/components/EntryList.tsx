@@ -149,7 +149,7 @@ export default function EntryList({
                 )}
               </p>
               <p className="text-xs text-muted tabular-nums">
-                <span className="font-mono text-ink">
+                <span className="timer-digits text-ink">
                   {formatDurationHours(e.duration_seconds)}h
                 </span>
                 <span className="mx-1.5">·</span>
@@ -180,7 +180,7 @@ export default function EntryList({
               <div className="flex justify-end gap-2 pt-1">
                 {!e.running && (
                   <button
-                    className="btn btn-sm"
+                    className="btn"
                     onClick={() => beginEdit(e)}
                     aria-label="Edit entry"
                   >
@@ -189,7 +189,7 @@ export default function EntryList({
                   </button>
                 )}
                 <button
-                  className="btn btn-danger btn-sm"
+                  className="btn btn-danger"
                   onClick={() => remove(e.id)}
                   aria-label="Delete entry"
                 >
