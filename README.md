@@ -129,8 +129,50 @@ Target: **single Azure Web App (Node 20)** + **Azure Database for PostgreSQL Fle
    | `NEXTAUTH_URL` | Public URL of your Web App |
    | `NODE_ENV` | `production` |
    | `WEBSITE_NODE_DEFAULT_VERSION` | `~20` |
+   | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault reference to the App Insights resource's connection string (see "Application Insights" below). |
 
 4. In your GH Actions deploy job (post-CI), run `npm run db:migrate` against the production DB before starting the app. There is nothing else — no Clockify, no Google, no calendar callbacks. Outbound only.
+
+### Application Insights
+
+Server-side telemetry (HTTP requests, exceptions, `pg` queries, and
+`console.*` output) is exported to Azure Monitor / Application Insights via
+[`@azure/monitor-opentelemetry`](https://learn.microsoft.com/azure/azure-monitor/app/opentelemetry-enable?tabs=nodejs).
+The SDK is bootstrapped from `src/instrumentation.ts` (Next.js
+[`instrumentation` hook](https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation))
+and only loads on the Node.js runtime.
+
+Enable it by setting a single App Setting on the Web App — no code change is
+required per environment:
+
+| App Setting | Value |
+|---|---|
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault reference to the App Insights connection string, e.g. `@Microsoft.KeyVault(SecretUri=https://kv-clockinoff-prod.vault.azure.net/secrets/applicationinsights-connection-string/)` |
+
+Production wiring (already provisioned by Nati):
+
+- App Insights resource: `appi-clockinoff-prod` (workspace `log-clockinoff-prod`) in `rg-clockinoff-prod` / `israelcentral`.
+- Web App `clockinoff-prod` reads `APPLICATIONINSIGHTS_CONNECTION_STRING` from Key Vault (`applicationinsights-connection-string`) via a Key Vault reference — no plaintext key is stored in App Settings.
+- Linux Node 22 uses the OpenTelemetry SDK path; the classic IIS agent is **not** used.
+
+When `APPLICATIONINSIGHTS_CONNECTION_STRING` is unset (local dev, CI, `next
+build`), `src/instrumentation.ts` early-returns and the SDK is never imported.
+
+**Redaction contract (Ariel).** The instrumentation strips sensitive material
+before it leaves the process. This is enforced in two places
+(`src/instrumentation.node.ts` and `src/lib/logger.ts`):
+
+- Span attributes matching `authorization`, `cookie`, `set-cookie`, `password`,
+  or `timely_session` are replaced with `[REDACTED]` before export.
+- Log / span bodies with a `postgres://` or `postgresql://` URL are replaced
+  with `[REDACTED_DATABASE_URL]` — the full `DATABASE_URL` is never emitted.
+- `Bearer <token>` values and `timely_session=<value>` cookie substrings are
+  redacted from log bodies.
+- The scrub is also applied to `console.*` before Azure Monitor's
+  [`instrumentation-console`](https://www.npmjs.com/package/@opentelemetry/instrumentation-console)
+  bridge captures the call, so third-party logs are covered too.
+
+Passwords, session cookies, and the full DATABASE_URL are never logged.
 
 ### Standalone bundle pitfalls (argon2 + PDF export)
 

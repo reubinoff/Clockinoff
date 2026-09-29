@@ -3,9 +3,24 @@ const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
   experimental: {
-    serverComponentsExternalPackages: ["@react-pdf/renderer", "argon2"],
+    // Enables `src/instrumentation.ts` (Azure Monitor / Application Insights
+    // bootstrap). Stable in Next 15; opt-in on 14.
+    instrumentationHook: true,
+    serverComponentsExternalPackages: [
+      "@react-pdf/renderer",
+      "argon2",
+      // OpenTelemetry auto-instrumentation packages patch third-party modules
+      // at `require()` time via `require-in-the-middle`. Bundling them through
+      // Webpack breaks that patching, so we mark them external and let Node
+      // resolve them from `node_modules/` at runtime.
+      "@azure/monitor-opentelemetry",
+      "@opentelemetry/api",
+      "@opentelemetry/api-logs",
+      "@opentelemetry/sdk-node",
+      "@opentelemetry/instrumentation",
+    ],
     // Next's standalone tracer follows JS `require`s, so it misses files that
-    // are loaded dynamically at runtime. Two known misses on this project:
+    // are loaded dynamically at runtime. Known misses on this project:
     //
     // 1. argon2 dynamically loads a prebuilt `.node` binary via `node-gyp-build`.
     //    Without the prebuilds/ tree the deployed bundle throws "No native
@@ -18,6 +33,12 @@ const nextConfig = {
     //    export route throws `MODULE_NOT_FOUND` for
     //    `pdfkit/js/standard-fonts/Helvetica.cjs` and returns HTTP 500.
     //
+    // 3. @azure/monitor-opentelemetry pulls a large tree of `@opentelemetry/*`
+    //    instrumentation packages via dynamic `require`, plus native helpers
+    //    like `require-in-the-middle` / `import-in-the-middle`. Force the
+    //    complete trees into the standalone output so the SDK actually loads
+    //    inside App Service.
+    //
     // Force the full packages (including their data / prebuilds trees) into
     // the standalone output.
     outputFileTracingIncludes: {
@@ -29,6 +50,15 @@ const nextConfig = {
         "./node_modules/pdfkit/**/*",
         "./node_modules/@react-pdf/**/*",
         "./node_modules/fontkit/**/*",
+        "./node_modules/@azure/monitor-opentelemetry/**/*",
+        "./node_modules/@azure/monitor-opentelemetry-exporter/**/*",
+        "./node_modules/@azure/core-*/**/*",
+        "./node_modules/@azure/identity/**/*",
+        "./node_modules/@azure/logger/**/*",
+        "./node_modules/@azure/opentelemetry-instrumentation-azure-sdk/**/*",
+        "./node_modules/@opentelemetry/**/*",
+        "./node_modules/require-in-the-middle/**/*",
+        "./node_modules/import-in-the-middle/**/*",
       ],
     },
   },
@@ -41,6 +71,64 @@ const nextConfig = {
       { source: "/maintenance", destination: "/unavailable.html" },
       { source: "/503", destination: "/unavailable.html" },
     ];
+  },
+  // Keep the OpenTelemetry / Azure Monitor SDKs out of the Webpack graph on
+  // the server. They rely on dynamic `require()` (via `require-in-the-middle`)
+  // to instrument third-party modules, and pull in optional gRPC transports
+  // that reference Node built-ins Webpack cannot always resolve
+  // (`@grpc/grpc-js` → `net`, `zlib`). Marking them external means the compiled
+  // instrumentation entrypoint keeps a plain `require(...)` that Node resolves
+  // at runtime from `node_modules/` (which is why the tracing includes above
+  // ship the full trees into the standalone output).
+  webpack: (config, { isServer, nextRuntime, webpack }) => {
+    if (!isServer) return config;
+    // We use Azure Monitor's HTTP exporter, not gRPC. `@opentelemetry/sdk-node`
+    // eagerly `require`s the gRPC exporter which drags in `@grpc/grpc-js`, and
+    // that package references a pile of Node built-ins (`net`, `zlib`, `tls`,
+    // `fs`, `stream`) that Webpack's server compilations fail to resolve.
+    // Azure Monitor never touches these transports — strip them.
+    config.plugins.push(
+      new webpack.IgnorePlugin({ resourceRegExp: /^@grpc\/grpc-js$/ }),
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^@opentelemetry\/(exporter-trace-otlp-grpc|otlp-grpc-exporter-base)$/,
+      }),
+    );
+    if (nextRuntime === "edge") {
+      // On the edge-server compilation (e.g. `/opengraph-image`), redirect the
+      // Node-only Azure Monitor bootstrap to an empty stub. The runtime guard
+      // in `src/instrumentation.ts` (`NEXT_RUNTIME !== "nodejs"`) already
+      // short-circuits before reaching it; the alias keeps the SDK's heavy
+      // deps out of the edge bundle so it doesn't try to bundle `fs` / `net`.
+      config.resolve = config.resolve ?? {};
+      config.resolve.alias = {
+        ...(config.resolve.alias ?? {}),
+        "./instrumentation.node": false,
+      };
+      return config;
+    }
+    // Node.js server: keep OTel / Azure Monitor out of the Webpack graph so
+    // `require-in-the-middle` patching works at runtime.
+    const otelExternals = ({ request }, callback) => {
+      if (
+        typeof request === "string" &&
+        (request.startsWith("@azure/monitor-opentelemetry") ||
+          request.startsWith("@opentelemetry/") ||
+          request === "require-in-the-middle" ||
+          request === "import-in-the-middle")
+      ) {
+        return callback(null, `commonjs ${request}`);
+      }
+      return callback();
+    };
+    const existing = config.externals;
+    if (Array.isArray(existing)) {
+      existing.push(otelExternals);
+    } else if (existing) {
+      config.externals = [existing, otelExternals];
+    } else {
+      config.externals = [otelExternals];
+    }
+    return config;
   },
 };
 

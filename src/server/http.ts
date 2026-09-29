@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ApiError, toErrorBody, errors } from "@/lib/errors";
+import { logger } from "@/lib/logger";
 import { SESSION_COOKIE, getSessionUser, type SessionUser } from "@/server/auth/session";
 
 export function jsonError(err: unknown): NextResponse {
   if (err instanceof ApiError) {
     return NextResponse.json(toErrorBody(err), { status: err.status });
   }
-  console.error("[api] Unhandled error:", err);
+  logger.exception("[api] Unhandled error", err);
   const internal = errors.internal();
   return NextResponse.json(toErrorBody(internal), { status: internal.status });
 }
