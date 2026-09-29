@@ -7,24 +7,14 @@ import {
   recordLoginFailure,
   recordLoginSuccess,
 } from "@/server/auth/rate-limit";
+import { clientIpFromHeaders } from "@/lib/client-ip";
 import { ApiError, errors } from "@/lib/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function clientIp(req: Request): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  const real = req.headers.get("x-real-ip")?.trim();
-  if (real) return real;
-  return "unknown";
-}
-
 export async function POST(req: Request): Promise<Response> {
-  const ip = clientIp(req);
+  const ip = clientIpFromHeaders(req.headers);
   let email = "";
   try {
     const body = await readJson<{ email: string; password: string }>(req);
