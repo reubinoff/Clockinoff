@@ -146,6 +146,19 @@
     color: #6d28d9;
     animation: timer-pulse 2s ease-in-out infinite;
   }
+  /* V2-5 §3 running wash: the whole dock swaps to an accent-soft surface with
+     an accent-tinted top border while a timer is running. Ties into the
+     existing purple brand (accent #6d28d9 / accent-soft #ede9fe) without any
+     new color tokens. Motion respects `--duration-moderate` so the transition
+     collapses to 0ms under `prefers-reduced-motion: reduce`. */
+  .timer-dock {
+    transition: background-color var(--duration-moderate) var(--ease-standard),
+                border-color var(--duration-moderate) var(--ease-standard);
+  }
+  .timer-dock-running {
+    background-color: #ede9fe;
+    border-top-color: rgba(109, 40, 217, 0.25);
+  }
   .timer-start-idle {
     animation: start-idle-breath var(--duration-breath) var(--ease-standard) infinite;
   }

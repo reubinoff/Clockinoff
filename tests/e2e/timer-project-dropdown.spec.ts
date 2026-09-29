@@ -17,12 +17,19 @@ test("timer project dropdown updates after project create", async ({ page }) => 
   await page.click('button[type="submit"]');
   await page.waitForURL(/\/app/);
 
+  // V2-5: dock details (project + billable + tz) are collapsed by default —
+  // expand them so the project dropdown is in the accessibility tree.
+  await page.getByRole("button", { name: "Show timer details" }).click();
+
   const projectSelect = page.getByRole("combobox", { name: "Project" });
   await expect(projectSelect).toBeVisible();
   // Before creating the project, the dropdown only offers the sentinel option.
   await expect(projectSelect.locator("option")).toHaveText(["No project"]);
 
   await page.goto("/app/projects");
+  // Full navigation remounts the dock; expand details again so the
+  // dropdown re-enters the DOM.
+  await page.getByRole("button", { name: "Show timer details" }).click();
   // The Name input is the required text input in the "Add project" form.
   await page.locator('form input[required]').first().fill(projectName);
   await page.click("button:has-text('Add')");

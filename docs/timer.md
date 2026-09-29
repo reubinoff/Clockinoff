@@ -21,21 +21,42 @@ page. You can only have **one running timer at a time**.
 
 ---
 
-## Anatomy of the timer bar
+## Anatomy of the timer dock
 
-The bar sits directly under the top navigation and contains, left to right:
+The timer dock is always visible while you're signed in:
+
+- **Desktop** — it sticks to the top of the page under the site header.
+- **Mobile** — it sticks to the bottom of the screen, floating just
+  above the bottom tab bar.
+
+The dock stays compact by default and contains, left to right (or top
+to bottom on narrow screens):
 
 - **Description field** — free text for "What are you working on?".
-- **Project dropdown** — pick a project you already created, or leave as
-  **No project**.
-- **Billable toggle** — the `$` checkbox marks the entry as billable.
 - **Elapsed time** — `HH:MM:SS`, updates every second while a timer is
   running.
 - **Buttons** — **Start** when idle, or **Discard** and **Stop** while a
-  timer is running.
+  timer is running. **Discard** is styled as a quiet ghost button so it
+  doesn't compete with **Stop**.
+- **Details chevron** — expands a second row with the fields below.
 
-The timezone label on the right shows which timezone Clockinoff uses for
-your display (see [Account & timezone]({{ '/account' | relative_url }})).
+### Details (collapsed by default)
+
+Click the chevron on the right of the dock to reveal:
+
+- **Project dropdown** — pick a project you already created, or leave as
+  **No project**.
+- **Billable toggle** — the `$` chip marks the entry as billable.
+- **Timezone label** (desktop only) — which timezone Clockinoff uses for
+  your display (see [Account & timezone]({{ '/account' | relative_url }})).
+
+The details section closes again on the next chevron click.
+
+### Running wash
+
+While a timer is running the whole dock swaps to a soft purple tint —
+the same accent-soft colour used elsewhere in the app — so it's obvious
+at a glance that time is currently being tracked.
 
 ---
 

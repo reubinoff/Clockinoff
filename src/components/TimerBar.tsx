@@ -9,6 +9,7 @@ import {
   IconStop,
   IconDiscard,
   IconBillable,
+  IconChevronDown,
 } from "@/components/icons";
 
 interface Entry {
@@ -37,6 +38,9 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
   const [billable, setBillable] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [pending, setPending] = useState(false);
+  // V2-5 Shaul lock: Details (project + billable + tz) collapsed by default.
+  // Description stays visible because it's the primary interaction.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const patchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadProjects = useCallback(async () => {
@@ -174,7 +178,15 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
   const running = entry !== null;
 
   return (
-    <div className="border-t border-border bg-canvas-2">
+    <div
+      className={
+        // V2-5 §3 running wash: swap the neutral dock surface for an
+        // accent-soft tint while a timer is running. Transition on the
+        // `--duration-moderate` motion token so it obeys reduced-motion.
+        "border-t timer-dock" +
+        (running ? " timer-dock-running" : " border-border bg-canvas-2")
+      }
+    >
       <div className="mx-auto max-w-6xl px-4 py-2 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3">
         {/* Row 1 (base): description — full width */}
         <input
@@ -185,36 +197,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
           data-timer-description="true"
           aria-label="Timer description"
         />
-        {/* Row 2 (base): project select + billable chip */}
-        <div className="flex items-center gap-2 md:contents">
-          <select
-            className="input flex-1 md:flex-none md:w-auto md:max-w-[200px]"
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            aria-label="Project"
-          >
-            <option value="">No project</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={billable}
-            onClick={() => setBillable((b) => !b)}
-            className={
-              "chip min-h-[44px] shrink-0" + (billable ? " chip-on" : "")
-            }
-            title={billable ? "Billable" : "Not billable"}
-          >
-            <IconBillable size={14} aria-hidden />
-            <span>Billable</span>
-          </button>
-        </div>
-        {/* Row 3 (base): duration + Start/Stop (+ Discard when running) */}
+        {/* Row 2 (base): duration + Start/Stop (+ Discard when running) + Details toggle */}
         <div className="flex items-center gap-2 md:contents">
           <span
             className={
@@ -229,7 +212,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
           {running ? (
             <>
               <button
-                className="btn btn-danger shrink-0"
+                className="btn btn-ghost shrink-0"
                 disabled={pending}
                 onClick={discard}
                 aria-label="Discard running timer"
@@ -258,10 +241,61 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
               <span>Start</span>
             </button>
           )}
+          <button
+            type="button"
+            className="btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2 shrink-0"
+            onClick={() => setDetailsOpen((v) => !v)}
+            aria-expanded={detailsOpen}
+            aria-controls="timer-details"
+            aria-label={detailsOpen ? "Hide timer details" : "Show timer details"}
+            title={detailsOpen ? "Hide details" : "Details"}
+          >
+            <IconChevronDown
+              size={16}
+              aria-hidden
+              className={
+                "transition-transform" + (detailsOpen ? " rotate-180" : "")
+              }
+            />
+          </button>
         </div>
-        <span className="text-xs text-muted hidden md:inline shrink-0">
-          {timezone}
-        </span>
+        {/* Details (project + billable + tz) — collapsed by default per V2-5. */}
+        {detailsOpen && (
+          <div
+            id="timer-details"
+            className="flex items-center gap-2 md:contents"
+          >
+            <select
+              className="input flex-1 md:flex-none md:w-auto md:max-w-[200px]"
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              aria-label="Project"
+            >
+              <option value="">No project</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={billable}
+              onClick={() => setBillable((b) => !b)}
+              className={
+                "chip min-h-[44px] shrink-0" + (billable ? " chip-on" : "")
+              }
+              title={billable ? "Billable" : "Not billable"}
+            >
+              <IconBillable size={14} aria-hidden />
+              <span>Billable</span>
+            </button>
+            <span className="text-xs text-muted hidden md:inline shrink-0">
+              {timezone}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
