@@ -91,8 +91,10 @@ At the top of every `/app/*` page you get two rows:
 
 On phones the chrome collapses to a bottom tab bar with three tabs —
 **Timer**, **Library**, and **Export** — where **Library** groups the
-projects, clients, and tags pages and defaults to projects. Your email
-and **Log out** live in an overflow menu in the top header.
+projects, clients, and tags pages and defaults to projects. Inside
+Library, a **Projects / Clients / Tags** segment control at the top of
+the page lets you switch between the three. Your email and **Log out**
+live in an overflow menu in the top header.
 
 The main area shows recent time entries, which are populated once you start
 using the timer.
