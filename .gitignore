@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+coverage
+.env
+.env.local
+.env.*.local
+*.log
+tsconfig.tsbuildinfo
+.DS_Store
+.vscode
+.idea
+playwright-report
+test-results
+.pgdata
