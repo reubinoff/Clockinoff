@@ -70,11 +70,18 @@ jobs:
           mkdir -p deploy/scripts
           cp scripts/migrate.mjs deploy/scripts/migrate.mjs
           # Belt-and-suspenders: Next.js standalone tracing has historically
-          # missed argon2's dynamically-loaded `.node` prebuilds. next.config.mjs
-          # forces them into the trace via outputFileTracingIncludes, but we also
-          # overlay the source-installed argon2 (with its linux-x64/glibc prebuild
-          # from `npm ci` on this ubuntu-latest runner) to guarantee the correct
-          # native binary is present in the deployed bundle.
+          # missed dynamically-loaded assets. next.config.mjs forces the affected
+          # trees into the trace via outputFileTracingIncludes, but we also
+          # overlay the source-installed copies here to guarantee the correct
+          # files are present in the deployed bundle.
+          #
+          # 1. argon2 loads a prebuilt `.node` binary through `node-gyp-build`.
+          #    Re-copy the linux-x64/glibc prebuild fetched by `npm ci` on this
+          #    ubuntu-latest runner.
+          # 2. @react-pdf/renderer → pdfkit (0.20.x) resolves the Standard 14
+          #    fonts through a subpath-imports template
+          #    `require('#standard-fonts/<Name>')` that the tracer cannot follow.
+          #    Re-copy pdfkit and fontkit in full so PDF export can render.
           rm -rf deploy/node_modules/argon2
           mkdir -p deploy/node_modules/argon2
           cp -R node_modules/argon2/. deploy/node_modules/argon2/
@@ -84,6 +91,23 @@ jobs:
               cp -R "node_modules/${dep}" "deploy/node_modules/${dep}"
             fi
           done
+          for dep in pdfkit fontkit; do
+            if [ -d "node_modules/${dep}" ]; then
+              rm -rf "deploy/node_modules/${dep}"
+              mkdir -p "deploy/node_modules/${dep}"
+              cp -R "node_modules/${dep}/." "deploy/node_modules/${dep}/"
+            fi
+          done
+          # @react-pdf/* is a group of ESM packages; overlay each subpackage
+          # so any lazily-loaded helper file is present.
+          if [ -d "node_modules/@react-pdf" ]; then
+            mkdir -p "deploy/node_modules/@react-pdf"
+            for sub in node_modules/@react-pdf/*; do
+              name="$(basename "${sub}")"
+              rm -rf "deploy/node_modules/@react-pdf/${name}"
+              cp -R "${sub}" "deploy/node_modules/@react-pdf/${name}"
+            done
+          fi
 
       - name: Verify argon2 native module is loadable in deploy bundle
         run: |
@@ -93,6 +117,37 @@ jobs:
           test -f deploy/node_modules/argon2/prebuilds/linux-x64/argon2.glibc.node
           echo "Loading argon2 from deploy/ under Node $(node -v)..."
           ( cd deploy && node -e "const a=require('argon2'); a.hash('smoketest',{type:a.argon2id}).then(h=>a.verify(h,'smoketest')).then(ok=>{if(!ok)throw new Error('verify failed');console.log('argon2 OK');}).catch(e=>{console.error(e);process.exit(1);});" )
+
+      - name: Verify PDF export can render in deploy bundle
+        run: |
+          set -euo pipefail
+          echo "Checking @react-pdf/renderer + pdfkit assets are present..."
+          test -f deploy/node_modules/@react-pdf/renderer/lib/react-pdf.js
+          test -f deploy/node_modules/pdfkit/js/standard-fonts/Helvetica.cjs
+          test -f deploy/node_modules/pdfkit/js/data/sRGB_IEC61966_2_1.icc
+          echo "Rendering a tiny PDF from deploy/ under Node $(node -v)..."
+          ( cd deploy && node -e "
+            const React = require('react');
+            const { Document, Page, Text, renderToStream } = require('@react-pdf/renderer');
+            const doc = React.createElement(
+              Document, null,
+              React.createElement(Page, { size: 'A4' },
+                React.createElement(Text, null, 'cd-smoke'))
+            );
+            renderToStream(doc).then(s => {
+              const chunks = [];
+              s.on('data', c => chunks.push(c));
+              s.on('end', () => {
+                const buf = Buffer.concat(chunks);
+                if (!buf.slice(0, 4).equals(Buffer.from('%PDF'))) {
+                  console.error('Bad PDF header:', buf.slice(0, 8));
+                  process.exit(2);
+                }
+                console.log('PDF OK', buf.length, 'bytes');
+              });
+              s.on('error', e => { console.error('STREAM ERR', e); process.exit(1); });
+            }).catch(e => { console.error('RENDER REJECT', e); process.exit(3); });
+          " )
 
       - name: Azure login (OIDC)
         uses: azure/login@v3

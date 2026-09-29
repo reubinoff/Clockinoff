@@ -4,17 +4,31 @@ const nextConfig = {
   output: "standalone",
   experimental: {
     serverComponentsExternalPackages: ["@react-pdf/renderer", "argon2"],
-    // Next's standalone tracer follows JS `require`s, so it misses argon2's
-    // prebuilt `.node` binaries (loaded dynamically at runtime via
-    // `node-gyp-build`). Without these files the deployed bundle throws
-    // "No native build was found ..." on App Service. Force the full argon2
-    // package (including prebuilds/) into the standalone output.
+    // Next's standalone tracer follows JS `require`s, so it misses files that
+    // are loaded dynamically at runtime. Two known misses on this project:
+    //
+    // 1. argon2 dynamically loads a prebuilt `.node` binary via `node-gyp-build`.
+    //    Without the prebuilds/ tree the deployed bundle throws "No native
+    //    build was found ..." on App Service.
+    //
+    // 2. @react-pdf/renderer → pdfkit (0.20.x) resolves the Standard 14 fonts
+    //    through a subpath-imports template `require('#standard-fonts/<Name>')`
+    //    which the tracer cannot statically follow. It also reads
+    //    `data/sRGB_IEC61966_2_1.icc` at runtime. Without these files the PDF
+    //    export route throws `MODULE_NOT_FOUND` for
+    //    `pdfkit/js/standard-fonts/Helvetica.cjs` and returns HTTP 500.
+    //
+    // Force the full packages (including their data / prebuilds trees) into
+    // the standalone output.
     outputFileTracingIncludes: {
       "*": [
         "./node_modules/argon2/**/*",
         "./node_modules/node-gyp-build/**/*",
         "./node_modules/node-addon-api/**/*",
         "./node_modules/@phc/format/**/*",
+        "./node_modules/pdfkit/**/*",
+        "./node_modules/@react-pdf/**/*",
+        "./node_modules/fontkit/**/*",
       ],
     },
   },
