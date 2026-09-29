@@ -152,3 +152,20 @@ export const IconEdit = makeIcon(
 export const IconPlus = makeIcon(<path d="M12 5v14M5 12h14" />);
 
 export const IconMinus = makeIcon(<path d="M5 12h14" />);
+
+export const IconLibrary = makeIcon(
+  <>
+    <path d="M12 3l9 4.5-9 4.5-9-4.5L12 3Z" />
+    <path d="M3 12l9 4.5 9-4.5" />
+    <path d="M3 16.5l9 4.5 9-4.5" />
+  </>,
+);
+
+export const IconMore = makeIcon(
+  <>
+    <circle cx="5" cy="12" r="1.25" fill="currentColor" />
+    <circle cx="12" cy="12" r="1.25" fill="currentColor" />
+    <circle cx="19" cy="12" r="1.25" fill="currentColor" />
+  </>,
+  { strokeWidth: 0 },
+);

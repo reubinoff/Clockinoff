@@ -89,6 +89,11 @@ At the top of every `/app/*` page you get two rows:
    ($) toggle, elapsed time, and a **Start** button (or **Stop** /
    **Discard** while a timer is running).
 
+On phones the chrome collapses to a bottom tab bar with three tabs —
+**Timer**, **Library**, and **Export** — where **Library** groups the
+projects, clients, and tags pages and defaults to projects. Your email
+and **Log out** live in an overflow menu in the top header.
+
 The main area shows recent time entries, which are populated once you start
 using the timer.
 

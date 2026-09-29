@@ -5,9 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
 import {
   IconTimer,
-  IconProject,
-  IconClient,
-  IconTag,
+  IconLibrary,
   IconExport,
   type IconProps,
 } from "@/components/icons";
@@ -19,6 +17,8 @@ type TabItem = {
   match: (pathname: string) => boolean;
 };
 
+const LIBRARY_ROUTES = ["/app/projects", "/app/clients", "/app/tags"] as const;
+
 const TABS: TabItem[] = [
   {
     href: "/app",
@@ -27,22 +27,12 @@ const TABS: TabItem[] = [
     match: (p) => p === "/app",
   },
   {
+    // Library groups the three existing library routes. Default target is
+    // projects; Library is active on any of them.
     href: "/app/projects",
-    label: "Projects",
-    Icon: IconProject,
-    match: (p) => p.startsWith("/app/projects"),
-  },
-  {
-    href: "/app/clients",
-    label: "Clients",
-    Icon: IconClient,
-    match: (p) => p.startsWith("/app/clients"),
-  },
-  {
-    href: "/app/tags",
-    label: "Tags",
-    Icon: IconTag,
-    match: (p) => p.startsWith("/app/tags"),
+    label: "Library",
+    Icon: IconLibrary,
+    match: (p) => LIBRARY_ROUTES.some((r) => p === r || p.startsWith(r + "/")),
   },
   {
     href: "/app/export",
@@ -63,7 +53,7 @@ export default function BottomTabBar(): JSX.Element {
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match(pathname);
           return (
-            <li key={href} className="flex-1">
+            <li key={label} className="flex-1">
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}

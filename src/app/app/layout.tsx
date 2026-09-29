@@ -7,6 +7,7 @@ import TimerBar from "@/components/TimerBar";
 import LogoutButton from "@/components/LogoutButton";
 import AppNav from "@/components/AppNav";
 import BottomTabBar from "@/components/BottomTabBar";
+import HeaderUserMenu from "@/components/HeaderUserMenu";
 import { Mark } from "@/components/brand/Mark";
 import { DOCS_URL } from "@/lib/docs";
 
@@ -38,7 +39,7 @@ export default async function AppLayout({
           </div>
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span
-              className="text-muted max-w-[180px] truncate hidden sm:inline"
+              className="text-muted max-w-[180px] truncate hidden md:inline"
               title={user.email}
             >
               {user.email}
@@ -52,7 +53,10 @@ export default async function AppLayout({
             >
               Docs
             </a>
-            <LogoutButton />
+            <div className="hidden md:block">
+              <LogoutButton />
+            </div>
+            <HeaderUserMenu email={user.email} />
           </div>
         </div>
         <div
