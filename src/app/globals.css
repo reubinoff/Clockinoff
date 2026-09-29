@@ -165,7 +165,11 @@
     transition-timing-function: var(--ease-in);
   }
   @media (prefers-reduced-motion: reduce) {
-    .timer-running-pulse {
+    /* Zeroing --duration-breath is not enough for an infinite keyframe
+       animation — the animation still runs, just with a 0ms cycle. Kill the
+       decorative motion outright, same as .timer-running-pulse. */
+    .timer-running-pulse,
+    .timer-start-idle {
       animation: none;
     }
   }
