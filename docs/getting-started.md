@@ -43,7 +43,19 @@ You will need:
 3. Click **Create account**.
 
 On success, Clockinoff issues a session cookie and drops you on the main
-`/app` page with the timer bar visible at the top.
+`/app?welcome=1` page with the timer bar visible at the top.
+
+The `?welcome=1` query flags a short first-run hero above the entries
+list that reads **"Your timer is ready"** with two buttons:
+
+- **Focus Start** — jumps focus to the timer's description field so you
+  can start typing immediately.
+- **I'll explore** — dismisses the hero.
+
+The hero is inline (not a modal), only shows while the account has
+zero entries, and disappears as soon as you dismiss it or log your
+first entry. Later visits to `/app` (without `?welcome=1`) never show
+it again, so it stays a one-time nudge.
 
 If you see an error like *"email already registered"*, use the
 [sign-in flow](#sign-in-later) instead.

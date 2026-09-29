@@ -1,13 +1,22 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SpotEmptyTimer } from "@/components/illustrations";
 import { IconCheck, IconX } from "@/components/icons";
 
-const DISMISS_KEY = "timely.welcome.dismissed.v1";
-
+/**
+ * V2-8 Quiet Pulse — first-run hero.
+ *
+ * Architect lock (Shaul): show inline on `/app?welcome=1` only, and only
+ * while the account has zero entries. This is the post-registration
+ * moment, not a persistent empty-state.
+ *
+ * Both dismiss paths (X button, "I'll explore") strip `welcome` from the
+ * URL, which is the single source of truth for visibility — no
+ * localStorage, no cookies. If the same user later lands on `/app` (no
+ * query) with zero entries, the hero stays out of their way.
+ */
 export default function WelcomePanel({
   hasEntries,
 }: {
@@ -22,39 +31,29 @@ export default function WelcomePanel({
 
   useEffect(() => {
     setMounted(true);
-    try {
-      const stored =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem(DISMISS_KEY)
-          : null;
-      setDismissed(stored === "1");
-    } catch {
-      // localStorage unavailable — keep default
-    }
   }, []);
+
+  useEffect(() => {
+    if (welcomeParam) setDismissed(false);
+  }, [welcomeParam]);
 
   const shouldShow = useMemo(() => {
     if (!mounted) return false;
     if (hasEntries) return false;
-    if (dismissed && !welcomeParam) return false;
-    return true;
+    if (dismissed) return false;
+    return welcomeParam;
   }, [mounted, hasEntries, dismissed, welcomeParam]);
 
   function dismiss(): void {
-    try {
-      window.localStorage.setItem(DISMISS_KEY, "1");
-    } catch {
-      // ignore storage failures
-    }
     setDismissed(true);
-    if (welcomeParam) {
+    if (typeof window !== "undefined" && welcomeParam) {
       const url = new URL(window.location.href);
       url.searchParams.delete("welcome");
       router.replace(url.pathname + (url.search ? url.search : ""));
     }
   }
 
-  function focusTimer(): void {
+  function focusStart(): void {
     const el = document.querySelector<HTMLInputElement>(
       'input[data-timer-description="true"]',
     );
@@ -78,10 +77,7 @@ export default function WelcomePanel({
         <div className="flex-1 space-y-3">
           <div className="flex items-start gap-3">
             <div className="flex-1">
-              <h2
-                id="welcome-title"
-                className="text-display text-ink"
-              >
+              <h2 id="welcome-title" className="text-display text-ink">
                 Your timer is ready
               </h2>
               <p className="mt-1 text-body-sm text-muted">
@@ -101,14 +97,11 @@ export default function WelcomePanel({
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               type="button"
-              onClick={focusTimer}
+              onClick={focusStart}
               className="btn btn-primary"
             >
-              Start your first timer
+              Focus Start
             </button>
-            <Link href="/app/projects" className="btn">
-              Add a project
-            </Link>
             <button type="button" onClick={dismiss} className="btn btn-ghost">
               I&rsquo;ll explore
             </button>
