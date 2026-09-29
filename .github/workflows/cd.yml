@@ -52,7 +52,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p deploy
-          # Standalone server bundle (includes minimal node_modules).
+          # Standalone server bundle (includes a minimal, production-only node_modules).
           cp -R .next/standalone/. deploy/
           # Static assets Next needs at runtime.
           mkdir -p deploy/.next
@@ -61,19 +61,14 @@ jobs:
           if [ -d public ]; then
             cp -R public deploy/public
           fi
-          # Drizzle migrations + the tsx runner used by the startup command.
+          # Drizzle SQL migrations, applied at startup by scripts/migrate.mjs.
           mkdir -p deploy/drizzle
           cp -R drizzle/. deploy/drizzle/
-          cp drizzle.config.ts deploy/ 2>/dev/null || true
-          # tsx is required by the App Service startup command to run migrations.
-          # Install it (and its deps) into the deployed node_modules alongside the standalone bundle.
-          npm install --omit=dev --no-save --prefix deploy tsx
-          # Ensure the migrate script is present in the deployed package.
-          mkdir -p deploy/src/server/db
-          cp src/server/db/migrate.ts deploy/src/server/db/migrate.ts
-          cp src/server/db/client.ts deploy/src/server/db/client.ts 2>/dev/null || true
-          # tsconfig helps tsx resolve paths if needed.
-          cp tsconfig.json deploy/ 2>/dev/null || true
+          # Runtime migration runner. Plain ESM JS so it runs on `node`
+          # directly using the `pg` package already bundled by Next standalone.
+          # No `tsx` / TypeScript toolchain is required at runtime.
+          mkdir -p deploy/scripts
+          cp scripts/migrate.mjs deploy/scripts/migrate.mjs
 
       - name: Azure login (OIDC)
         uses: azure/login@v3
@@ -92,7 +87,7 @@ jobs:
               --name "${AZURE_WEBAPP_NAME}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --linux-fx-version "NODE|22-lts" \
-              --startup-file "node node_modules/tsx/dist/cli.mjs src/server/db/migrate.ts && node server.js"
+              --startup-file "node scripts/migrate.mjs && node server.js"
             az webapp config appsettings set \
               --name "${AZURE_WEBAPP_NAME}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
