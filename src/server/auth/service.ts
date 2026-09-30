@@ -2,19 +2,14 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { users } from "@/server/db/schema";
 import { errors } from "@/lib/errors";
+import { validatePassword } from "@/lib/password";
 import { hashPassword, verifyPassword } from "./passwords";
 import { createSession, type CreatedSession, type SessionUser } from "./session";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD = 8;
-const MAX_PASSWORD = 200;
 
 function validEmail(email: unknown): email is string {
   return typeof email === "string" && email.length <= 254 && EMAIL_RE.test(email);
-}
-
-function validPassword(pw: unknown): pw is string {
-  return typeof pw === "string" && pw.length >= MIN_PASSWORD && pw.length <= MAX_PASSWORD;
 }
 
 function validTimezone(tz: unknown): tz is string | undefined {
@@ -46,8 +41,8 @@ export interface AuthResult {
 
 export async function register(input: RegisterInput): Promise<AuthResult> {
   if (!validEmail(input.email)) throw errors.validation("Invalid email");
-  if (!validPassword(input.password))
-    throw errors.validation("Password must be at least 8 characters");
+  const pwCheck = validatePassword(input.password);
+  if (!pwCheck.ok) throw errors.validation(pwCheck.message);
   if (!validTimezone(input.timezone)) throw errors.validation("Invalid timezone");
 
   const email = input.email.trim();

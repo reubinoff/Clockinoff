@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 //   PLAYWRIGHT_BASE_URL=http://localhost:3000 npm run test:e2e
 
 const email = `dropdown-${Date.now()}@example.com`;
-const password = "password123";
+const password = "correct-horse-battery";
 const projectName = `Proj ${Date.now()}`;
 
 test("timer project dropdown updates after project create", async ({ page }) => {

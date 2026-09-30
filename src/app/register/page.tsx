@@ -8,6 +8,11 @@ import { PasswordField } from "@/components/auth/PasswordField";
 import { TimezoneSelect } from "@/components/auth/TimezoneSelect";
 import { IconAlert } from "@/components/icons";
 import { DEFAULT_TIMEZONE, detectTimezone } from "@/lib/timezones";
+import {
+  PASSWORD_COPY,
+  PASSWORD_MIN_LENGTH,
+  validatePassword,
+} from "@/lib/password";
 
 export default function RegisterPage(): JSX.Element {
   const router = useRouter();
@@ -25,6 +30,11 @@ export default function RegisterPage(): JSX.Element {
 
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
+    const pwCheck = validatePassword(password);
+    if (!pwCheck.ok) {
+      setError(pwCheck.message);
+      return;
+    }
     setPending(true);
     setError(null);
     try {
@@ -88,9 +98,9 @@ export default function RegisterPage(): JSX.Element {
           value={password}
           onChange={setPassword}
           autoComplete="new-password"
-          minLength={8}
+          minLength={PASSWORD_MIN_LENGTH}
           required
-          helper="At least 8 characters"
+          helper={PASSWORD_COPY.helper}
           describedById={error ? "auth-error" : undefined}
         />
         <TimezoneSelect

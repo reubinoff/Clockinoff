@@ -8,7 +8,11 @@ export async function makeUser(email = `u-${Date.now()}-${Math.random().toString
   session: CreatedSession;
   cookie: string;
 }> {
-  const res = await register({ email, password: "password123", timezone: "Asia/Jerusalem" });
+  const res = await register({
+    email,
+    password: "correct-horse-battery",
+    timezone: "Asia/Jerusalem",
+  });
   return {
     user: res.user,
     session: res.session,

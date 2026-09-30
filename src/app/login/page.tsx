@@ -98,7 +98,6 @@ function LoginForm(): JSX.Element {
           value={password}
           onChange={setPassword}
           autoComplete="current-password"
-          minLength={8}
           required
           describedById={error ? "auth-error" : undefined}
         />

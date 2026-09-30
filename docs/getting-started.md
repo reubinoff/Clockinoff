@@ -23,7 +23,9 @@ Just a browser. Clockinoff is a web app; there is nothing to install.
 You will need:
 
 - An **email address** — used as your login.
-- A **password** — at least 8 characters.
+- A **password** — at least 12 characters. Very obvious passwords
+  (`aaaaaaaaaaaa`, `password123`, `123456789012`, …) are rejected.
+  Longer passphrases are stronger than short strings with symbols.
 - Optionally, your **timezone** in [IANA form](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
   (for example, `Asia/Jerusalem`, `Europe/Berlin`, `America/New_York`). The
   default is `Asia/Jerusalem`; change it during registration or later from
@@ -36,8 +38,11 @@ You will need:
 1. Go to `/register` on your Clockinoff instance.
 2. Fill in:
    - **Email** — used to sign in.
-   - **Password** — minimum 8 characters. Stored as an argon2id hash; the
-     server never sees your plaintext after registration.
+   - **Password** — minimum 12 characters, with obviously trivial
+     strings ("all one letter", `password123`, `123456789012`, …)
+     rejected. There is no upper/number/symbol checklist — a long
+     passphrase is fine. Stored as an argon2id hash; the server never
+     sees your plaintext after registration.
    - **Timezone** — pre-filled with `Asia/Jerusalem`. Change it now if you
      work outside that zone.
 3. Click **Create account**.

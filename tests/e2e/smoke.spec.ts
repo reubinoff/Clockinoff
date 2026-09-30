@@ -10,7 +10,7 @@ import { expect, test } from "@playwright/test";
 // In CI (nightly) Playwright starts `next start` itself via webServer.
 
 const email = `e2e-${Date.now()}@example.com`;
-const password = "password123";
+const password = "correct-horse-battery";
 const description = `playwright smoke ${Date.now()}`;
 
 test.describe.serial("Timer smoke", () => {
