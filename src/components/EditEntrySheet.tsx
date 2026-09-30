@@ -104,6 +104,7 @@ export default function EditEntrySheet({
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   const [startInput, setStartInput] = useState<string>(() =>
     toLocalInput(originalStart, timezone),
@@ -113,6 +114,7 @@ export default function EditEntrySheet({
   );
 
   const descRef = useRef<HTMLInputElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     descRef.current?.focus();
@@ -120,10 +122,47 @@ export default function EditEntrySheet({
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // V2-9: play the reverse motion (faster than open) before unmounting.
+  // Under prefers-reduced-motion: reduce we skip the timeout so the sheet
+  // just closes; keyframes are neutered to `animation: none` in globals.css
+  // so there is no mid-frame paint either way.
+  const dismiss = useCallback(
+    (after: () => void) => {
+      if (closing) return;
+      const reduceMotion =
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reduceMotion) {
+        after();
+        return;
+      }
+      setClosing(true);
+      closeTimerRef.current = window.setTimeout(() => {
+        closeTimerRef.current = null;
+        after();
+      }, 180);
+    },
+    [closing],
+  );
+
+  const requestClose = useCallback(() => {
+    dismiss(onClose);
+  }, [dismiss, onClose]);
+
+  useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        requestClose();
       }
     }
     document.addEventListener("keydown", onKey);
@@ -133,7 +172,7 @@ export default function EditEntrySheet({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [onClose]);
+  }, [requestClose]);
 
   const applyDuration = useCallback(
     (nextSeconds: number) => {
@@ -265,8 +304,8 @@ export default function EditEntrySheet({
       }
       const updated = (await res.json()) as EditableEntry;
       setSavedFlash(true);
-      setTimeout(() => {
-        onSaved(updated);
+      window.setTimeout(() => {
+        dismiss(() => onSaved(updated));
       }, 250);
     } catch {
       setApiError("Something went wrong. Try again.");
@@ -279,17 +318,23 @@ export default function EditEntrySheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-ink/40"
+      className={
+        "fixed inset-0 z-50 flex items-end md:items-center justify-center bg-ink/40 " +
+        (closing ? "sheet-backdrop-exit" : "sheet-backdrop-enter")
+      }
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="edit-entry-title"
     >
       <div
-        className="w-full md:max-w-md bg-surface md:rounded-2xl rounded-t-2xl shadow-card-lg
-                   max-h-[92dvh] overflow-y-auto"
+        className={
+          "w-full md:max-w-md bg-surface md:rounded-2xl rounded-t-2xl shadow-card-lg " +
+          "max-h-[92dvh] overflow-y-auto " +
+          (closing ? "sheet-panel-exit" : "sheet-panel-enter")
+        }
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border">
@@ -298,7 +343,7 @@ export default function EditEntrySheet({
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2"
             aria-label="Close"
           >
@@ -507,7 +552,7 @@ export default function EditEntrySheet({
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={pending}
           >
             Cancel

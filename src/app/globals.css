@@ -215,6 +215,64 @@
   .toast {
     animation: toast-in var(--duration-moderate) var(--ease-out) both;
   }
+  /* V2-9 §1 edit-sheet motion. Backdrop fades in over --duration-moderate;
+     the sheet slides up from below on mobile and scales from 0.96 with a
+     fade on desktop, both over --duration-sheet. Dismiss reverses on the
+     shorter --duration-fast so closing feels lighter than opening. Under
+     `prefers-reduced-motion: reduce` the sheet still mounts/unmounts, but
+     the travel is skipped: motion tokens zero to 0ms and the reduce block
+     below drops the animation entirely so no mid-frame translate/scale
+     ever paints. CSS-only per the Shaul lock (no Framer). */
+  @keyframes sheet-backdrop-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes sheet-backdrop-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+  }
+  @keyframes sheet-panel-in-mobile {
+    from { opacity: 0; transform: translateY(100%); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes sheet-panel-out-mobile {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(100%); }
+  }
+  @keyframes sheet-panel-in-desktop {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes sheet-panel-out-desktop {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0; transform: scale(0.96); }
+  }
+  .sheet-backdrop-enter {
+    animation: sheet-backdrop-in var(--duration-moderate) var(--ease-out) both;
+  }
+  .sheet-backdrop-exit {
+    animation: sheet-backdrop-out var(--duration-fast) var(--ease-in) both;
+  }
+  .sheet-panel-enter {
+    animation: sheet-panel-in-mobile var(--duration-sheet) var(--ease-out) both;
+    transform-origin: center bottom;
+    will-change: transform, opacity;
+  }
+  .sheet-panel-exit {
+    animation: sheet-panel-out-mobile var(--duration-fast) var(--ease-in) both;
+    transform-origin: center bottom;
+    will-change: transform, opacity;
+  }
+  @media (min-width: 768px) {
+    .sheet-panel-enter {
+      animation: sheet-panel-in-desktop var(--duration-sheet) var(--ease-out) both;
+      transform-origin: center center;
+    }
+    .sheet-panel-exit {
+      animation: sheet-panel-out-desktop var(--duration-fast) var(--ease-in) both;
+      transform-origin: center center;
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
     /* Zeroing --duration-breath is not enough for an infinite keyframe
        animation — the animation still runs, just with a 0ms cycle. Kill the
@@ -229,6 +287,14 @@
        flashes a mid-keyframe state before settling. */
     .entry-spring-in,
     .toast {
+      animation: none;
+    }
+    /* V2-9 rule: edit sheet still opens/closes, but travel is skipped so
+       the panel never slides or scales. Backdrop just appears. */
+    .sheet-backdrop-enter,
+    .sheet-backdrop-exit,
+    .sheet-panel-enter,
+    .sheet-panel-exit {
       animation: none;
     }
   }

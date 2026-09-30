@@ -96,10 +96,16 @@ use **Discard** on the timer bar (see [Using the timer]({{ '/timer' | relative_u
 
 ## Editing an entry
 
-Tap the pencil icon on a card to open the edit sheet. From there you
-can change the entry's description, project, tags, billable flag, and
-start/end times, then save. The list updates in place and a **Saved**
-toast confirms the change.
+Tap the pencil icon on a card to open the edit sheet. On phones the
+sheet slides up from the bottom; on desktop it fades in and scales up
+slightly in place. Closing it (Cancel, ×, Esc, or tapping the backdrop)
+reverses the same motion a touch faster. If your system has
+**reduce motion** turned on the sheet still opens and closes, just
+without the travel.
+
+From there you can change the entry's description, project, tags,
+billable flag, and start/end times, then save. The list updates in
+place and a **Saved** toast confirms the change.
 
 Editing is not available for the currently running entry — stop it
 first, or use the timer bar to change its description and project.
