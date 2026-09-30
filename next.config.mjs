@@ -79,6 +79,10 @@ const nextConfig = {
         "./node_modules/pdfkit/**/*",
         "./node_modules/@react-pdf/**/*",
         "./node_modules/fontkit/**/*",
+        // Noto Sans TTFs used by the PDF export report (`renderReportPdf`).
+        // `Font.register` reads them from disk at request time, so they must
+        // land in the standalone output alongside the compiled server code.
+        "./src/server/assets/fonts/**/*",
         "./node_modules/@azure/monitor-opentelemetry/**/*",
         "./node_modules/@azure/monitor-opentelemetry-exporter/**/*",
         "./node_modules/@azure/core-*/**/*",
