@@ -211,7 +211,7 @@ export default function EntryList({
 
       {filtered.length === 0 ? (
         <div className="card p-6 text-center text-muted text-sm">
-          No entries yet. Start the timer above or add one manually.
+          No entries yet. Start the timer above.
         </div>
       ) : (
         <div className="space-y-5">
