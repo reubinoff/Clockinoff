@@ -8,6 +8,9 @@ import {
 } from "@/lib/tz";
 import { errors } from "@/lib/errors";
 
+// `billed` is appended at the end so existing CSV consumers keep their column
+// indices; the older columns (`billable`, `rate`, `amount`) keep their names
+// and positions. See EXPORT-PDF brief §Columns.
 export const EXPORT_HEADERS = [
   "date",
   "start",
@@ -20,6 +23,7 @@ export const EXPORT_HEADERS = [
   "billable",
   "rate",
   "amount",
+  "billed",
 ] as const;
 
 export interface ExportInput {
@@ -44,6 +48,7 @@ export interface ExportRow {
   billable: string;
   rate: string;
   amount: string;
+  billed: string;
 }
 
 async function fetchAllClosed(userId: string, filters: ExportInput): Promise<EntryView[]> {
@@ -84,6 +89,10 @@ export function toExportRow(entry: EntryView, tz: string): ExportRow {
     billable: entry.billable ? "yes" : "no",
     rate: entry.effective_rate == null ? "" : entry.effective_rate.toFixed(2),
     amount: entry.amount == null ? "" : entry.amount.toFixed(2),
+    // `billed` only meaningfully applies to billable entries (server + DB
+    // check enforces this) but we still stamp "no" on non-billable rows so
+    // the column is never blank — matches the `billable` column's shape.
+    billed: entry.billed ? "yes" : "no",
   };
 }
 

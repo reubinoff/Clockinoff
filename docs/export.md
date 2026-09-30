@@ -74,6 +74,7 @@ The CSV has a header row followed by one row per entry. Columns:
 | `billable` | `yes` / `no`. |
 | `rate` | Effective rate, formatted to 2 decimals, or blank. |
 | `amount` | Billable amount (`duration × effective_rate`), 2 decimals, or blank. |
+| `billed` | `yes` / `no` — whether the entry has already been invoiced. Always `no` when `billable` is `no`. |
 
 If there are no entries in the range, the CSV still contains a **header
 row** and nothing else — the response is `200 OK`, not an error.

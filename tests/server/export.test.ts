@@ -172,9 +172,46 @@ describe("export", () => {
     );
     expect(row.duration).toBe("1.50");
     expect(row.billable).toBe("yes");
+    expect(row.billed).toBe("no");
     expect(row.rate).toBe("40.00");
     expect(row.amount).toBe("60.00");
     expect(row.tags).toBe("a, b");
+  });
+
+  it("toExportRow emits billed=yes when the entry is billed", () => {
+    const row = toExportRow(
+      {
+        id: "id",
+        description: "hi",
+        project_id: null,
+        project_name: null,
+        client_id: null,
+        client_name: null,
+        start_at: "2026-01-01T09:00:00Z",
+        end_at: "2026-01-01T10:00:00Z",
+        duration_seconds: 3600,
+        billable: true,
+        billed: true,
+        rate: null,
+        effective_rate: null,
+        amount: null,
+        tag_ids: [],
+        tag_names: [],
+        running: false,
+      },
+      "UTC",
+    );
+    expect(row.billable).toBe("yes");
+    expect(row.billed).toBe("yes");
+  });
+
+  it("CSV appends `billed` as the last column without renaming existing ones", () => {
+    const csv = rowsToCsv([]);
+    // Header row, no data — locks the column order.
+    expect(csv).toBe(
+      "date,start,end,duration,description,project,client,tags,billable,rate,amount,billed\r\n",
+    );
+    expect(EXPORT_HEADERS[EXPORT_HEADERS.length - 1]).toBe("billed");
   });
 
   it("renders a PDF (non-empty + empty)", async () => {
