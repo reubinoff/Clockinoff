@@ -38,7 +38,11 @@ Fill in the form at the top of the Projects page:
   [Clients]({{ '/clients' | relative_url }}) if the list is empty.
 - **Default rate** — an optional non-negative number. Used only when the
   entry (or the project) is marked billable.
-- **Billable** — toggle if entries under this project default to billable.
+- **Billable** — toggle if entries under this project default to
+  billable. Note that entries themselves default to **billable = on**
+  regardless (see [Using the timer]({{ '/timer' | relative_url }}#details-collapsed-by-default));
+  this per-project flag only matters if you want a specific project's
+  entries to default the other way.
 
 Click **Add**. The new project appears at the top of the table.
 
@@ -82,8 +86,11 @@ If you change the project's `default_rate` **later**, entries that were
 already closed keep the amount they were saved with. Only new entries
 inherit the new default.
 
-Marking the project as billable by default just pre-fills the **$**
-checkbox on the timer bar; you can still toggle it off per entry.
+Marking the project as billable by default just pre-fills the
+**Billable** switch on the timer bar; you can still toggle it off per
+entry. Entries default to **billable = on** even without a project, so
+turning this on is only necessary if a specific project's default
+should differ from the global one.
 
 ---
 

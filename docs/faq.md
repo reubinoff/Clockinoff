@@ -40,6 +40,31 @@ did during the same window and split the accounting yourself.
 
 **Running** entries: no, because there is [only one running timer](#one-running-timer).
 
+## Billable and Already billed
+
+**How do Clockinoff's billable and billed flags interact?**
+
+Every time entry has two independent booleans:
+
+- **Billable** — is this time client-facing work? Default **on** so
+  the common case (tracking billable work) is one less click. Turn it
+  off for meetings, admin, learning, etc. Turning it off also clears
+  **Already billed** — that's a server-enforced invariant, not a UI
+  convenience.
+- **Already billed** — have you invoiced or been paid for this entry
+  yet? Default **off**. Only meaningful when **Billable** is on, and
+  the API refuses `{ billable: false, billed: true }` with a `400
+  VALIDATION`. There is a DB `CHECK` constraint behind that too, so a
+  broken client cannot bypass it.
+
+The running timer only carries **Billable** (visible in the timer
+dock's *Details* section). **Already billed** is only reachable after
+you stop the timer, either from the row **⋯** menu (**Mark as
+billed**) on a billable entry or from the edit sheet.
+
+For roadmap items around rates, invoices, bulk billing, and export of
+the *Unbilled* filter see [What's not in v1](#whats-not-in-v1).
+
 ## Currency
 
 **What currency are amounts in?**
@@ -120,5 +145,12 @@ By design, Clockinoff does not include:
 - Clockify / Toggl / Harvest sync.
 - Google / OAuth sign-in.
 - Reporting dashboards beyond the entries list and the CSV/PDF exports.
+- Rates or invoice generation on top of **Billable / Already billed**.
+  The two flags are recorded per entry; interpreting them is up to you.
+- Bulk "mark all as billed". Row-by-row from **⋯ → Mark as billed** is
+  the v1 workflow.
+- **Unbilled** filter or **Already billed** column in the CSV / PDF
+  export. The chip only exists in the entries list; exports still ship
+  the plain `billable` column.
 
 These are intentional trade-offs to keep the app tiny.

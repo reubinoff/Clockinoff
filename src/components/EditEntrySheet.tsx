@@ -28,6 +28,7 @@ export interface EditableEntry {
   start_at: string;
   end_at: string | null;
   billable: boolean;
+  billed: boolean;
   tag_ids: string[];
   running: boolean;
 }
@@ -85,6 +86,10 @@ export default function EditEntrySheet({
   const [description, setDescription] = useState(entry.description);
   const [projectId, setProjectId] = useState<string>(entry.project_id ?? "");
   const [billable, setBillable] = useState(entry.billable);
+  // Product-locked invariant: turning billable off must clear/hide Already
+  // billed. When billable flips off the sheet snaps `billed` to false in
+  // local state too, and the "Already billed" chip goes away entirely.
+  const [billed, setBilled] = useState(entry.billable && entry.billed);
   const [tagIds, setTagIds] = useState<string[]>(entry.tag_ids);
 
   const [startAt, setStartAt] = useState<Date>(originalStart);
@@ -245,6 +250,7 @@ export default function EditEntrySheet({
     if (description !== entry.description) return true;
     if ((projectId || null) !== (entry.project_id ?? null)) return true;
     if (billable !== entry.billable) return true;
+    if (billed !== entry.billed) return true;
     if (!sameSet(tagIds, entry.tag_ids)) return true;
     if (startAt.getTime() !== originalStart.getTime()) return true;
     if (!originalEnd || endAt.getTime() !== originalEnd.getTime()) return true;
@@ -253,12 +259,14 @@ export default function EditEntrySheet({
     description,
     projectId,
     billable,
+    billed,
     tagIds,
     startAt,
     endAt,
     entry.description,
     entry.project_id,
     entry.billable,
+    entry.billed,
     entry.tag_ids,
     originalStart,
     originalEnd,
@@ -277,6 +285,7 @@ export default function EditEntrySheet({
         body.project_id = projectId || null;
       }
       if (billable !== entry.billable) body.billable = billable;
+      if (billed !== entry.billed) body.billed = billed;
       if (!sameSet(tagIds, entry.tag_ids)) body.tag_ids = tagIds;
       if (startAt.getTime() !== originalStart.getTime()) {
         body.start_at = startAt.toISOString();
@@ -410,16 +419,49 @@ export default function EditEntrySheet({
 
           <div>
             <span className="label">Billable</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={billable}
-              onClick={() => setBillable((b) => !b)}
-              className={"chip" + (billable ? " chip-on" : "")}
-            >
-              <IconBillable size={14} aria-hidden />
-              <span>{billable ? "Billable" : "Not billable"}</span>
-            </button>
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={billable}
+                aria-label="Billable"
+                onClick={() =>
+                  setBillable((b) => {
+                    const next = !b;
+                    // Turning billable off must clear billed (Shaul lock).
+                    if (!next) setBilled(false);
+                    return next;
+                  })
+                }
+                className={"chip self-start" + (billable ? " chip-on" : "")}
+              >
+                <IconBillable size={14} aria-hidden />
+                <span>Billable</span>
+              </button>
+              <span className="text-xs text-muted">
+                Counts toward client work.
+              </span>
+            </div>
+            {billable && (
+              <div className="mt-3 pl-1 border-l-2 border-border">
+                <div className="pl-3 flex flex-col gap-1">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={billed}
+                    aria-label="Already billed"
+                    onClick={() => setBilled((v) => !v)}
+                    className={"chip self-start" + (billed ? " chip-on" : "")}
+                  >
+                    <IconCheck size={14} aria-hidden />
+                    <span>Already billed</span>
+                  </button>
+                  <span className="text-xs text-muted">
+                    Mark this entry as invoiced or already paid.
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>

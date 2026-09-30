@@ -35,7 +35,10 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
   const [projects, setProjects] = useState<Project[]>([]);
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState<string>("");
-  const [billable, setBillable] = useState(false);
+  // Product-locked: Billable is ON by default. Persisted server-side via the
+  // debounced PATCH below and re-read from GET /api/timer on load, so a
+  // refresh keeps whatever the user last set on the dock.
+  const [billable, setBillable] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [pending, setPending] = useState(false);
   // V2-5 Shaul lock: Details (project + billable + tz) collapsed by default.
@@ -66,7 +69,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
       } else {
         setDescription("");
         setProjectId("");
-        setBillable(false);
+        setBillable(true);
       }
     }
     if (pRes.ok) {
@@ -152,7 +155,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
         setEntry(null);
         setDescription("");
         setProjectId("");
-        setBillable(false);
+        setBillable(true);
         emitEntryAdded(stopped);
         emitToast("Logged");
         router.refresh();
@@ -171,7 +174,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
         setEntry(null);
         setDescription("");
         setProjectId("");
-        setBillable(false);
+        setBillable(true);
         // V2-6 §3: discard produces no list row — toast only.
         emitToast("Discarded");
         router.refresh();
@@ -268,11 +271,14 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
             />
           </button>
         </div>
-        {/* Details (project + billable + tz) — collapsed by default per V2-5. */}
+        {/* Details (project + billable + tz) — collapsed by default per V2-5.
+             Billable lives here as a quiet switch (Dana lock). Default on;
+             persisted server-side via PATCH /api/timer above so a refresh
+             keeps the choice, and copied onto the entry on Stop. */}
         {detailsOpen && (
           <div
             id="timer-details"
-            className="flex items-center gap-2 md:contents"
+            className="flex flex-col gap-2 md:flex-row md:items-center md:contents"
           >
             <select
               className="input flex-1 md:flex-none md:w-auto md:max-w-[200px]"
@@ -287,19 +293,32 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
                 </option>
               ))}
             </select>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={billable}
-              onClick={() => setBillable((b) => !b)}
-              className={
-                "chip min-h-[44px] shrink-0" + (billable ? " chip-on" : "")
-              }
-              title={billable ? "Billable" : "Not billable"}
-            >
-              <IconBillable size={14} aria-hidden />
-              <span>Billable</span>
-            </button>
+            <div className="flex flex-col items-start gap-0.5 shrink-0">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={billable}
+                aria-label="Billable"
+                onClick={() => {
+                  setBillable((b) => {
+                    const next = !b;
+                    emitToast(next ? "Billable on" : "Billable off");
+                    return next;
+                  });
+                }}
+                className={
+                  "chip min-h-[44px]" + (billable ? " chip-on" : "")
+                }
+                title="Billable"
+                data-timer-billable-toggle="true"
+              >
+                <IconBillable size={14} aria-hidden />
+                <span>Billable</span>
+              </button>
+              <span className="text-xs text-muted">
+                Counts toward client work.
+              </span>
+            </div>
             <span className="text-xs text-muted hidden md:inline shrink-0">
               {timezone}
             </span>

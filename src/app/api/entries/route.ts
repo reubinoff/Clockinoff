@@ -29,6 +29,8 @@ export async function GET(req: Request): Promise<Response> {
       client_id: optionalUuid(sp.get("client_id"), "client_id"),
       tag_id: optionalUuid(sp.get("tag_id"), "tag_id"),
       billable: sp.get("billable") == null ? undefined : sp.get("billable") === "true",
+      billed: sp.get("billed") == null ? undefined : sp.get("billed") === "true",
+      unbilled: sp.get("unbilled") === "true" ? true : undefined,
       include_running: sp.get("include_running") !== "false",
       limit: sp.get("limit") ? Number(sp.get("limit")) : undefined,
       cursor: sp.get("cursor"),

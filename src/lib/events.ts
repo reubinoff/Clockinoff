@@ -23,7 +23,13 @@ export function emitProjectsChanged(): void {
 // persistence, no queue beyond the short replay buffer described below. The
 // Toaster mounted in the app layout subscribes and renders; TimerBar /
 // EntryList emit.
-export type ToastKind = "Logged" | "Saved" | "Discarded";
+export type ToastKind =
+  | "Logged"
+  | "Saved"
+  | "Discarded"
+  | "Marked as billed"
+  | "Billable on"
+  | "Billable off";
 
 export interface ToastEvent {
   id: number;

@@ -55,8 +55,12 @@ Each entry renders as a card with:
   running entry, only visible if you filter it in).
 - Chips for the entry's **project**, **tags**, and, if billable, a
   **billable** marker with the computed amount.
+- If the entry has been marked as billed, a quiet **Billed** meta in the
+  muted row style — no loud badge, no colour.
 - An **edit** control (pencil icon, 44 × 44 px tap target) that opens
-  the edit sheet, and a delete control (×) to remove the entry.
+  the edit sheet, a **more** control (**⋯**) that opens the row action
+  menu when the entry is billable but not yet billed, and a delete
+  control (×) to remove the entry.
 
 The billable amount uses the *effective rate* stored on the entry —
 either the entry's own rate or, if that is null, the project's
@@ -66,12 +70,15 @@ either the entry's own rate or, if that is null, the project's
 
 ## Filtering
 
-Above the table there are three controls:
+Above the list there are three controls:
 
 - **Search box** — matches the description field, case-insensitive.
 - **Project dropdown** — pick a single project (or **All projects**).
-- **Billable dropdown** — **Any**, **Billable only**, or **Not billable
-  only**.
+- **Unbilled chip** — a single quiet toggle. Off (default) shows every
+  entry; on shows only entries that are **billable and not yet billed**,
+  i.e. work you have done but not invoiced. When the chip is on and no
+  entries match, the list shows *Nothing unbilled in this range.*
+  instead of the usual empty state.
 
 Filtering runs client-side over the loaded entries; the counter to the
 right shows *N of M* matching rows.
@@ -104,11 +111,35 @@ reverses the same motion a touch faster. If your system has
 without the travel.
 
 From there you can change the entry's description, project, tags,
-billable flag, and start/end times, then save. The list updates in
-place and a **Saved** toast confirms the change.
+**Billable** flag, **Already billed** flag (only visible when
+**Billable** is on), and start/end times, then save. The list updates
+in place and a **Saved** toast confirms the change.
+
+Turning **Billable** off in the edit sheet hides the **Already billed**
+sub-toggle and clears the flag; the server enforces the same
+invariant, so the two switches can never disagree.
 
 Editing is not available for the currently running entry — stop it
 first, or use the timer bar to change its description and project.
+
+---
+
+## Mark an entry as billed
+
+Once you have invoiced or been paid for an entry you can mark it as
+billed without opening the edit sheet:
+
+1. Tap the **⋯** button on a billable, not-yet-billed row.
+2. Choose **Mark as billed** from the small menu.
+
+The row stays in place, its row action menu goes away, a muted
+**Billed** meta appears next to its other chips, and a **Marked as
+billed** toast confirms the change. The **⋯** menu only appears when
+an entry is currently billable and not billed — a non-billable entry
+or an already-billed entry does not surface the shortcut.
+
+For anything more involved (undo, change the flag alongside other
+edits) use the edit sheet.
 
 ---
 

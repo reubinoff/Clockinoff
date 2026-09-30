@@ -113,7 +113,8 @@ export const timeEntries = pgTable(
     description: text("description").notNull().default(""),
     startAt: timestamp("start_at", { withTimezone: true, mode: "date" }).notNull(),
     endAt: timestamp("end_at", { withTimezone: true, mode: "date" }),
-    billable: boolean("billable").notNull().default(false),
+    billable: boolean("billable").notNull().default(true),
+    billed: boolean("billed").notNull().default(false),
     rate: numeric("rate", { precision: 12, scale: 2 }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()

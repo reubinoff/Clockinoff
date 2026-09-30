@@ -160,6 +160,7 @@ describe("export", () => {
         end_at: "2026-01-01T10:30:00Z",
         duration_seconds: 5400,
         billable: true,
+        billed: false,
         rate: 40,
         effective_rate: 40,
         amount: 60,

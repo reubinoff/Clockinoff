@@ -9,7 +9,7 @@ import {
   formatTime,
 } from "@/lib/tz";
 import { emitToast, onEntryAdded } from "@/lib/events";
-import { IconBillable, IconEdit } from "@/components/icons";
+import { IconBillable, IconCheck, IconEdit } from "@/components/icons";
 import EditEntrySheet, { type EditableEntry } from "@/components/EditEntrySheet";
 
 interface Entry {
@@ -22,6 +22,7 @@ interface Entry {
   end_at: string | null;
   duration_seconds: number;
   billable: boolean;
+  billed: boolean;
   rate: number | null;
   effective_rate: number | null;
   amount: number | null;
@@ -83,9 +84,15 @@ export default function EntryList({
   const router = useRouter();
   const [entries, setEntries] = useState(initial);
   const [filterProject, setFilterProject] = useState("");
-  const [filterBillable, setFilterBillable] = useState<"" | "true" | "false">("");
+  // Dana lock: single "Unbilled" chip on the day-entries list — default off.
+  // On = show only entries where billable && !billed. There is no explicit
+  // Billable/Not-billable filter; billed rows quietly recede into the muted
+  // "Billed" meta on each row.
+  const [filterUnbilled, setFilterUnbilled] = useState(false);
   const [filterQ, setFilterQ] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<string | null>(null);
   // V2-6 §1: entry ids whose row should render with the spring-in class.
   // Cleared shortly after the animation duration so subsequent renders
   // (e.g. filter changes) don't re-play the animation on the same row.
@@ -126,12 +133,11 @@ export default function EntryList({
   const filtered = useMemo(() => {
     return entries.filter((e) => {
       if (filterProject && e.project_id !== filterProject) return false;
-      if (filterBillable === "true" && !e.billable) return false;
-      if (filterBillable === "false" && e.billable) return false;
+      if (filterUnbilled && !(e.billable && !e.billed)) return false;
       if (filterQ && !e.description.toLowerCase().includes(filterQ.toLowerCase())) return false;
       return true;
     });
-  }, [entries, filterProject, filterBillable, filterQ]);
+  }, [entries, filterProject, filterUnbilled, filterQ]);
 
   // Recompute Today/Yesterday labels on mount so a client whose clock advances
   // past midnight since SSR still sees the correct label after hydration.
@@ -154,6 +160,40 @@ export default function EntryList({
       router.refresh();
     }
   }
+
+  // Dana lock: Mark as billed stays on the list, does not open the edit
+  // sheet, muted Billed meta replaces the row inline, and a "Marked as
+  // billed" toast confirms. Only reachable when billable && !billed.
+  async function markAsBilled(id: string): Promise<void> {
+    setMenuOpenId(null);
+    setMarkingId(id);
+    try {
+      const res = await fetch(`/api/entries/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ billed: true }),
+      });
+      if (res.ok) {
+        const updated = (await res.json()) as Entry;
+        setEntries((cur) => cur.map((e) => (e.id === id ? updated : e)));
+        emitToast("Marked as billed");
+        router.refresh();
+      }
+    } finally {
+      setMarkingId(null);
+    }
+  }
+
+  useEffect(() => {
+    if (menuOpenId === null) return;
+    function onDocClick(): void {
+      setMenuOpenId(null);
+    }
+    document.addEventListener("click", onDocClick);
+    return () => {
+      document.removeEventListener("click", onDocClick);
+    };
+  }, [menuOpenId]);
 
   function beginEdit(e: Entry): void {
     if (e.running) return;
@@ -192,18 +232,20 @@ export default function EntryList({
             </option>
           ))}
         </select>
-        <select
-          className="input flex-1 sm:flex-none sm:max-w-[140px]"
-          value={filterBillable}
-          onChange={(e) =>
-            setFilterBillable(e.target.value as "" | "true" | "false")
+        <button
+          type="button"
+          role="switch"
+          aria-checked={filterUnbilled}
+          onClick={() => setFilterUnbilled((v) => !v)}
+          className={
+            "chip min-h-[44px] shrink-0" + (filterUnbilled ? " chip-on" : "")
           }
-          aria-label="Filter by billable"
+          title="Show only unbilled entries"
+          data-entries-unbilled-chip="true"
         >
-          <option value="">Billable: any</option>
-          <option value="true">Billable</option>
-          <option value="false">Not billable</option>
-        </select>
+          <IconBillable size={14} aria-hidden />
+          <span>Unbilled</span>
+        </button>
         <span className="text-xs text-muted">
           {filtered.length} of {entries.length}
         </span>
@@ -211,7 +253,9 @@ export default function EntryList({
 
       {filtered.length === 0 ? (
         <div className="card p-6 text-center text-muted text-sm">
-          No entries yet. Start the timer above.
+          {filterUnbilled
+            ? "Nothing unbilled in this range."
+            : "No entries yet. Start the timer above."}
         </div>
       ) : (
         <div className="space-y-5">
@@ -259,7 +303,8 @@ export default function EntryList({
                           </p>
                           {(e.project_name ||
                             e.tag_names.length > 0 ||
-                            e.billable) && (
+                            e.billable ||
+                            e.billed) && (
                             <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                               {e.project_name ? (
                                 <span className="chip">{e.project_name}</span>
@@ -279,6 +324,16 @@ export default function EntryList({
                                   {e.amount != null ? e.amount.toFixed(2) : ""}
                                 </span>
                               )}
+                              {e.billed && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-xs text-muted"
+                                  title="Already billed"
+                                  aria-label="Billed"
+                                >
+                                  <IconCheck size={12} aria-hidden />
+                                  Billed
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
@@ -292,6 +347,43 @@ export default function EntryList({
                             >
                               <IconEdit size={16} aria-hidden />
                             </button>
+                          )}
+                          {!e.running && e.billable && !e.billed && (
+                            <div className="relative">
+                              <button
+                                className="btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0"
+                                onClick={(evt) => {
+                                  evt.stopPropagation();
+                                  setMenuOpenId((cur) => (cur === e.id ? null : e.id));
+                                }}
+                                aria-label="More actions"
+                                aria-haspopup="menu"
+                                aria-expanded={menuOpenId === e.id}
+                                title="More"
+                                data-entry-more-btn={e.id}
+                              >
+                                <span aria-hidden className="text-lg leading-none">
+                                  ⋯
+                                </span>
+                              </button>
+                              {menuOpenId === e.id && (
+                                <div
+                                  role="menu"
+                                  className="absolute right-0 top-full z-10 mt-1 w-44 rounded-xl border border-border bg-surface shadow-card-lg py-1"
+                                  onClick={(evt) => evt.stopPropagation()}
+                                >
+                                  <button
+                                    role="menuitem"
+                                    type="button"
+                                    className="w-full text-left px-3 py-2 text-body-sm text-ink hover:bg-canvas-2 disabled:opacity-60"
+                                    disabled={markingId === e.id}
+                                    onClick={() => void markAsBilled(e.id)}
+                                  >
+                                    Mark as billed
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )}
                           <button
                             className="btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0 text-danger hover:bg-danger-soft"

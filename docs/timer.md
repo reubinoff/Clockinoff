@@ -46,11 +46,22 @@ Click the chevron on the right of the dock to reveal:
 
 - **Project dropdown** — pick a project you already created, or leave as
   **No project**.
-- **Billable toggle** — the `$` chip marks the entry as billable.
+- **Billable switch** — quiet toggle labelled **Billable** with the
+  helper text *Counts toward client work.* **Default is on**, so a new
+  timer is billable unless you explicitly turn it off. The value is
+  persisted server-side on the running entry, so a refresh keeps
+  whatever you last picked, and it is copied onto the entry when you
+  hit **Stop**. Flipping the switch shows a **Billable on** /
+  **Billable off** toast so the change is visible without pulling
+  attention.
 - **Timezone label** (desktop only) — which timezone Clockinoff uses for
   your display (see [Account & timezone]({{ '/account' | relative_url }})).
 
 The details section closes again on the next chevron click.
+
+The **Already billed** flag is *not* available on the running dock —
+you can only mark an entry as billed after it has been stopped (see
+[Time entries → Mark as billed]({{ '/entries' | relative_url }}#mark-an-entry-as-billed)).
 
 ### Running wash
 
@@ -67,7 +78,8 @@ at a glance that time is currently being tracked.
 2. Pick a project if you want to group this entry. The project's default
    billable and default rate carry into the entry (rate is used only when
    **Billable** is on).
-3. Toggle **$** if this time is billable.
+3. Leave **Billable** on (default) or toggle it off if this time is not
+   billable.
 4. Click **Start**.
 
 The elapsed counter begins ticking and the button set switches to
