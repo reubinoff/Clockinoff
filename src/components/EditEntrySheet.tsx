@@ -332,7 +332,7 @@ export default function EditEntrySheet({
       <div
         className={
           "w-full md:max-w-md bg-surface md:rounded-2xl rounded-t-2xl shadow-card-lg " +
-          "max-h-[92dvh] overflow-y-auto " +
+          "max-h-[92dvh] overflow-y-auto overflow-x-hidden " +
           (closing ? "sheet-panel-exit" : "sheet-panel-enter")
         }
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -424,7 +424,7 @@ export default function EditEntrySheet({
 
           <div>
             <span className="label">Duration</span>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <div className="flex items-center gap-1">
                 <button
                   type="button"
