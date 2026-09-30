@@ -31,7 +31,7 @@ export async function GET(req: Request): Promise<Response> {
     const to = parseRangeParam(sp.get("to"), tz, true);
     const { from: f, to: t } = validateExportRange({ from, to });
 
-    const { rows, totalSeconds, totalAmount } = await getExportRows(
+    const { entries, totalSeconds, totalAmount } = await getExportRows(
       user.id,
       {
         from: f,
@@ -44,9 +44,9 @@ export async function GET(req: Request): Promise<Response> {
       tz,
     );
     const pdf = await renderReportPdf({
-      rows,
-      from: sp.get("from") ?? "",
-      to: sp.get("to") ?? "",
+      entries,
+      from: f,
+      to: t,
       timezone: tz,
       totalSeconds,
       totalAmount,

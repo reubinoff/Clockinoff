@@ -214,25 +214,30 @@ describe("export", () => {
     expect(EXPORT_HEADERS[EXPORT_HEADERS.length - 1]).toBe("billed");
   });
 
-  it("renders a PDF (non-empty + empty)", async () => {
+  it("renders a PDF (non-empty + empty) with Noto-embedded fonts", async () => {
+    const entry = {
+      id: "e1",
+      description: "work",
+      project_id: null,
+      project_name: "p",
+      client_id: null,
+      client_name: "c",
+      start_at: "2026-04-01T09:00:00Z",
+      end_at: "2026-04-01T10:00:00Z",
+      duration_seconds: 3600,
+      billable: true,
+      billed: false,
+      rate: 50,
+      effective_rate: 50,
+      amount: 50,
+      tag_ids: [],
+      tag_names: ["focus"],
+      running: false,
+    };
     const withRows = await renderReportPdf({
-      rows: [
-        {
-          date: "2026-04-01",
-          start: "09:00",
-          end: "10:00",
-          duration: "1.00",
-          description: "work",
-          project: "p",
-          client: "c",
-          tags: "focus",
-          billable: "yes",
-          rate: "50.00",
-          amount: "50.00",
-        },
-      ],
-      from: "2026-04-01",
-      to: "2026-04-30",
+      entries: [entry],
+      from: new Date("2026-04-01T00:00:00Z"),
+      to: new Date("2026-05-01T00:00:00Z"),
       timezone: "UTC",
       totalSeconds: 3600,
       totalAmount: 50,
@@ -241,14 +246,45 @@ describe("export", () => {
     expect(withRows.subarray(0, 4).toString()).toBe("%PDF");
 
     const empty = await renderReportPdf({
-      rows: [],
-      from: "2026-04-01",
-      to: "2026-04-30",
+      entries: [],
+      from: new Date("2026-04-01T00:00:00Z"),
+      to: new Date("2026-05-01T00:00:00Z"),
       timezone: "UTC",
       totalSeconds: 0,
       totalAmount: 0,
     });
     expect(empty.length).toBeGreaterThan(200);
     expect(empty.subarray(0, 4).toString()).toBe("%PDF");
+  });
+
+  it("renders a PDF with Hebrew descriptions without crashing", async () => {
+    const entry = {
+      id: "e1",
+      description: "סקיצה לדשבורד",
+      project_id: null,
+      project_name: null,
+      client_id: null,
+      client_name: null,
+      start_at: "2026-09-30T18:19:00Z",
+      end_at: "2026-09-30T18:34:00Z",
+      duration_seconds: 900,
+      billable: true,
+      billed: true,
+      rate: 200,
+      effective_rate: 200,
+      amount: 50,
+      tag_ids: [],
+      tag_names: [],
+      running: false,
+    };
+    const pdf = await renderReportPdf({
+      entries: [entry],
+      from: new Date("2026-09-01T00:00:00Z"),
+      to: new Date("2026-10-01T00:00:00Z"),
+      timezone: "Asia/Jerusalem",
+      totalSeconds: 900,
+      totalAmount: 50,
+    });
+    expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
   });
 });
