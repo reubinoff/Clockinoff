@@ -2,6 +2,9 @@ import type { SVGProps } from "react";
 
 type Props = SVGProps<SVGSVGElement> & { size?: number | string; title?: string };
 
+// V2-10 Dark #10: fills reference the tokenized accent/accent-fg via CSS
+// variables so the mark picks up dark's `#7c3aed` automatically. The white
+// glyph stays white because `--color-accent-fg` is `#ffffff` in both themes.
 export function Mark({ size = 40, title = "Timely", ...rest }: Props): JSX.Element {
   return (
     <svg
@@ -14,12 +17,19 @@ export function Mark({ size = 40, title = "Timely", ...rest }: Props): JSX.Eleme
       {...rest}
     >
       <title>{title}</title>
-      <rect width="64" height="64" rx="15" fill="#6d28d9" />
-      <circle cx="32" cy="32" r="18" fill="none" stroke="#ffffff" strokeWidth="3" />
+      <rect width="64" height="64" rx="15" fill="var(--color-accent)" />
+      <circle
+        cx="32"
+        cy="32"
+        r="18"
+        fill="none"
+        stroke="var(--color-accent-fg)"
+        strokeWidth="3"
+      />
       <path
         d="M28.5 23.5 L44 32 L28.5 40.5 Z"
-        fill="#ffffff"
-        stroke="#ffffff"
+        fill="var(--color-accent-fg)"
+        stroke="var(--color-accent-fg)"
         strokeWidth="1.5"
         strokeLinejoin="round"
       />
@@ -42,7 +52,7 @@ export function Wordmark({
           fontWeight: 600,
           letterSpacing: "-0.01em",
           fontSize: Math.round(Number(markSize) * 0.75),
-          color: "#0f172a",
+          color: "var(--color-ink)",
           lineHeight: 1,
         }}
       >

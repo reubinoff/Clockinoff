@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { IconMore } from "@/components/icons";
+import AppearanceSelect from "@/components/AppearanceSelect";
 
 interface Props {
   email: string;
@@ -77,15 +78,23 @@ export default function HeaderUserMenu({ email }: Props): JSX.Element {
           >
             {email}
           </div>
-          <button
-            type="button"
-            role="menuitem"
-            className="btn btn-ghost w-full justify-start !min-h-[44px]"
-            onClick={logout}
-            disabled={pending}
-          >
-            {pending ? "Signing out…" : "Log out"}
-          </button>
+          {/* V2-10 Dark #10: Appearance lives in the mobile account
+              overflow, above Log out, alongside the desktop pref. Same
+              locked `timely.appearance` key backs both. */}
+          <div role="none" className="border-t border-border mt-1 pt-1">
+            <AppearanceSelect variant="menu" />
+          </div>
+          <div role="none" className="border-t border-border mt-1 pt-1">
+            <button
+              type="button"
+              role="menuitem"
+              className="btn btn-ghost w-full justify-start !min-h-[44px]"
+              onClick={logout}
+              disabled={pending}
+            >
+              {pending ? "Signing out…" : "Log out"}
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -19,6 +19,8 @@ You get:
 - **Projects, clients, and tags** to organise entries.
 - **Billable flag** with an optional rate on each project.
 - **CSV and PDF export** over any date range.
+- **Light and dark theme** — an Appearance picker (System · Light · Dark)
+  in the account cluster; System tracks your device.
 
 That's the whole product. There is intentionally no calendar view, no team
 management, no Google or Clockify sync, and no dashboards beyond the entry

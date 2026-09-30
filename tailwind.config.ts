@@ -4,24 +4,27 @@ export default {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      // V2-10 Dark #10: every color token resolves through a CSS variable
+      // scoped to `html[data-theme="light|dark"]` in `globals.css`. This is
+      // what makes the whole 17-token palette flip together in one shot.
       colors: {
-        accent: "#6d28d9",
-        "accent-hover": "#5b21b6",
-        "accent-fg": "#ffffff",
-        "accent-soft": "#ede9fe",
-        "accent-ring": "rgba(109,40,217,0.35)",
-        surface: "#ffffff",
-        canvas: "#f7f6f3",
-        "canvas-2": "#efeee9",
-        ink: "#0f172a",
-        "ink-2": "#334155",
-        muted: "#64748b",
-        border: "#e7e5e4",
-        "border-strong": "#d6d3d1",
-        danger: "#b91c1c",
-        "danger-soft": "#fef2f2",
-        success: "#15803d",
-        "success-soft": "#f0fdf4",
+        accent: "var(--color-accent)",
+        "accent-hover": "var(--color-accent-hover)",
+        "accent-fg": "var(--color-accent-fg)",
+        "accent-soft": "var(--color-accent-soft)",
+        "accent-ring": "var(--color-accent-ring)",
+        surface: "var(--color-surface)",
+        canvas: "var(--color-canvas)",
+        "canvas-2": "var(--color-canvas-2)",
+        ink: "var(--color-ink)",
+        "ink-2": "var(--color-ink-2)",
+        muted: "var(--color-muted)",
+        border: "var(--color-border)",
+        "border-strong": "var(--color-border-strong)",
+        danger: "var(--color-danger)",
+        "danger-soft": "var(--color-danger-soft)",
+        success: "var(--color-success)",
+        "success-soft": "var(--color-success-soft)",
       },
       fontFamily: {
         sans: [
@@ -69,10 +72,9 @@ export default {
         "timer-md": ["1.25rem", { lineHeight: "1", fontWeight: "500" }],
       },
       boxShadow: {
-        card: "0 1px 2px rgba(15,23,42,0.04)",
-        "card-lg":
-          "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.06)",
-        sheet: "0 8px 32px rgba(15,23,42,0.12)",
+        card: "var(--shadow-card)",
+        "card-lg": "var(--shadow-card-lg)",
+        sheet: "var(--shadow-sheet)",
       },
       borderRadius: {
         "radius-sm": "8px",

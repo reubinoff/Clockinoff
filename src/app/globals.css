@@ -3,12 +3,86 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /*
+   * V2-10 Dark #10 — Quiet Pulse light↔dark token map.
+   *
+   * Every one of the 17 shipped color tokens plus the 3 shadow tokens has a
+   * dark twin. All Tailwind color/shadow utilities resolve through these
+   * variables (see `tailwind.config.ts`), so a single `data-theme` flip on
+   * `<html>` swaps the entire palette in one shot — no partial screens.
+   *
+   * `data-theme` is set before paint by the boot script in `src/app/layout.tsx`
+   * based on the locked `localStorage['timely.appearance']` enum.
+   */
+  :root,
+  html[data-theme="light"] {
     color-scheme: light;
 
-    /* V2-3 Quiet Pulse motion tokens (§5.1). Every animation/transition in the
-       app must reference these via var(...) so `prefers-reduced-motion: reduce`
-       can zero durations in one place (§5.3) without touching call sites. */
+    --color-accent: #6d28d9;
+    --color-accent-hover: #5b21b6;
+    --color-accent-fg: #ffffff;
+    --color-accent-soft: #ede9fe;
+    --color-accent-ring: rgba(109, 40, 217, 0.35);
+    --color-surface: #ffffff;
+    --color-canvas: #f7f6f3;
+    --color-canvas-2: #efeee9;
+    --color-ink: #0f172a;
+    --color-ink-2: #334155;
+    --color-muted: #64748b;
+    --color-border: #e7e5e4;
+    --color-border-strong: #d6d3d1;
+    --color-danger: #b91c1c;
+    --color-danger-soft: #fef2f2;
+    --color-success: #15803d;
+    --color-success-soft: #f0fdf4;
+
+    --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-card-lg: 0 1px 2px rgba(15, 23, 42, 0.04),
+      0 8px 24px rgba(15, 23, 42, 0.06);
+    --shadow-sheet: 0 8px 32px rgba(15, 23, 42, 0.12);
+
+    /* Purple-tinted breath glow — resolves to accent in whichever theme. */
+    --glow-accent: rgba(109, 40, 217, 0.08);
+    --border-accent-tint: rgba(109, 40, 217, 0.25);
+  }
+
+  html[data-theme="dark"] {
+    color-scheme: dark;
+
+    /* Locked Quiet Pulse dark map. CTA fill and hover both hit ≥ 4.5:1 on
+       white text; hover is darker than fill (§HOLD fix). */
+    --color-accent: #7c3aed;
+    --color-accent-hover: #6d28d9;
+    --color-accent-fg: #ffffff;
+    --color-accent-soft: #2e1065;
+    --color-accent-ring: rgba(139, 92, 246, 0.45);
+    --color-surface: #1c1924;
+    --color-canvas: #0c0b10;
+    --color-canvas-2: #14121a;
+    --color-ink: #f4f4f5;
+    --color-ink-2: #d4d4d8;
+    --color-muted: #a1a1aa;
+    --color-border: #2a2633;
+    --color-border-strong: #3f3a4a;
+    --color-danger: #f87171;
+    --color-danger-soft: #3b1418;
+    --color-success: #4ade80;
+    --color-success-soft: #0a1f14;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45);
+    --shadow-card-lg: 0 1px 2px rgba(0, 0, 0, 0.45),
+      0 8px 24px rgba(0, 0, 0, 0.55);
+    --shadow-sheet: 0 8px 32px rgba(0, 0, 0, 0.55);
+
+    /* Decorative violet family — allowed on non-text chrome only (Shaul). */
+    --glow-accent: rgba(139, 92, 246, 0.16);
+    --border-accent-tint: rgba(139, 92, 246, 0.35);
+  }
+
+  /* V2-3 Quiet Pulse motion tokens (§5.1). Every animation/transition in the
+     app must reference these via var(...) so `prefers-reduced-motion: reduce`
+     can zero durations in one place (§5.3) without touching call sites. */
+  :root {
     --duration-instant: 80ms;
     --duration-fast: 160ms;
     --duration-moderate: 280ms;
@@ -87,15 +161,24 @@
            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:ring-offset-2 focus-visible:ring-offset-canvas;
   }
   .nav-link-active {
-    @apply text-ink bg-accent-soft/60;
+    @apply text-ink;
+    /* V2-10 Dark #10: opacity modifiers on `bg-accent-soft` can't work
+       when the color resolves through a raw `var(--…)`, so we mix at 60%
+       against transparent in-place. Same visual on both palettes. */
+    background-color: color-mix(in srgb, var(--color-accent-soft) 60%, transparent);
   }
   .chip {
     @apply inline-flex items-center gap-1.5 rounded-full border border-border bg-surface
            px-3 py-1 text-xs text-ink hover:bg-canvas-2 transition-colors
            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:ring-offset-2 focus-visible:ring-offset-canvas;
   }
+  /* V2-10 dark note: dark `accent` is optimised for fills + white labels; on
+     dark surfaces at small type it lands under 4.5:1. Selected chip uses the
+     accent-soft wash with `ink` for the label instead of `accent`. */
   .chip-on {
-    @apply border-accent/40 bg-accent-soft text-accent;
+    @apply bg-accent-soft text-ink;
+    /* Same reason as .nav-link-active: mix in place instead of `/40`. */
+    border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
   }
   .tab-link {
     @apply flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 py-1.5
@@ -131,33 +214,35 @@
      0 → ~8% → 0 over --duration-breath. Only runs on the idle Start button;
      stops as soon as the timer transitions to running (class removed by the
      TimerBar) and — via the reduced-motion token override above — becomes a
-     0ms no-op when the user prefers reduced motion. */
+     0ms no-op when the user prefers reduced motion. V2-10: the glow rgba is
+     tokenized via `--glow-accent` so dark picks up the violet-family halo. */
   @keyframes start-idle-breath {
     0%, 100% {
       transform: scale(1);
-      box-shadow: 0 0 0 0 rgba(109, 40, 217, 0);
+      box-shadow: 0 0 0 0 var(--glow-accent);
     }
     50% {
       transform: scale(1.02);
-      box-shadow: 0 0 16px 2px rgba(109, 40, 217, 0.08);
+      box-shadow: 0 0 16px 2px var(--glow-accent);
     }
   }
   .timer-running-pulse {
-    color: #6d28d9;
+    color: var(--color-accent);
     animation: timer-pulse 2s ease-in-out infinite;
   }
   /* V2-5 §3 running wash: the whole dock swaps to an accent-soft surface with
-     an accent-tinted top border while a timer is running. Ties into the
-     existing purple brand (accent #6d28d9 / accent-soft #ede9fe) without any
-     new color tokens. Motion respects `--duration-moderate` so the transition
-     collapses to 0ms under `prefers-reduced-motion: reduce`. */
+     an accent-tinted top border while a timer is running. V2-10: uses the
+     tokenized `accent-soft` fill and `--border-accent-tint` so the wash
+     flips with the theme (deep violet on dark, lilac on light). Motion
+     respects `--duration-moderate` so the transition collapses to 0ms under
+     `prefers-reduced-motion: reduce`. */
   .timer-dock {
     transition: background-color var(--duration-moderate) var(--ease-standard),
                 border-color var(--duration-moderate) var(--ease-standard);
   }
   .timer-dock-running {
-    background-color: #ede9fe;
-    border-top-color: rgba(109, 40, 217, 0.25);
+    background-color: var(--color-accent-soft);
+    border-top-color: var(--border-accent-tint);
   }
   .timer-start-idle {
     animation: start-idle-breath var(--duration-breath) var(--ease-standard) infinite;

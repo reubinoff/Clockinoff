@@ -9,6 +9,7 @@ import AppNav from "@/components/AppNav";
 import BottomTabBar from "@/components/BottomTabBar";
 import HeaderUserMenu from "@/components/HeaderUserMenu";
 import Toaster from "@/components/Toaster";
+import AppearanceSelect from "@/components/AppearanceSelect";
 import { Mark } from "@/components/brand/Mark";
 import { DOCS_URL } from "@/lib/docs";
 
@@ -54,6 +55,11 @@ export default async function AppLayout({
             >
               Docs
             </a>
+            <div className="hidden md:block">
+              {/* V2-10 Dark #10: Appearance picker sits in the desktop
+                  account cluster next to email · docs · Log out. */}
+              <AppearanceSelect />
+            </div>
             <div className="hidden md:block">
               <LogoutButton />
             </div>

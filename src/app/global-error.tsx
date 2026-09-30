@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { appearanceBootScript } from "@/lib/appearance";
 
 export default function GlobalError({
   error,
@@ -16,12 +17,16 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html lang="en">
+    // V2-10 Dark #10: global-error renders outside the app-router tree and
+    // ships its own <html>, so it also needs the boot script + the same
+    // full Quiet Pulse light/dark token remap (not the pre-V2 fallback).
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="noindex" />
         <title>Service unavailable · Timely</title>
+        <script dangerouslySetInnerHTML={{ __html: appearanceBootScript() }} />
         <style>{globalErrorCss}</style>
       </head>
       <body>
@@ -62,9 +67,17 @@ export default function GlobalError({
   );
 }
 
+// V2-10 Dark #10: this style block owns its own token twin because
+// global-error is served as a standalone HTML document (no Tailwind
+// runtime). The light values below are the shipped V2-0 palette; the
+// `[data-theme="dark"]` block is the locked Quiet Pulse dark map
+// (canvas / surface / ink / muted / border / accent / accent-fg /
+// shadow). System-preference fallback covers the pre-hydration case if
+// the boot script somehow failed to set data-theme.
 const globalErrorCss = `
-:root{color-scheme:light dark;--bg:#f7f6f3;--surface:#ffffff;--ink:#0f172a;--muted:#64748b;--border:#e7e5e4;--accent:#6d28d9;--accent-fg:#ffffff;--shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px rgba(15,23,42,.06)}
-@media (prefers-color-scheme: dark){:root{--bg:#0b0f14;--surface:#111827;--ink:#f3f4f6;--muted:#9ca3af;--border:#1f2937;--accent:#c4b5fd;--accent-fg:#1e1b4b;--shadow:0 1px 2px rgba(0,0,0,.4),0 1px 3px rgba(0,0,0,.35)}}
+:root,html[data-theme="light"]{color-scheme:light;--bg:#f7f6f3;--surface:#ffffff;--ink:#0f172a;--muted:#64748b;--border:#e7e5e4;--accent:#6d28d9;--accent-hover:#5b21b6;--accent-fg:#ffffff;--shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px rgba(15,23,42,.06)}
+html[data-theme="dark"]{color-scheme:dark;--bg:#0c0b10;--surface:#1c1924;--ink:#f4f4f5;--muted:#a1a1aa;--border:#2a2633;--accent:#7c3aed;--accent-hover:#6d28d9;--accent-fg:#ffffff;--shadow:0 1px 2px rgba(0,0,0,.45),0 8px 24px rgba(0,0,0,.55)}
+@media (prefers-color-scheme: dark){html:not([data-theme]){color-scheme:dark;--bg:#0c0b10;--surface:#1c1924;--ink:#f4f4f5;--muted:#a1a1aa;--border:#2a2633;--accent:#7c3aed;--accent-hover:#6d28d9;--accent-fg:#ffffff;--shadow:0 1px 2px rgba(0,0,0,.45),0 8px 24px rgba(0,0,0,.55)}}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:InterVariable,Inter,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -79,7 +92,7 @@ p{margin:0 0 8px;color:var(--muted);font-size:15px}
 .btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--ink);font-size:14px;font-weight:500;text-decoration:none;cursor:pointer;transition:background 120ms ease,opacity 120ms ease}
 .btn:hover{background:color-mix(in srgb,var(--ink) 6%,transparent)}
 .btn-primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
-.btn-primary:hover{opacity:.9;background:var(--accent)}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
 footer{margin-top:20px;color:var(--muted);font-size:12px}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb,var(--ink) 8%,transparent)}
 `;

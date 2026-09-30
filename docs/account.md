@@ -68,6 +68,30 @@ displayed.
 
 ---
 
+## Appearance
+
+Clockinoff has a light and a dark theme. Pick one from the **Appearance**
+control:
+
+- On desktop, next to your email in the top-right of every `/app/*` page.
+- On mobile, inside the account menu (`⋯` button in the header) above
+  **Log out**.
+
+The options are:
+
+- **System** — follows your device's colour scheme and switches
+  automatically when you flip between light and dark in the OS. Labelled
+  *Matches your device*.
+- **Light** — always the light Quiet Pulse palette.
+- **Dark** — always the dark Quiet Pulse palette (deep violet accent).
+
+The pref is stored in your browser (`localStorage`) and applied on both
+the app and the sign-in / register screens. Because it is browser-local
+there is no server profile field for it — each browser you sign in from
+keeps its own choice.
+
+---
+
 ## Sign out
 
 Click **Sign out** in the top-right of `/app/*`. Clockinoff:
