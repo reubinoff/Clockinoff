@@ -51,14 +51,6 @@ const QUICK_RANGES: readonly { key: QuickRange; label: string }[] = [
   { key: "custom", label: "Custom" },
 ];
 
-function activeRange(from: string, to: string): QuickRange {
-  for (const kind of ["today", "week", "month"] as const) {
-    const r = presetRange(kind);
-    if (r.from === from && r.to === to) return kind;
-  }
-  return "custom";
-}
-
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -74,23 +66,29 @@ export default function ExportPage(): JSX.Element {
   const initial = useMemo(() => presetRange("month"), []);
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
+  const [selected, setSelected] = useState<QuickRange>("month");
   const [pending, setPending] = useState<"csv" | "pdf" | null>(null);
   const [isEmpty, setIsEmpty] = useState(false);
 
-  const active = activeRange(from, to);
+  function editFrom(v: string): void {
+    setFrom(v);
+    setSelected("custom");
+    setIsEmpty(false);
+  }
 
-  function updateRange(next: { from: string; to: string }): void {
-    setFrom(next.from);
-    setTo(next.to);
+  function editTo(v: string): void {
+    setTo(v);
+    setSelected("custom");
     setIsEmpty(false);
   }
 
   function onQuick(key: QuickRange): void {
-    if (key === "custom") {
-      setIsEmpty(false);
-      return;
-    }
-    updateRange(presetRange(key));
+    setSelected(key);
+    setIsEmpty(false);
+    if (key === "custom") return;
+    const r = presetRange(key);
+    setFrom(r.from);
+    setTo(r.to);
   }
 
   async function download(format: "csv" | "pdf"): Promise<void> {
@@ -122,7 +120,7 @@ export default function ExportPage(): JSX.Element {
     }
   }
 
-  const showCustomFields = active === "custom";
+  const showCustomFields = selected === "custom";
 
   return (
     <section className="space-y-4">
@@ -139,7 +137,7 @@ export default function ExportPage(): JSX.Element {
             aria-labelledby="export-quick-label"
           >
             {QUICK_RANGES.map((r) => {
-              const isActive = active === r.key;
+              const isActive = selected === r.key;
               return (
                 <button
                   key={r.key}
@@ -166,7 +164,7 @@ export default function ExportPage(): JSX.Element {
                 className="input"
                 type="date"
                 value={from}
-                onChange={(e) => updateRange({ from: e.target.value, to })}
+                onChange={(e) => editFrom(e.target.value)}
               />
             </div>
             <div>
@@ -176,7 +174,7 @@ export default function ExportPage(): JSX.Element {
                 className="input"
                 type="date"
                 value={to}
-                onChange={(e) => updateRange({ from, to: e.target.value })}
+                onChange={(e) => editTo(e.target.value)}
               />
             </div>
           </div>

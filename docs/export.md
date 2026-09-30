@@ -31,8 +31,9 @@ Go to `/app/export`. You will see:
 
 - **Quick ranges** — a row of chips: **Today**, **This week**,
   **This month**, **Custom**. Picking a preset fills the From/To
-  dates for you; picking **Custom** reveals the same From/To inputs so
-  you can dial in any range.
+  dates for you. **Custom** is always selectable — clicking it reveals
+  the same From/To inputs so you can dial in any range without
+  disturbing the preset that was previously shown.
 - **From** — start date (inclusive). Required. Shown when **Custom** is
   selected; the presets fill it silently.
 - **To** — end date (inclusive). Required. Same as above.
