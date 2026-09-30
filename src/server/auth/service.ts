@@ -8,6 +8,12 @@ import { createSession, type CreatedSession, type SessionUser } from "./session"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Generic, deliberately unhelpful message returned for any register failure
+// past client-side field validation. Ariel + Dana aligned: same status, same
+// shape, same string for "email already exists" as for any other unexpected
+// register failure so the endpoint cannot be used to enumerate accounts.
+const GENERIC_REGISTER_ERROR = "Unable to complete sign-up. Please try again.";
+
 function validEmail(email: unknown): email is string {
   return typeof email === "string" && email.length <= 254 && EMAIL_RE.test(email);
 }
@@ -47,6 +53,9 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
 
   const email = input.email.trim();
   const timezone = input.timezone?.trim() || "Asia/Jerusalem";
+  // Hash before the insert so the "email already exists" branch and the
+  // happy path do comparable CPU work. Combined with the generic error
+  // below this keeps timing + response shape indistinguishable.
   const passwordHash = await hashPassword(input.password);
 
   const db = getDb();
@@ -60,7 +69,7 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
   } catch (err) {
     const code = (err as { code?: string })?.code;
     if (code === "23505") {
-      throw errors.conflict("Email already registered");
+      throw errors.validation(GENERIC_REGISTER_ERROR);
     }
     throw err;
   }

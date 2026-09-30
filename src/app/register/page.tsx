@@ -14,6 +14,8 @@ import {
   validatePassword,
 } from "@/lib/password";
 
+const GENERIC_REGISTER_ERROR = "Unable to complete sign-up. Please try again.";
+
 export default function RegisterPage(): JSX.Element {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -44,18 +46,18 @@ export default function RegisterPage(): JSX.Element {
         body: JSON.stringify({ email, password, timezone }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        const msg =
-          data && typeof data === "object" && data.error?.message
-            ? String(data.error.message)
-            : "Something went wrong. Try again.";
-        setError(msg);
+        // Deliberately generic — never surface "email already registered"
+        // or any other server hint that would enumerate accounts. The
+        // client already validated the field shape above, so any 4xx we
+        // hit here is either the duplicate-email path or something the
+        // user cannot act on individually.
+        setError(GENERIC_REGISTER_ERROR);
         return;
       }
       router.push("/app?welcome=1");
       router.refresh();
     } catch {
-      setError("Something went wrong. Try again.");
+      setError(GENERIC_REGISTER_ERROR);
     } finally {
       setPending(false);
     }

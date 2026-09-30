@@ -62,8 +62,15 @@ zero entries, and disappears as soon as you dismiss it or log your
 first entry. Later visits to `/app` (without `?welcome=1`) never show
 it again, so it stays a one-time nudge.
 
-If you see an error like *"email already registered"*, use the
-[sign-in flow](#sign-in-later) instead.
+Register only returns a single generic error string — *"Unable to
+complete sign-up. Please try again."* — for any failure past the field
+validation, including when the email is already in use. This is on
+purpose: Clockinoff never tells a stranger whether a given email is
+registered. If you know the account exists, use the
+[sign-in flow](#sign-in-later) instead; if you see the generic error
+and you *don't* know whether you have an account, try signing in — the
+sign-in page's failure message is equally generic but a valid password
+just works.
 
 ---
 

@@ -14,6 +14,7 @@ import { PASSWORD_COPY } from "@/lib/password";
 import { truncateAll } from "../setup";
 
 const PW = "correct-horse-battery";
+const GENERIC_REGISTER_ERROR = "Unable to complete sign-up. Please try again.";
 
 describe("auth", () => {
   beforeEach(async () => {
@@ -40,11 +41,15 @@ describe("auth", () => {
     expect(found?.id).toBe(user.id);
   });
 
-  it("rejects duplicate emails with 409", async () => {
+  it("rejects duplicate emails with the same generic error as any other failed sign-up", async () => {
     await register({ email: "dup@example.com", password: PW });
-    await expect(register({ email: "DUP@example.com", password: PW })).rejects.toMatchObject({
-      status: 409,
-      code: "CONFLICT",
+    // Same status + same code + same generic message — no "email taken" leak.
+    await expect(
+      register({ email: "DUP@example.com", password: PW }),
+    ).rejects.toMatchObject({
+      status: 400,
+      code: "VALIDATION",
+      message: GENERIC_REGISTER_ERROR,
     });
   });
 
