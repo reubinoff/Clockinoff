@@ -29,17 +29,30 @@ entries only** — a running timer is not included until you stop it.
 
 Go to `/app/export`. You will see:
 
-- **From** — start date (inclusive). Required.
-- **To** — end date (inclusive). Required.
-- **Format** — pick **CSV** or **PDF**.
-- **Download** — opens the export in a new browser tab. The browser
-  triggers the download automatically.
+- **Quick ranges** — a row of chips: **Today**, **This week**,
+  **This month**, **Custom**. Picking a preset fills the From/To
+  dates for you; picking **Custom** reveals the same From/To inputs so
+  you can dial in any range.
+- **From** — start date (inclusive). Required. Shown when **Custom** is
+  selected; the presets fill it silently.
+- **To** — end date (inclusive). Required. Same as above.
+- **Download CSV** / **Download PDF** — one button per format. While a
+  download is being prepared the button label reads **Preparing…** and
+  both buttons disable to prevent a double-fire.
 
-Defaults: **From** is 30 days before today, **To** is today. Both dates
-are interpreted in your account timezone.
+Defaults: the page opens on **This month** (from the 1st of the current
+month through today). Both dates are interpreted in your account
+timezone.
 
 If either date is missing or invalid, the server returns a validation
 error. If `From` is after `To`, you also get a validation error.
+
+If the range contains no closed entries, the download does not fire.
+Instead the page shows:
+
+> No entries in this range — try different dates.
+
+Pick a different quick range (or edit From/To in Custom) and try again.
 
 ---
 

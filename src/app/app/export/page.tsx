@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { IconExport } from "@/components/icons";
 
 function pad(n: number): string {
@@ -13,12 +13,6 @@ function fmt(d: Date): string {
 
 function today(): string {
   return fmt(new Date());
-}
-
-function daysAgo(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return fmt(d);
 }
 
 function startOfWeek(): string {
@@ -35,28 +29,100 @@ function startOfMonth(): string {
   return fmt(d);
 }
 
-type Range = { label: string; from: string; to: string };
+type Preset = "today" | "week" | "month";
+type QuickRange = Preset | "custom";
 
-function buildRanges(): Range[] {
+interface PresetRange {
+  from: string;
+  to: string;
+}
+
+function presetRange(kind: Preset): PresetRange {
   const t = today();
-  return [
-    { label: "Today", from: t, to: t },
-    { label: "This week", from: startOfWeek(), to: t },
-    { label: "This month", from: startOfMonth(), to: t },
-    { label: "Last 30 days", from: daysAgo(30), to: t },
-  ];
+  if (kind === "today") return { from: t, to: t };
+  if (kind === "week") return { from: startOfWeek(), to: t };
+  return { from: startOfMonth(), to: t };
+}
+
+const QUICK_RANGES: readonly { key: QuickRange; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "week", label: "This week" },
+  { key: "month", label: "This month" },
+  { key: "custom", label: "Custom" },
+];
+
+function activeRange(from: string, to: string): QuickRange {
+  for (const kind of ["today", "week", "month"] as const) {
+    const r = presetRange(kind);
+    if (r.from === from && r.to === to) return kind;
+  }
+  return "custom";
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export default function ExportPage(): JSX.Element {
-  const [from, setFrom] = useState(daysAgo(30));
-  const [to, setTo] = useState(today());
+  const initial = useMemo(() => presetRange("month"), []);
+  const [from, setFrom] = useState(initial.from);
+  const [to, setTo] = useState(initial.to);
+  const [pending, setPending] = useState<"csv" | "pdf" | null>(null);
+  const [isEmpty, setIsEmpty] = useState(false);
 
-  function download(format: "csv" | "pdf"): void {
-    const url = `/api/export/${format}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-    window.open(url, "_blank", "noopener");
+  const active = activeRange(from, to);
+
+  function updateRange(next: { from: string; to: string }): void {
+    setFrom(next.from);
+    setTo(next.to);
+    setIsEmpty(false);
   }
 
-  const ranges = buildRanges();
+  function onQuick(key: QuickRange): void {
+    if (key === "custom") {
+      setIsEmpty(false);
+      return;
+    }
+    updateRange(presetRange(key));
+  }
+
+  async function download(format: "csv" | "pdf"): Promise<void> {
+    if (pending) return;
+    setPending(format);
+    setIsEmpty(false);
+    try {
+      const csvUrl = `/api/export/csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+      const csvRes = await fetch(csvUrl, { cache: "no-store" });
+      if (!csvRes.ok) return;
+      const csvBlob = await csvRes.blob();
+      const csvText = await csvBlob.text();
+      const dataLines = csvText.split(/\r?\n/).slice(1).filter((l) => l.length > 0);
+      if (dataLines.length === 0) {
+        setIsEmpty(true);
+        return;
+      }
+      if (format === "csv") {
+        triggerDownload(csvBlob, `timely-${from}-${to}.csv`);
+        return;
+      }
+      const pdfUrl = `/api/export/pdf?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+      const pdfRes = await fetch(pdfUrl, { cache: "no-store" });
+      if (!pdfRes.ok) return;
+      const pdfBlob = await pdfRes.blob();
+      triggerDownload(pdfBlob, `timely-${from}-${to}.pdf`);
+    } finally {
+      setPending(null);
+    }
+  }
+
+  const showCustomFields = active === "custom";
 
   return (
     <section className="space-y-4">
@@ -65,48 +131,24 @@ export default function ExportPage(): JSX.Element {
         <p className="text-body-sm text-muted">CSV or PDF. Date range required.</p>
       </div>
       <div className="card p-6 space-y-4 md:max-w-md">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="label" htmlFor="export-from">From</label>
-            <input
-              id="export-from"
-              className="input"
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="label" htmlFor="export-to">To</label>
-            <input
-              id="export-to"
-              className="input"
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-            />
-          </div>
-        </div>
         <div>
-          <label className="label">Quick ranges</label>
+          <label className="label" id="export-quick-label">Quick ranges</label>
           <div
-            className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1"
+            className="flex flex-wrap gap-2"
             role="group"
-            aria-label="Quick ranges"
+            aria-labelledby="export-quick-label"
           >
-            {ranges.map((r) => {
-              const active = r.from === from && r.to === to;
+            {QUICK_RANGES.map((r) => {
+              const isActive = active === r.key;
               return (
                 <button
-                  key={r.label}
+                  key={r.key}
                   type="button"
-                  onClick={() => {
-                    setFrom(r.from);
-                    setTo(r.to);
-                  }}
+                  onClick={() => onQuick(r.key)}
+                  aria-pressed={isActive}
                   className={
                     "chip whitespace-nowrap shrink-0" +
-                    (active ? " chip-on" : "")
+                    (isActive ? " chip-on" : "")
                   }
                 >
                   {r.label}
@@ -115,22 +157,59 @@ export default function ExportPage(): JSX.Element {
             })}
           </div>
         </div>
+        {showCustomFields ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="label" htmlFor="export-from">From</label>
+              <input
+                id="export-from"
+                className="input"
+                type="date"
+                value={from}
+                onChange={(e) => updateRange({ from: e.target.value, to })}
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor="export-to">To</label>
+              <input
+                id="export-to"
+                className="input"
+                type="date"
+                value={to}
+                onChange={(e) => updateRange({ from, to: e.target.value })}
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="text-body-sm text-muted tabular-nums">
+            {from} → {to}
+          </p>
+        )}
+        {isEmpty && (
+          <p
+            className="text-body-sm text-muted"
+            role="status"
+            aria-live="polite"
+          >
+            No entries in this range — try different dates.
+          </p>
+        )}
         <div className="flex flex-col sm:flex-row gap-2">
           <button
             className="btn btn-primary w-full sm:flex-1"
             onClick={() => download("csv")}
-            disabled={!from || !to}
+            disabled={!from || !to || pending !== null}
           >
             <IconExport size={16} aria-hidden />
-            <span>Download CSV</span>
+            <span>{pending === "csv" ? "Preparing…" : "Download CSV"}</span>
           </button>
           <button
             className="btn w-full sm:flex-1"
             onClick={() => download("pdf")}
-            disabled={!from || !to}
+            disabled={!from || !to || pending !== null}
           >
             <IconExport size={16} aria-hidden />
-            <span>Download PDF</span>
+            <span>{pending === "pdf" ? "Preparing…" : "Download PDF"}</span>
           </button>
         </div>
       </div>
