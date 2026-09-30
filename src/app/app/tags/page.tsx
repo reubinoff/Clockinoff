@@ -19,6 +19,7 @@ export default async function TagsPage(): Promise<JSX.Element> {
         subtitle="Label entries. Names are unique per user."
         resource="tags"
         supportsArchive={false}
+        emptyText="No tags yet. Tags help you filter exports later."
         initial={tags.map((t) => ({ id: t.id, name: t.name, archived: false }))}
       />
     </>

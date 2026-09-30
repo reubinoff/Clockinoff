@@ -22,6 +22,10 @@ They are handy for slicing your hours by kind of work (e.g. `research`,
 
 Manage tags at `/app/tags`.
 
+Before you add your first tag the page shows:
+
+> No tags yet. Tags help you filter exports later.
+
 ---
 
 ## Add a tag

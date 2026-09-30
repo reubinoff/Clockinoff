@@ -22,6 +22,10 @@ more useful.
 
 Manage clients at `/app/clients`.
 
+Before you add your first client the page shows:
+
+> No clients yet. Link them to projects when you’re ready.
+
 ---
 
 ## Add a client

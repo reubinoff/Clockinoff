@@ -15,12 +15,14 @@ export default function SimpleCrudPanel({
   resource,
   supportsArchive,
   initial,
+  emptyText,
 }: {
   title: string;
   subtitle: string;
   resource: "clients" | "tags";
   supportsArchive: boolean;
   initial: Item[];
+  emptyText: string;
 }): JSX.Element {
   const router = useRouter();
   const [items, setItems] = useState<Item[]>(initial);
@@ -94,7 +96,7 @@ export default function SimpleCrudPanel({
       <ul className="md:hidden space-y-2">
         {items.length === 0 && (
           <li className="card p-6 text-center text-sm text-muted">
-            Nothing yet.
+            {emptyText}
           </li>
         )}
         {items.map((item) => (
@@ -141,7 +143,7 @@ export default function SimpleCrudPanel({
             {items.length === 0 && (
               <tr>
                 <td colSpan={supportsArchive ? 3 : 2} className="text-center py-8 text-muted">
-                  Nothing yet.
+                  {emptyText}
                 </td>
               </tr>
             )}

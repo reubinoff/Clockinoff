@@ -19,6 +19,7 @@ export default async function ClientsPage(): Promise<JSX.Element> {
         subtitle="Attach clients to projects."
         resource="clients"
         supportsArchive
+        emptyText="No clients yet. Link them to projects when you’re ready."
         initial={clients.map((c) => ({
           id: c.id,
           name: c.name,

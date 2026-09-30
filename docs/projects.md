@@ -22,6 +22,10 @@ attached to a **Client**, and can carry a **default billable** flag and
 
 Manage projects at `/app/projects`.
 
+When you have no projects yet the page shows the nudge:
+
+> No projects yet — add one so timers stay organized.
+
 ---
 
 ## Add a project

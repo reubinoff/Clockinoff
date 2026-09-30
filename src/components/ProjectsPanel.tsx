@@ -224,7 +224,9 @@ export default function ProjectsPanel({
           <tbody>
             {projects.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center py-8 text-muted">No projects yet.</td>
+                <td colSpan={6} className="text-center py-8 text-muted">
+                  No projects yet — add one so timers stay organized.
+                </td>
               </tr>
             )}
             {projects.map((p) => (
