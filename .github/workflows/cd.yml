@@ -12,7 +12,7 @@ concurrency:
 env:
   AZURE_WEBAPP_NAME: clockinoff-prod
   AZURE_RESOURCE_GROUP: rg-clockinoff-prod
-  NODE_VERSION: "22"
+  NODE_VERSION: "24"
 
 permissions:
   id-token: write
@@ -165,7 +165,7 @@ jobs:
             az webapp config set \
               --name "${AZURE_WEBAPP_NAME}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
-              --linux-fx-version "NODE|22-lts" \
+              --linux-fx-version "NODE|24-lts" \
               --startup-file "node scripts/migrate.mjs && node server.js"
             az webapp config appsettings set \
               --name "${AZURE_WEBAPP_NAME}" \
@@ -174,7 +174,7 @@ jobs:
                 WEBSITES_PORT=3000 \
                 PORT=3000 \
                 SCM_DO_BUILD_DURING_DEPLOYMENT=false \
-                WEBSITE_NODE_DEFAULT_VERSION=~22 \
+                WEBSITE_NODE_DEFAULT_VERSION=~24 \
                 NEXT_TELEMETRY_DISABLED=1 \
               --output none
 

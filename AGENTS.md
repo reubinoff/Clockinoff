@@ -26,7 +26,7 @@ no Clockify sync, no Google auth. The full product scope lives in
 - **Tests**: Vitest (unit + API) + Playwright (smoke)
 - **CI**: GitHub Actions with a Postgres 16 service container and a **≥90%
   coverage gate** on `src/server` + `src/lib`
-- **Deploy**: single Azure Web App (Node 20) + Azure Postgres Flexible Server
+- **Deploy**: single Azure Web App (Node 24) + Azure Postgres Flexible Server
 
 ### Code layout
 
@@ -85,7 +85,7 @@ tests/
 
 ## 2. Environment setup
 
-Prerequisites: Node.js ≥ 20 (CI uses Node 22), Docker for Postgres.
+Prerequisites: Node.js ≥ 24 (CI uses Node 24), Docker for Postgres.
 
 ```bash
 docker compose up -d        # starts Postgres 16 with timely + timely_test DBs

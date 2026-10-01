@@ -26,7 +26,7 @@ To enable Pages on a fork: in the GitHub repo, go to **Settings → Pages → Bu
 
 ## Local development
 
-Prerequisites: Node.js ≥ 20, Docker (or a local Postgres 16).
+Prerequisites: Node.js ≥ 24, Docker (or a local Postgres 16).
 
 ```bash
 # 1. Start Postgres (creates timely + timely_test databases)
@@ -156,10 +156,10 @@ The build job compiles `next build` to catch runtime regressions.
 
 ## Deploy to Azure
 
-Target: **single Azure Web App (Node 20)** + **Azure Database for PostgreSQL Flexible Server**.
+Target: **single Azure Web App (Node 24)** + **Azure Database for PostgreSQL Flexible Server**.
 
 1. Create a Flexible Server (Postgres 16). Note the connection string.
-2. Create a Web App (Linux, Node 20). Deployment: GitHub Actions or Oryx builds. The app runs `next start`.
+2. Create a Web App (Linux, Node 24). Deployment: GitHub Actions or Oryx builds. The app runs `next start`.
 3. In **Configuration → Application settings**, set:
 
    | App Setting | Value |
@@ -168,7 +168,7 @@ Target: **single Azure Web App (Node 20)** + **Azure Database for PostgreSQL Fle
    | `NEXTAUTH_SECRET` | 32+ byte random secret (used for cookie signing surface / crypto) |
    | `NEXTAUTH_URL` | Public URL of your Web App |
    | `NODE_ENV` | `production` |
-   | `WEBSITE_NODE_DEFAULT_VERSION` | `~20` |
+   | `WEBSITE_NODE_DEFAULT_VERSION` | `~24` |
    | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault reference to the App Insights resource's connection string (see "Application Insights" below). |
 
 4. In your GH Actions deploy job (post-CI), run `npm run db:migrate` against the production DB before starting the app. There is nothing else — no Clockify, no Google, no calendar callbacks. Outbound only.
@@ -193,7 +193,7 @@ Production wiring (already provisioned by Nati):
 
 - App Insights resource: `appi-clockinoff-prod` (workspace `log-clockinoff-prod`) in `rg-clockinoff-prod` / `israelcentral`.
 - Web App `clockinoff-prod` reads `APPLICATIONINSIGHTS_CONNECTION_STRING` from Key Vault (`applicationinsights-connection-string`) via a Key Vault reference — no plaintext key is stored in App Settings.
-- Linux Node 22 uses the OpenTelemetry SDK path; the classic IIS agent is **not** used.
+- Linux Node 24 uses the OpenTelemetry SDK path; the classic IIS agent is **not** used.
 
 When `APPLICATIONINSIGHTS_CONNECTION_STRING` is unset (local dev, CI, `next
 build`), `src/instrumentation.ts` early-returns and the SDK is never imported.
