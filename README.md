@@ -1,41 +1,115 @@
-# Timely / Clockinoff — v1
+<p align="center">
+  <a href="https://clockinoff.reubinoff.com">
+    <img src="public/timely-wordmark.svg" alt="Clockinoff" height="72">
+  </a>
+</p>
 
-A tiny, clean, solo time tracker. Manual entries + one running timer + projects/clients/tags + CSV/PDF export. No calendar. No teams. No Clockify sync. No Google auth.
+<p align="center">
+  <em>A tiny, honest time tracker for people who work alone.</em>
+</p>
 
-Built to the [attached tech design](uploads/timely-tech-design.md).
+<p align="center">
+  <a href="https://github.com/reubinoff/Clockinoff/actions/workflows/ci.yml?query=branch%3Amain">
+    <img src="https://github.com/reubinoff/Clockinoff/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
+  </a>
+  <a href="https://github.com/reubinoff/Clockinoff/actions/workflows/nightly.yml">
+    <img src="https://github.com/reubinoff/Clockinoff/actions/workflows/nightly.yml/badge.svg" alt="Nightly regression">
+  </a>
+  <a href="https://github.com/reubinoff/Clockinoff/actions/workflows/grype.yml">
+    <img src="https://github.com/reubinoff/Clockinoff/actions/workflows/grype.yml/badge.svg" alt="Grype vulnerability scan">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
+  </a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A524-brightgreen" alt="Node 24+">
+  <img src="https://img.shields.io/badge/next-16-black" alt="Next 16">
+  <img src="https://img.shields.io/badge/react-19-61dafb" alt="React 19">
+  <img src="https://img.shields.io/badge/postgres-16-336791" alt="Postgres 16">
+</p>
 
-## Documentation
+<p align="center">
+  <strong>Live app</strong>: <a href="https://clockinoff.reubinoff.com">clockinoff.reubinoff.com</a>
+  &nbsp;·&nbsp;
+  <strong>User guide</strong>: <a href="https://clockinoff.reubinoff.com/docs">clockinoff.reubinoff.com/docs</a>
+  &nbsp;·&nbsp;
+  <strong>Source</strong>: <a href="https://github.com/reubinoff/Clockinoff">github.com/reubinoff/Clockinoff</a>
+</p>
 
-End-user documentation (how to register, use the timer, manage projects/clients/tags, and export CSV/PDF) lives in [`/docs`](./docs/index.md) as plain markdown and is served two ways:
+---
 
-- **In-app, on the same public origin** at `/docs` (e.g. <https://clockinoff.reubinoff.com/docs>). The Next.js app renders the same markdown via `src/app/docs/*` and `src/lib/docs-content.ts`, so the "Docs" link in the app shell always resolves regardless of GitHub Pages state. Set `NEXT_PUBLIC_DOCS_URL` to override the destination (e.g. point at a Pages mirror).
-- **Optionally**, as a Jekyll / `just-the-docs` [GitHub Pages site](https://reubinoff.github.io/Clockinoff/). The `/docs` folder is already a valid Jekyll site; enabling Pages requires no code change. If you fork this repo and want the Pages mirror, go to **Settings → Pages → Build and deployment** and select **Source: Deploy from a branch**, **Branch: `main`**, **Folder: `/docs`**.
+**Clockinoff** (internally named **Timely**) is a single-user time tracker
+for freelancers and solo consultants. One running timer, projects / clients /
+tags, CSV & PDF export over any date range — and nothing else. It is
+deliberately not a team product.
 
-Both renderings read the same markdown, so edits land everywhere at once. The Azure Web App CD workflow is unaffected either way.
+If you have ever opened Clockify or Toggl and felt the UI was asking you to
+run a company, Clockinoff is the opposite of that.
 
-## Stack
+## Features
 
-- **Next.js 14** (App Router) + React 18 + TypeScript
-- **Postgres 16** + **Drizzle ORM** + drizzle-kit migrations
-- **Auth**: email + password (argon2id) with **database sessions** and `httpOnly / Secure / SameSite=Lax` cookie
-- **PDF**: `@react-pdf/renderer`
-- **Testing**: Vitest (unit + API) + Playwright (smoke)
-- **CI**: GitHub Actions with a Postgres service container and a **≥90% coverage gate** on `src/server` + `src/lib`
+- **One running timer** per user, enforced in Postgres by a partial unique
+  index. A second start returns HTTP `409 TIMER_ALREADY_RUNNING` with the
+  running `entry_id` — never a silent duplicate.
+- **Manual entries & bulk edit.** Log hours after the fact; multi-select
+  rows to re-tag, re-project, mark billable / billed, or delete in a single
+  server round-trip.
+- **Projects, clients, tags.** Billable projects carry a default hourly
+  rate; per-entry rate overrides are supported. `amount` is derived server-side,
+  never typed in by the user.
+- **CSV & PDF export** over any `from`/`to` range. Empty ranges still return
+  `200` (CSV header row / "No entries" PDF page) so pipelines never see a
+  surprise error.
+- **Timezone-aware.** Timestamps are stored as UTC `timestamptz` and
+  rendered in your TZ (`Asia/Jerusalem` by default, user-overridable).
+  Day boundaries for filters and export are computed in your TZ, not the
+  server's.
+- **Quiet Pulse UI.** Locked light + dark palettes with an in-app
+  Appearance picker (System · Light · Dark), motion tokens that respect
+  `prefers-reduced-motion`, and skeleton states that read as *intentional
+  wait*, not a frozen click.
+- **In-app documentation** at `/docs` — the same markdown is served inside
+  the running app so the "Docs" link always resolves regardless of GitHub
+  Pages state.
+- **MIT licensed** and small enough to read end-to-end.
 
-## Local development
+## Not in v1
 
-Prerequisites: Node.js ≥ 24, Docker (or a local Postgres 16).
+By design — these are not "coming soon", they are "not what this product is":
+
+- No teams, workspaces, or shared entries.
+- No calendar view or dashboards beyond the entry list + exports.
+- No Clockify / Toggl / third-party sync.
+- No Google / OAuth login — email + password only (argon2id + DB sessions).
+
+See the [FAQ](https://clockinoff.reubinoff.com/docs/faq) for the longer
+version.
+
+## Try it
+
+The hosted instance is open for self-registration:
+
+- **Live app** → <https://clockinoff.reubinoff.com>
+- **Register** → <https://clockinoff.reubinoff.com/register>
+- **User guide** → <https://clockinoff.reubinoff.com/docs>
+
+There are no seed accounts — register with an email + password and you are
+in. The session cookie is `httpOnly / SameSite=Lax` (`Secure` in prod);
+password hashes are argon2id.
+
+## Quick start (local dev)
+
+Prerequisites: **Node.js ≥ 24** (CI uses Node 24) and **Docker** for the
+Postgres service container.
 
 ```bash
-# 1. Start Postgres (creates timely + timely_test databases)
+# 1. Start Postgres 16 (creates `timely` + `timely_test` databases)
 docker compose up -d
 
 # 2. Install
 npm install
 
-# 3. Configure
+# 3. Configure (defaults match docker-compose)
 cp .env.example .env
-# edit .env if needed — defaults match docker-compose
 
 # 4. Apply migrations
 npm run db:migrate
@@ -45,201 +119,215 @@ npm run dev
 # → http://localhost:3000
 ```
 
-Register at `/register`, then start a timer from the persistent bar at the top.
+Register at `/register`, then start a timer from the persistent bar at the
+top of every authenticated page.
 
-### Tests
+See [`AGENTS.md`](./AGENTS.md) for the full contributor contract (coding
+conventions, invariants, commit style, CI gates). The repo also ships an
+[`.env.example`](./.env.example) with every variable the app reads.
 
-```bash
-# Unit + API tests (Docker Postgres must be up)
-npm test
+## Documentation
 
-# With coverage gate (≥90% lines on src/server + src/lib)
-npm run test:coverage
+End-user documentation (register, use the timer, manage projects / clients /
+tags, export CSV & PDF, change timezone) lives as plain Markdown under
+[`/docs`](./docs) and is served two ways:
 
-# Playwright smoke (register → timer → entries refresh → CSV/PDF export)
-# Option A — point at an already-running dev server:
-npm run dev
-PLAYWRIGHT_BASE_URL=http://localhost:3000 npm run test:e2e
+| Audience | Where | Rendered by |
+|---|---|---|
+| **Users** (primary) | <https://clockinoff.reubinoff.com/docs> | The Next.js app itself — `src/app/docs/*` + `src/lib/docs-content.ts` |
+| Users (optional mirror) | GitHub Pages (`just-the-docs`), off by default | Jekyll from the `/docs` folder |
+| Agents & contributors | [`AGENTS.md`](./AGENTS.md), [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Markdown in the repo |
 
-# Option B — let Playwright build and start `next start` itself:
-npm run build
-npx playwright install --with-deps chromium
-npm run test:e2e
-```
+Both renderings read the same source, so edits land everywhere at once.
+Override the in-app Docs link with `NEXT_PUBLIC_DOCS_URL` if you want it to
+point at a Pages mirror or an internal fork.
 
-Push/PR CI (`.github/workflows/ci.yml`) is the required gate and runs the
-Vitest suite with the ≥90% coverage bar. The Playwright suite runs nightly
-(and on demand) via `.github/workflows/nightly.yml` — see that file for the
-cron time and env; the workflow can also be triggered manually from the
-Actions tab ("Run workflow" on the "Nightly regression" workflow).
+## Stack
 
-### DB scripts
+- **Next.js 16** (App Router, webpack build) · **React 19** · **TypeScript** · **Tailwind CSS 3**
+- **Postgres 16** · **Drizzle ORM** · `drizzle-kit` migrations under [`./drizzle`](./drizzle)
+- **Auth**: email + password with **argon2id**, **database sessions**, and a
+  `httpOnly / Secure / SameSite=Lax` cookie — no OAuth providers
+- **PDF**: [`@react-pdf/renderer`](https://react-pdf.org/) · **CSV**: hand-rolled streaming writer
+- **Testing**: [Vitest](https://vitest.dev/) (unit + API) + [Playwright](https://playwright.dev/) (smoke)
+- **Observability**: [`@azure/monitor-opentelemetry`](https://learn.microsoft.com/azure/azure-monitor/app/opentelemetry-enable?tabs=nodejs) with a strict redaction contract
+- **CI**: GitHub Actions, Postgres 16 service container, **≥90 % coverage gate** on `src/server` + `src/lib`
+- **Deploy**: single **Azure Web App** (Linux, Node 24) + **Azure Database for PostgreSQL Flexible Server**
 
-```bash
-npm run db:generate   # regenerate Drizzle SQL from schema
-npm run db:migrate    # apply pending migrations from ./drizzle
-npm run db:studio     # open Drizzle Studio
-```
+## API surface (all JSON)
 
-## Key API surface (all JSON)
+Route handlers live under `src/app/api/**` and delegate to owner-scoped
+services in `src/server/services/*`. Every error is shaped as
+`{ error: { code, message } }` with codes `VALIDATION`, `UNAUTHORIZED`,
+`NOT_FOUND`, `TIMER_ALREADY_RUNNING`, `TIMER_NOT_RUNNING`, `CONFLICT`,
+`INTERNAL`.
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/api/auth/register` | `{ email, password, timezone? }` → 201 + session cookie |
-| POST | `/api/auth/login` | `{ email, password }` → 200 |
-| POST | `/api/auth/logout` | 204, clears cookie |
-| GET / PATCH | `/api/auth/me` | current user; PATCH `{ timezone }` |
-| CRUD | `/api/clients`, `/api/projects`, `/api/tags` | `?archived=true` shows archived |
-| GET | `/api/timer` | running entry or `null` |
-| POST | `/api/timer/start` | 201 running entry; 409 `TIMER_ALREADY_RUNNING` with `entry_id` |
-| POST | `/api/timer/stop` | 200 closed entry; 404 when nothing running |
-| PATCH | `/api/timer` | metadata only |
-| DELETE | `/api/timer` | discards running entry |
-| GET / POST | `/api/entries` | list + filters + cursor pagination |
-| PATCH / DELETE | `/api/entries/:id` | closed entries only (running → use `/api/timer`) |
-| GET | `/api/export/csv?from&to` | **from/to required**; empty → header row only, 200 |
-| GET | `/api/export/pdf?from&to` | **from/to required**; empty → “No entries” page, 200 |
-
-All errors follow `{ error: { code, message } }`; codes: `VALIDATION`, `UNAUTHORIZED`, `NOT_FOUND`, `TIMER_ALREADY_RUNNING`, `TIMER_NOT_RUNNING`, `CONFLICT`, `INTERNAL`.
+| `POST` | `/api/auth/register` | `{ email, password, timezone? }` → 201 + session cookie |
+| `POST` | `/api/auth/login` | `{ email, password }` → 200 |
+| `POST` | `/api/auth/logout` | 204, clears cookie |
+| `GET` / `PATCH` | `/api/auth/me` | current user; `PATCH { timezone }` |
+| CRUD | `/api/clients`, `/api/projects`, `/api/tags` | `?archived=true` includes archived |
+| `GET` | `/api/timer` | running entry or `null` |
+| `POST` | `/api/timer/start` | 201 running entry; 409 `TIMER_ALREADY_RUNNING` with `entry_id` |
+| `POST` | `/api/timer/stop` | 200 closed entry; 404 when nothing is running |
+| `PATCH` | `/api/timer` | metadata only (project / client / tags / notes / rate) |
+| `DELETE` | `/api/timer` | discards the running entry |
+| `GET` / `POST` | `/api/entries` | list + filters + cursor pagination |
+| `PATCH` / `DELETE` | `/api/entries/:id` | closed entries only (running → use `/api/timer`) |
+| `GET` | `/api/export/csv?from&to` | **from/to required**; empty → header row only, 200 |
+| `GET` | `/api/export/pdf?from&to` | **from/to required**; empty → "No entries" page, 200 |
 
 ## Data model highlights
 
-- **One running timer per user** — enforced by `CREATE UNIQUE INDEX ... WHERE end_at IS NULL`. Second running-start attempts get 409 by DB constraint (see `tests/server/timer.test.ts` for the parallel race test).
-- **Overlaps between closed entries are allowed by design.**
-- **`start_at < end_at`** — enforced by CHECK constraint whenever `end_at IS NOT NULL`.
-- **`amount` is derived**: `billable ? duration_hours * effective_rate : null`, where `effective_rate = entry.rate ?? project.default_rate`.
-- All rows scoped by `user_id`; every service verifies ownership.
+- **One running timer per user** — `CREATE UNIQUE INDEX ... WHERE end_at IS NULL`. The second concurrent start loses on the DB constraint, not in app code (`tests/server/timer.test.ts` covers the parallel race).
+- **`start_at < end_at`** — CHECK constraint whenever `end_at IS NOT NULL`.
+- **Overlaps between *closed* entries are allowed by design** — e.g. for corrections after a forgotten stop.
+- **`amount` is derived**: `billable ? duration_hours * effective_rate : null`, where `effective_rate = entry.rate ?? project.default_rate`. Clients never POST a monetary amount.
+- **Every row is scoped by `user_id`.** Every service verifies ownership — a new service without an ownership check is treated as a bug.
 
 ## Timezones
 
-User TZ defaults to **Asia/Jerusalem**, overridable per user. Timestamps are stored as UTC (`timestamptz`); the export and UI render in the user's TZ. See `src/lib/tz.ts` and the boundary test in `tests/server/export.test.ts`.
+User TZ defaults to **Asia/Jerusalem**, overridable per user from the
+Account panel. Timestamps are stored as UTC (`timestamptz`); the export
+and UI render in the user's TZ. All day-boundary math goes through
+`src/lib/tz.ts` — never JS `Date` local time. See the boundary test in
+`tests/server/export.test.ts`.
 
-## Authentication
+## Scripts
 
-The tech design calls for "Auth.js Credentials + database sessions". Auth.js Credentials only supports JWT sessions upstream; to honor the design's *database sessions* requirement without stubs we implement a self-contained credentials + DB-session layer in `src/server/auth/`:
+```bash
+# Dev / build
+npm run dev              # Next dev server
+npm run build            # production build (next build --webpack)
+npm start                # next start (used in prod)
 
-- `POST /api/auth/register` and `/login` argon2id-hash passwords and create a row in `sessions` (`id`, `user_id`, `expires_at`).
-- The session id is sent as an `httpOnly / SameSite=Lax` cookie named `timely_session` (`Secure` in production).
-- `middleware.ts` gates `/app/*` and every `/api/*` except the auth routes; server helpers use `getSessionUser(cookie)` to load the current user.
+# Quality gates
+npm run typecheck        # tsc --noEmit
+npm run lint             # eslint
+npm test                 # vitest run (unit + API)
+npm run test:coverage    # vitest with the ≥90% coverage gate
+npm run test:e2e         # Playwright smoke (needs dev server or a build)
 
-No Google or OAuth provider is wired in — v1 is email + password only.
+# Database
+npm run db:generate      # regenerate Drizzle SQL from schema
+npm run db:migrate       # apply pending migrations from ./drizzle
+npm run db:studio        # open Drizzle Studio
 
-## Ops scripts
+# Ops
+npm run ops:delete-users # purge users (and their cascaded rows) by email
+```
 
-One-shot maintenance helpers live under [`scripts/`](./scripts/) and speak
-directly to Postgres via `DATABASE_URL`.
+Before pushing to `main`, at minimum:
 
-- **Delete users by email** (e.g. leftover pentest accounts). Owned rows —
-  sessions, clients, projects, tags, entries, entry↔tag rows — cascade
-  automatically via the `ON DELETE CASCADE` on `user_id`.
+```bash
+npm run typecheck && npm run lint && npm run test:coverage
+```
 
-  ```bash
-  # Dry-run: show what would be deleted.
-  DATABASE_URL=postgres://... npm run ops:delete-users -- \
-    pentest-ariel-a@example.com pentest-ariel-b@example.com
+## CI & CD
 
-  # Confirm and actually delete.
-  DATABASE_URL=postgres://... npm run ops:delete-users -- --yes \
-    pentest-ariel-a@example.com pentest-ariel-b@example.com
-  ```
-
-  Emails are matched case-insensitively. Never pass a password on the
-  command line — this script only needs the email.
-
-## CI
-
-`.github/workflows/ci.yml` boots a Postgres 16 service container, runs `npm ci`, migrates both DBs, type-checks, lints, and runs `npm run test:coverage`. Coverage thresholds are enforced by Vitest (`vitest.config.ts`) on `src/server` + `src/lib`: ≥90% lines / statements / functions and ≥80% branches.
-
-The build job compiles `next build` to catch runtime regressions.
+- **[`ci.yml`](./.github/workflows/ci.yml)** — on every push and PR: a fast
+  "Linters" job (ESLint + `tsc --noEmit`, no DB) runs in ~a minute, then a
+  full `test` job boots a Postgres 16 service container, migrates both DBs,
+  type-checks, lints, and runs `npm run test:coverage`. Coverage thresholds
+  are enforced by Vitest (`vitest.config.ts`) on `src/server` + `src/lib`:
+  ≥90 % lines / statements / functions and ≥80 % branches. A separate
+  `build` job runs `next build` to catch runtime regressions.
+- **[`nightly.yml`](./.github/workflows/nightly.yml)** — the full Playwright
+  regression (register → timer → entries refresh → CSV/PDF export) runs on
+  cron (02:15 UTC) and `workflow_dispatch`. It is additive to CI — nothing
+  here deploys.
+- **[`grype.yml`](./.github/workflows/grype.yml)** — Anchore Grype scan
+  against the production dependency tree (`npm install --omit=dev`). Fails
+  CI only on **Critical** or **High**; known accepted findings are
+  baselined in [`.grype.yaml`](./.grype.yaml) with a short rationale.
+- **[`cd.yml`](./.github/workflows/cd.yml)** — pushes to `main` build the
+  Next.js standalone bundle, run two pre-deploy smoke tests (argon2 native
+  load + a tiny PDF render), and deploy to the **`clockinoff-prod`** Azure
+  Web App via OIDC.
 
 ## Deploy to Azure
 
-Target: **single Azure Web App (Node 24)** + **Azure Database for PostgreSQL Flexible Server**.
+Target: **single Azure Web App (Linux, Node 24)** + **Azure Database for
+PostgreSQL Flexible Server**. The deploy workflow lives in
+[`.github/workflows/cd.yml`](./.github/workflows/cd.yml) and is the source
+of truth; the short version is:
 
-1. Create a Flexible Server (Postgres 16). Note the connection string.
-2. Create a Web App (Linux, Node 24). Deployment: GitHub Actions or Oryx builds. The app runs `next start`.
+1. Create a Postgres Flexible Server (version 16) and note the connection string.
+2. Create a Web App (Linux, Node 24, `next start`). Wire up OIDC federation to the GitHub repo.
 3. In **Configuration → Application settings**, set:
 
    | App Setting | Value |
    |---|---|
    | `DATABASE_URL` | `postgres://<user>:<pw>@<host>:5432/<db>?sslmode=require` |
-   | `NEXTAUTH_SECRET` | 32+ byte random secret (used for cookie signing surface / crypto) |
+   | `NEXTAUTH_SECRET` | 32+ byte random secret (cookie / crypto surface) |
    | `NEXTAUTH_URL` | Public URL of your Web App |
    | `NODE_ENV` | `production` |
    | `WEBSITE_NODE_DEFAULT_VERSION` | `~24` |
-   | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault reference to the App Insights resource's connection string (see "Application Insights" below). |
+   | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault reference to the App Insights connection string (optional — see below) |
 
-4. In your GH Actions deploy job (post-CI), run `npm run db:migrate` against the production DB before starting the app. There is nothing else — no Clockify, no Google, no calendar callbacks. Outbound only.
+4. The CD job runs `npm run db:migrate` against the target DB before
+   starting the app. There is nothing else to wire — no Clockify, no
+   Google, no calendar callbacks. Outbound only.
 
 ### Application Insights
 
-Server-side telemetry (HTTP requests, exceptions, `pg` queries, and
-`console.*` output) is exported to Azure Monitor / Application Insights via
+Server-side telemetry (HTTP requests, exceptions, `pg` queries, `console.*`
+output) is exported to Azure Monitor via
 [`@azure/monitor-opentelemetry`](https://learn.microsoft.com/azure/azure-monitor/app/opentelemetry-enable?tabs=nodejs).
 The SDK is bootstrapped from `src/instrumentation.ts` (Next.js
 [`instrumentation` hook](https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation))
-and only loads on the Node.js runtime.
+and only loads on the Node runtime. When
+`APPLICATIONINSIGHTS_CONNECTION_STRING` is unset (local dev, CI,
+`next build`), `src/instrumentation.ts` early-returns and the SDK is never
+imported.
 
-Enable it by setting a single App Setting on the Web App — no code change is
-required per environment:
+**Redaction contract** (enforced in `src/instrumentation.node.ts` and
+`src/lib/logger.ts`):
 
-| App Setting | Value |
-|---|---|
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault reference to the App Insights connection string, e.g. `@Microsoft.KeyVault(SecretUri=https://kv-clockinoff-prod.vault.azure.net/secrets/applicationinsights-connection-string/)` |
-
-Production wiring (already provisioned by Nati):
-
-- App Insights resource: `appi-clockinoff-prod` (workspace `log-clockinoff-prod`) in `rg-clockinoff-prod` / `israelcentral`.
-- Web App `clockinoff-prod` reads `APPLICATIONINSIGHTS_CONNECTION_STRING` from Key Vault (`applicationinsights-connection-string`) via a Key Vault reference — no plaintext key is stored in App Settings.
-- Linux Node 24 uses the OpenTelemetry SDK path; the classic IIS agent is **not** used.
-
-When `APPLICATIONINSIGHTS_CONNECTION_STRING` is unset (local dev, CI, `next
-build`), `src/instrumentation.ts` early-returns and the SDK is never imported.
-
-**Redaction contract (Ariel).** The instrumentation strips sensitive material
-before it leaves the process. This is enforced in two places
-(`src/instrumentation.node.ts` and `src/lib/logger.ts`):
-
-- Span attributes matching `authorization`, `cookie`, `set-cookie`, `password`,
-  or `timely_session` are replaced with `[REDACTED]` before export.
-- Log / span bodies with a `postgres://` or `postgresql://` URL are replaced
-  with `[REDACTED_DATABASE_URL]` — the full `DATABASE_URL` is never emitted.
-- `Bearer <token>` values and `timely_session=<value>` cookie substrings are
-  redacted from log bodies.
+- Span attributes matching `authorization`, `cookie`, `set-cookie`,
+  `password`, or `timely_session` are replaced with `[REDACTED]` before
+  export.
+- Log / span bodies with a `postgres://` or `postgresql://` URL are
+  replaced with `[REDACTED_DATABASE_URL]` — the full `DATABASE_URL` is
+  never emitted.
+- `Bearer <token>` values and `timely_session=<value>` cookie substrings
+  are redacted from log bodies.
 - The scrub is also applied to `console.*` before Azure Monitor's
-  [`instrumentation-console`](https://www.npmjs.com/package/@opentelemetry/instrumentation-console)
-  bridge captures the call, so third-party logs are covered too.
+  `instrumentation-console` bridge captures the call, so third-party logs
+  are covered too.
 
-Passwords, session cookies, and the full DATABASE_URL are never logged.
+Passwords, session cookies, and the full `DATABASE_URL` are never logged.
 
 ### Standalone bundle pitfalls (argon2 + PDF export)
 
 The Azure deploy uses `output: "standalone"` and ships the traced
-`.next/standalone` tree, not the full `node_modules`. Next.js traces reachable
-`require()`s statically, so it misses assets that are loaded dynamically at
-runtime. Two packages we depend on need explicit inclusion (see
-`next.config.mjs → experimental.outputFileTracingIncludes` and the
-belt-and-suspenders overlay in `.github/workflows/cd.yml`):
+`.next/standalone` tree, not the full `node_modules`. Next.js traces
+reachable `require()`s statically, so it misses assets that are loaded
+dynamically at runtime. Two packages we depend on need explicit inclusion
+(see `next.config.mjs → experimental.outputFileTracingIncludes` and the
+belt-and-suspenders overlay in [`.github/workflows/cd.yml`](./.github/workflows/cd.yml)):
 
-- **argon2** loads a prebuilt `.node` binary via `node-gyp-build`. Without the
-  `prebuilds/` tree the app throws "No native build was found ..." at startup
-  (fixed in #24).
-- **@react-pdf/renderer → pdfkit** resolves the Standard 14 fonts through a
-  subpath-imports template `require('#standard-fonts/<Name>')` and reads
+- **argon2** loads a prebuilt `.node` binary via `node-gyp-build`. Without
+  the `prebuilds/` tree the app throws "No native build was found ..." at
+  startup (fixed in #24).
+- **@react-pdf/renderer → pdfkit** resolves the Standard 14 fonts through
+  a subpath-imports template `require('#standard-fonts/<Name>')` and reads
   `pdfkit/js/data/sRGB_IEC61966_2_1.icc` at runtime. Without those files
   `GET /api/export/pdf` throws `MODULE_NOT_FOUND` for
-  `pdfkit/js/standard-fonts/Helvetica.cjs` and returns HTTP 500 while CSV export
-  keeps working.
+  `pdfkit/js/standard-fonts/Helvetica.cjs` and returns HTTP 500 while CSV
+  export keeps working.
 
-The CD workflow has two pre-deploy verify steps that fail the pipeline before
-`azure/webapps-deploy` runs if either of these regresses:
+The CD workflow has two pre-deploy verify steps that fail the pipeline
+before `azure/webapps-deploy` runs if either of these regresses:
 
-- "Verify argon2 native module is loadable in deploy bundle" — hashes and
-  verifies a password against the deploy bundle.
-- "Verify PDF export can render in deploy bundle" — renders a tiny PDF from
-  `deploy/` and asserts the `%PDF` header.
+- *"Verify argon2 native module is loadable in deploy bundle"* — hashes
+  and verifies a password against the deploy bundle.
+- *"Verify PDF export can render in deploy bundle"* — renders a tiny PDF
+  from `deploy/` and asserts the `%PDF` header.
 
-To reproduce / verify locally:
+Reproduce locally:
 
 ```bash
 npm ci
@@ -265,6 +353,73 @@ NEXT_TELEMETRY_DISABLED=1 \
 
 Both smoke tests must print `argon2 OK` and `PDF %PDF`.
 
-## Out of scope (v1)
+## Ops scripts
 
-Calendar, teams, Clockify sync, Google auth, dashboards beyond entry list + export.
+One-shot maintenance helpers live under [`scripts/`](./scripts/) and speak
+directly to Postgres via `DATABASE_URL`.
+
+**Delete users by email** (e.g. leftover pentest accounts). Owned rows —
+sessions, clients, projects, tags, entries, entry↔tag rows — cascade
+automatically via the `ON DELETE CASCADE` on `user_id`.
+
+```bash
+# Dry-run: show what would be deleted.
+DATABASE_URL=postgres://... npm run ops:delete-users -- \
+  pentest-ariel-a@example.com pentest-ariel-b@example.com
+
+# Confirm and actually delete.
+DATABASE_URL=postgres://... npm run ops:delete-users -- --yes \
+  pentest-ariel-a@example.com pentest-ariel-b@example.com
+```
+
+Emails are matched case-insensitively. Never pass a password on the
+command line — this script only needs the email.
+
+## Project layout
+
+```
+src/
+  app/                Next.js App Router (pages + /api route handlers)
+    api/              Route handlers: auth, clients, projects, tags,
+                      timer, entries, export
+    app/              Authenticated app shell + panels
+    docs/             In-app renderer for the /docs markdown
+    login/ register/  Auth pages
+  components/         Client components (TimerBar, EntryList, panels…)
+  lib/                Framework-free helpers: errors, tz, money, csv, id, docs-content
+  server/
+    auth/             passwords (argon2id), session, service
+    db/               drizzle client, schema, migrate runner
+    services/         Business logic: clients / projects / tags / entries /
+                      timer / export / pdf — all owner-scoped
+  middleware.ts       Gates /app/* and /api/* (except auth routes)
+
+docs/                 User-facing documentation (served in-app at /docs)
+drizzle/              Generated SQL migrations (do not hand-edit; regenerate)
+tests/
+  lib/  server/       Vitest unit + API tests
+  e2e/                Playwright smoke test
+.github/workflows/    ci.yml · nightly.yml · grype.yml · cd.yml
+```
+
+## Contributing
+
+Clockinoff is a solo product, but PRs that fix bugs, tighten tests, or
+sharpen docs are welcome. Before you open one, please read
+[`AGENTS.md`](./AGENTS.md) — it is the contract for both humans and AI
+coding agents working on this repo. Highlights:
+
+- Conventional commit messages; one logical change per commit.
+- Zod for every request body / query param.
+- All DB queries scoped by `user_id`.
+- Coverage stays at ≥90 % on `src/server` + `src/lib`.
+- Any change that alters user-visible behaviour updates the matching page
+  under [`/docs`](./docs) in the same commit.
+
+Bugs and feature requests → [GitHub Issues](https://github.com/reubinoff/Clockinoff/issues).
+For issue templates and the "out of scope" list, see
+[`AGENTS.md §5`](./AGENTS.md#5-opening-issues--bugs).
+
+## License
+
+[MIT](./LICENSE) © 2026 Moshe Reubinoff.
