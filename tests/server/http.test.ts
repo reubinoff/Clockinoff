@@ -7,7 +7,7 @@ import { makeUser } from "../helpers";
 let cookieValue: string | undefined;
 
 vi.mock("next/headers", () => ({
-  cookies: () => ({
+  cookies: async () => ({
     get: (_name: string) =>
       cookieValue === undefined ? undefined : { name: "timely_session", value: cookieValue },
   }),

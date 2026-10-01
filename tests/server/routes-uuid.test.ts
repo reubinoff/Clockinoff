@@ -4,11 +4,12 @@ import { makeUser } from "../helpers";
 
 // Route handlers read the session cookie via next/headers. We swap it out
 // with a lightweight mock so we can drive the routes directly (same pattern
-// as tests/server/http.test.ts).
+// as tests/server/http.test.ts). Next 16 made cookies() async, so the mock
+// returns a Promise.
 let cookieValue: string | undefined;
 
 vi.mock("next/headers", () => ({
-  cookies: () => ({
+  cookies: async () => ({
     get: (_name: string) =>
       cookieValue === undefined ? undefined : { name: "timely_session", value: cookieValue },
   }),
@@ -52,7 +53,7 @@ describe("route UUID path param validation", () => {
   describe("clients/[id]", () => {
     it("PATCH returns 400 VALIDATION for malformed UUID", async () => {
       for (const id of MALFORMED_IDS) {
-        const res = await clientsPatch(jsonPatch("http://x", { name: "x" }), { params: { id } });
+        const res = await clientsPatch(jsonPatch("http://x", { name: "x" }), { params: Promise.resolve({ id }) });
         expect(res.status).toBe(400);
         const body = await res.json();
         expect(body).toEqual({ error: { code: "VALIDATION", message: expect.any(String) } });
@@ -61,7 +62,7 @@ describe("route UUID path param validation", () => {
 
     it("DELETE returns 400 VALIDATION for malformed UUID", async () => {
       for (const id of MALFORMED_IDS) {
-        const res = await clientsDelete(del("http://x"), { params: { id } });
+        const res = await clientsDelete(del("http://x"), { params: Promise.resolve({ id }) });
         expect(res.status).toBe(400);
         expect((await res.json()).error.code).toBe("VALIDATION");
       }
@@ -71,7 +72,7 @@ describe("route UUID path param validation", () => {
   describe("projects/[id]", () => {
     it("PATCH returns 400 VALIDATION for malformed UUID", async () => {
       for (const id of MALFORMED_IDS) {
-        const res = await projectsPatch(jsonPatch("http://x", { name: "x" }), { params: { id } });
+        const res = await projectsPatch(jsonPatch("http://x", { name: "x" }), { params: Promise.resolve({ id }) });
         expect(res.status).toBe(400);
         expect((await res.json()).error.code).toBe("VALIDATION");
       }
@@ -79,7 +80,7 @@ describe("route UUID path param validation", () => {
 
     it("DELETE returns 400 VALIDATION for malformed UUID", async () => {
       for (const id of MALFORMED_IDS) {
-        const res = await projectsDelete(del("http://x"), { params: { id } });
+        const res = await projectsDelete(del("http://x"), { params: Promise.resolve({ id }) });
         expect(res.status).toBe(400);
         expect((await res.json()).error.code).toBe("VALIDATION");
       }
@@ -89,7 +90,7 @@ describe("route UUID path param validation", () => {
   describe("tags/[id]", () => {
     it("PATCH returns 400 VALIDATION for malformed UUID", async () => {
       for (const id of MALFORMED_IDS) {
-        const res = await tagsPatch(jsonPatch("http://x", { name: "x" }), { params: { id } });
+        const res = await tagsPatch(jsonPatch("http://x", { name: "x" }), { params: Promise.resolve({ id }) });
         expect(res.status).toBe(400);
         expect((await res.json()).error.code).toBe("VALIDATION");
       }
@@ -97,7 +98,7 @@ describe("route UUID path param validation", () => {
 
     it("DELETE returns 400 VALIDATION for malformed UUID", async () => {
       for (const id of MALFORMED_IDS) {
-        const res = await tagsDelete(del("http://x"), { params: { id } });
+        const res = await tagsDelete(del("http://x"), { params: Promise.resolve({ id }) });
         expect(res.status).toBe(400);
         expect((await res.json()).error.code).toBe("VALIDATION");
       }
@@ -108,7 +109,7 @@ describe("route UUID path param validation", () => {
     it("PATCH returns 400 VALIDATION for malformed UUID", async () => {
       for (const id of MALFORMED_IDS) {
         const res = await entriesPatch(jsonPatch("http://x", { description: "x" }), {
-          params: { id },
+          params: Promise.resolve({ id }),
         });
         expect(res.status).toBe(400);
         expect((await res.json()).error.code).toBe("VALIDATION");
@@ -117,7 +118,7 @@ describe("route UUID path param validation", () => {
 
     it("DELETE returns 400 VALIDATION for malformed UUID", async () => {
       for (const id of MALFORMED_IDS) {
-        const res = await entriesDelete(del("http://x"), { params: { id } });
+        const res = await entriesDelete(del("http://x"), { params: Promise.resolve({ id }) });
         expect(res.status).toBe(400);
         expect((await res.json()).error.code).toBe("VALIDATION");
       }
@@ -126,7 +127,7 @@ describe("route UUID path param validation", () => {
 
   it("well-formed but unknown UUID still yields 404 (not 400/500)", async () => {
     const unknown = "00000000-0000-4000-8000-000000000000";
-    const res = await clientsDelete(del("http://x"), { params: { id: unknown } });
+    const res = await clientsDelete(del("http://x"), { params: Promise.resolve({ id: unknown }) });
     expect(res.status).toBe(404);
     expect((await res.json()).error.code).toBe("NOT_FOUND");
   });
