@@ -2,9 +2,16 @@
 // Runtime-safe migration runner used by the Azure App Service startup command.
 // Deliberately plain ESM JavaScript so it can run under `node` directly on the
 // deployed Next.js standalone bundle, without needing `tsx`, `ts-node`, or any
-// TypeScript toolchain in production. It only depends on `pg`, which is a
-// production dependency and is therefore always present in the standalone
-// `node_modules`.
+// TypeScript toolchain in production. It depends on `pg` and (when AAD
+// mode is on) `@azure/identity`, both of which are production dependencies
+// and therefore always present in the standalone `node_modules`.
+//
+// Entra / Managed Identity support (#75 phase 1): when `DATABASE_URL`
+// has no password component, or `PG_AZURE_AD_AUTH` is explicitly on, the
+// pool password becomes a function that returns an AAD access token for
+// `https://ossrdbms-aad.database.windows.net/.default`. Falls back to
+// the static password path if the URL still carries a password or the
+// flag is `0`/`false`.
 
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -20,12 +27,15 @@ CREATE TABLE IF NOT EXISTS "__migrations" (
 );
 `;
 
+const AZURE_POSTGRES_SCOPE =
+  "https://ossrdbms-aad.database.windows.net/.default";
+const REFRESH_BUFFER_MS = 5 * 60_000;
+
 function resolveMigrationsDir() {
   if (process.env.MIGRATIONS_DIR) {
     return path.resolve(process.env.MIGRATIONS_DIR);
   }
   const here = path.dirname(fileURLToPath(import.meta.url));
-  // scripts/migrate.mjs -> ../drizzle
   return path.resolve(here, "..", "drizzle");
 }
 
@@ -37,12 +47,71 @@ function resolveDatabaseUrl() {
   return url;
 }
 
+function isPasswordlessPostgresUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (!/^postgres(ql)?:$/i.test(parsed.protocol)) return false;
+  if (parsed.username === "") return false;
+  return parsed.password === "";
+}
+
+function shouldUseAzureAdAuth(url) {
+  const raw = (process.env.PG_AZURE_AD_AUTH ?? "").trim().toLowerCase();
+  if (raw === "0" || raw === "false" || raw === "off" || raw === "no") {
+    return false;
+  }
+  if (raw === "1" || raw === "true" || raw === "on" || raw === "yes") {
+    return true;
+  }
+  return isPasswordlessPostgresUrl(url);
+}
+
+async function createAzurePasswordProvider() {
+  const { DefaultAzureCredential } = await import("@azure/identity");
+  const credential = new DefaultAzureCredential();
+  let cached = null;
+  let inflight = null;
+
+  async function fetchToken() {
+    const result = await credential.getToken(AZURE_POSTGRES_SCOPE);
+    if (!result || !result.token) {
+      throw new Error("Azure AD token acquisition returned no token");
+    }
+    cached = {
+      token: result.token,
+      expiresOnTimestamp: result.expiresOnTimestamp,
+    };
+    return result.token;
+  }
+
+  return async function getPassword() {
+    if (cached && cached.expiresOnTimestamp - Date.now() > REFRESH_BUFFER_MS) {
+      return cached.token;
+    }
+    if (!inflight) {
+      inflight = fetchToken().finally(() => {
+        inflight = null;
+      });
+    }
+    return inflight;
+  };
+}
+
+async function buildPoolConfig(url) {
+  const base = { connectionString: url, max: 1 };
+  if (!shouldUseAzureAdAuth(url)) return base;
+  const password = await createAzurePasswordProvider();
+  return { ...base, password };
+}
+
 async function runMigrations() {
   const dir = resolveMigrationsDir();
-  const pool = new Pool({
-    connectionString: resolveDatabaseUrl(),
-    max: 1,
-  });
+  const url = resolveDatabaseUrl();
+  const pool = new Pool(await buildPoolConfig(url));
   const applied = [];
   const client = await pool.connect();
   try {
