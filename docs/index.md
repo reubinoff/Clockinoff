@@ -16,6 +16,9 @@ You get:
 
 - **One running timer** at a time, with a big Start / Stop bar at the top
   of every page.
+- **Manual entries** when you forgot the timer — a quiet
+  Timer / Manual toggle in the dock lets you type start / end times and
+  pick a date (desktop + mobile, see [Using the timer]({{ '/timer' | relative_url }}#add-a-manual-entry)).
 - **Projects, clients, and tags** to organise entries.
 - **Billable flag** with an optional rate on each project.
 - **CSV and PDF export** over any date range.

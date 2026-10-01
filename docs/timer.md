@@ -19,6 +19,10 @@ nav_order: 3
 Clockinoff has a single, always-visible timer at the top of every `/app/*`
 page. You can only have **one running timer at a time**.
 
+If you forgot to start the timer, you don't have to pretend otherwise:
+Clockinoff also lets you add an entry **manually** with explicit
+start/end times — see [Add a manual entry](#add-a-manual-entry) below.
+
 ---
 
 ## Anatomy of the timer dock
@@ -26,8 +30,13 @@ page. You can only have **one running timer at a time**.
 The timer dock is always visible while you're signed in:
 
 - **Desktop** — it sticks to the top of the page under the site header.
+  A quiet **Timer | Manual** segmented toggle sits above the dock while
+  idle so you can switch between starting a live timer and logging past
+  time (see [Add a manual entry](#add-a-manual-entry)).
 - **Mobile** — it sticks to the bottom of the screen, floating just
-  above the bottom tab bar.
+  above the bottom tab bar. While idle the dock shows a secondary
+  **Manual** button alongside the primary purple **Start** so you can
+  open the manual-entry sheet without leaving the page.
 
 The dock stays compact by default and contains, left to right (or top
 to bottom on narrow screens):
@@ -181,10 +190,74 @@ Clockinoff does not auto-stop timers. If you leave one running overnight
 you have two options:
 
 - **Stop it now**, then delete the entry from the [entries list]({{ '/entries' | relative_url }}).
-  If you need to record the *actual* time you worked, delete and re-record
-  from the API (the UI does not currently offer manual entry creation for
-  arbitrary date ranges).
+  If you need to record the *actual* time you worked, delete the stale
+  entry and recreate it with [Add a manual entry](#add-a-manual-entry).
 - **Discard it** — the running entry is thrown away entirely.
 
 See [FAQ → Overlapping entries]({{ '/faq' | relative_url }}#overlapping-entries)
 for what happens if you re-record time that overlaps another closed entry.
+
+---
+
+## Add a manual entry
+
+If you forgot to run the timer, open the manual-entry form and type the
+start / end you actually worked. There is no live clock involved — the
+duration is derived from the times you enter, and the entry lands in
+the list straight away.
+
+### Where to find it
+
+- **Desktop** (`md+`, ≥ 768 px wide): the dock header shows a quiet
+  **Timer | Manual** segmented toggle while no timer is running. Click
+  **Manual** to swap the live-timer controls for the manual-entry form
+  inline in the dock. Click **Timer** to go back; the form state is
+  cleared when you add an entry.
+- **Mobile** (`< md`): the dock shows a secondary **Manual** button to
+  the left of the purple **Start** button while idle. Tapping it opens
+  a full-width bottom sheet with the same fields and a full-width
+  purple **Add** button.
+
+The manual-entry entry point is only available while idle. As soon as a
+live timer is running Clockinoff hides the desktop toggle and the mobile
+**Manual** button so the running dock stays the only control surface.
+
+### Fields
+
+The manual-entry form takes the same metadata as the timer plus the
+times you worked:
+
+- **Description** — optional, same rules as the timer description.
+- **Project** — optional; defaults to **No project**. The project's
+  billable + rate are *not* automatically applied here (the form is
+  explicit about billable).
+- **Billable** — quiet chip, default **on**.
+- **Start** and **End** — time inputs in your [timezone]({{ '/account' | relative_url }}#timezone).
+  Both default to the current time, so the initial duration is `00:00`
+  until you move at least one of them.
+- **Date** — single date picker, default **Today**.
+- **Duration** — read-only `HH:MM` readback computed from start/end.
+  Edit the times to change the duration.
+- **Add** — the purple primary. Disabled until **End** is strictly
+  after **Start**; if you drag End back before Start the form shows an
+  inline **End must be after start** message and keeps the button
+  disabled.
+
+### What happens on Add
+
+Clockinoff sends `POST /api/entries` with the exact timestamps you
+chose. On success:
+
+1. A new row springs into the [entries list]({{ '/entries' | relative_url }}),
+   just like a stopped timer, and the short **Logged** toast appears.
+2. The form resets to its defaults (empty description, no project,
+   billable on, start = end = now, date = Today). On desktop the dock
+   stays in **Manual** mode so you can add another entry back-to-back;
+   on mobile the sheet dismisses.
+3. If you dismiss the mobile sheet (tap the backdrop, **Close**, or
+   **Esc**) **without** pressing Add, the fields you typed are
+   discarded — manual-entry drafts are not kept across sessions.
+
+Manual entries have no "running" state: they ship with both `start_at`
+and `end_at` set, and are editable from the row **Edit** sheet like any
+other closed entry.
