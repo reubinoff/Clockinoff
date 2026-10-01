@@ -29,7 +29,15 @@ interface Project {
   archivedAt: string | null;
 }
 
-export default function TimerBar({ timezone }: { timezone: string }): JSX.Element {
+// `timezone` is still accepted so the server layout keeps supplying it, but
+// per #64 the timezone label no longer renders inside the dock — it lives in
+// the desktop footer / Account page only. Keeping the prop avoids a layout
+// refactor and preserves the public shape for tests + other callers.
+export default function TimerBar({
+  timezone: _timezone,
+}: {
+  timezone: string;
+}): JSX.Element {
   const [entry, setEntry] = useState<Entry | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [description, setDescription] = useState("");
@@ -256,22 +264,32 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
         "border-t timer-dock" +
         (running ? " timer-dock-running" : " border-border bg-canvas-2")
       }
+      // #64 mobile scroll padding: globals.css uses :has() on this
+      // attribute to bump `main`'s mobile pb when Details is open, so the
+      // expanded dock never permanently covers the first entry row.
+      data-timer-dock-root="true"
+      data-timer-details-open={detailsOpen ? "true" : "false"}
     >
       <div className="mx-auto max-w-6xl px-4 py-2 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3">
-        {/* Row 1 (base): description — full width */}
+        {/* #64 md+ dock lock (Moshe product-lock 2026-10-01):
+              description | Project ▾ | Billable chip | 00:00:00 | Start
+            is one `items-center` baseline. On md+ we flow every control into
+            the same flex row and use `md:order-*` to put project + billable
+            BEFORE the duration + Start cluster so the chevron can stay at the
+            far right without breaking the dock order. Mobile keeps the
+            calm stack (description → duration + Start → optional Details). */}
         <input
-          className="input w-full md:flex-1 md:w-auto md:min-w-[280px]"
+          className="input w-full md:flex-1 md:w-auto md:min-w-[280px] md:order-1"
           placeholder="What are you working on?"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           data-timer-description="true"
           aria-label="Timer description"
         />
-        {/* Row 2 (base): duration + Start/Stop (+ Discard when running) + Details toggle */}
         <div className="flex items-center gap-2 md:contents">
           <span
             className={
-              "timer-digits text-timer-md flex-1 md:flex-none md:w-[92px] text-right text-ink" +
+              "timer-digits text-timer-md flex-1 md:flex-none md:w-[92px] text-right text-ink md:order-4" +
               (running ? " timer-running-pulse" : "")
             }
             aria-live="polite"
@@ -282,7 +300,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
           {running ? (
             <>
               <button
-                className="btn btn-ghost shrink-0"
+                className="btn btn-ghost shrink-0 md:order-5"
                 disabled={pending}
                 onClick={discard}
                 aria-label="Discard running timer"
@@ -292,7 +310,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
                 <span className="hidden sm:inline">Discard</span>
               </button>
               <button
-                className="btn btn-primary press-scale flex-1 md:flex-none"
+                className="btn btn-primary press-scale flex-1 md:flex-none md:order-6"
                 disabled={pending}
                 onClick={stop}
                 aria-label="Stop timer"
@@ -305,7 +323,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
             </>
           ) : (
             <button
-              className="btn btn-primary timer-start-idle press-scale flex-1 md:flex-none"
+              className="btn btn-primary timer-start-idle press-scale flex-1 md:flex-none md:order-6"
               disabled={pending}
               onClick={start}
               aria-label="Start timer"
@@ -318,7 +336,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
           )}
           <button
             type="button"
-            className="btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2 shrink-0"
+            className="btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2 shrink-0 md:order-7"
             onClick={() => setDetailsOpen((v) => !v)}
             aria-expanded={detailsOpen}
             aria-controls="timer-details"
@@ -334,17 +352,23 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
             />
           </button>
         </div>
-        {/* Details (project + billable + tz) — collapsed by default per V2-5.
-             Billable lives here as a quiet switch (Dana lock). Default on;
-             persisted server-side via PATCH /api/timer above so a refresh
-             keeps the choice, and copied onto the entry on Stop. */}
+        {/* Details (project + billable) — collapsed by default per V2-5.
+             #64 md+ lock: on md+ project + billable flow INLINE in the main
+             dock row via `md:contents` + `md:order-2/3`, so the whole dock
+             reads as a single band. The helper copy "Counts toward client
+             work." is now a tooltip on the chip (Dana lock) instead of a
+             stacked span that broke the chip's baseline. Timezone no longer
+             appears here — it lives in the desktop footer and the Account
+             page (see #64 brief). Billable itself is still persisted
+             server-side via PATCH /api/timer above so a refresh keeps the
+             choice, and the flag is copied onto the entry on Stop. */}
         {detailsOpen && (
           <div
             id="timer-details"
             className="flex flex-col gap-2 md:flex-row md:items-center md:contents"
           >
             <select
-              className="input flex-1 md:flex-none md:w-auto md:max-w-[200px]"
+              className="input flex-1 md:flex-none md:w-auto md:max-w-[200px] md:order-2"
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
               aria-label="Project"
@@ -356,35 +380,28 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
                 </option>
               ))}
             </select>
-            <div className="flex flex-col items-start gap-0.5 shrink-0">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={billable}
-                aria-label="Billable"
-                onClick={() => {
-                  setBillable((b) => {
-                    const next = !b;
-                    emitToast(next ? "Billable on" : "Billable off");
-                    return next;
-                  });
-                }}
-                className={
-                  "chip min-h-[44px]" + (billable ? " chip-on" : "")
-                }
-                title="Billable"
-                data-timer-billable-toggle="true"
-              >
-                <IconBillable size={14} aria-hidden />
-                <span>Billable</span>
-              </button>
-              <span className="text-xs text-muted">
-                Counts toward client work.
-              </span>
-            </div>
-            <span className="text-xs text-muted hidden md:inline shrink-0">
-              {timezone}
-            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={billable}
+              aria-label="Billable"
+              onClick={() => {
+                setBillable((b) => {
+                  const next = !b;
+                  emitToast(next ? "Billable on" : "Billable off");
+                  return next;
+                });
+              }}
+              className={
+                "chip min-h-[44px] shrink-0 md:order-3" +
+                (billable ? " chip-on" : "")
+              }
+              title="Billable — counts toward client work"
+              data-timer-billable-toggle="true"
+            >
+              <IconBillable size={14} aria-hidden />
+              <span>Billable</span>
+            </button>
           </div>
         )}
       </div>

@@ -36,9 +36,10 @@ to bottom on narrow screens):
 - **Elapsed time** — `HH:MM:SS`, updates every second while a timer is
   running.
 - **Buttons** — **Start** when idle, or **Discard** and **Stop** while a
-  timer is running. **Discard** is styled as a quiet ghost button so it
-  doesn't compete with **Stop**.
-- **Details chevron** — expands a second row with the fields below.
+  timer is running. **Start** is the sole solid-purple primary; **Discard**
+  is a quiet ghost button so it doesn't compete with **Stop**.
+- **Details chevron** — expands the Project dropdown and the Billable
+  chip inline on tablet/desktop, or on a separate row on phones.
 
 ### Details (collapsed by default)
 
@@ -46,18 +47,29 @@ Click the chevron on the right of the dock to reveal:
 
 - **Project dropdown** — pick a project you already created, or leave as
   **No project**.
-- **Billable switch** — quiet toggle labelled **Billable** with the
-  helper text *Counts toward client work.* **Default is on**, so a new
+- **Billable chip** — quiet toggle labelled **Billable** (tooltip:
+  *Billable — counts toward client work*). **Default is on**, so a new
   timer is billable unless you explicitly turn it off. The value is
   persisted server-side on the running entry, so a refresh keeps
   whatever you last picked, and it is copied onto the entry when you
   hit **Stop**. Flipping the switch shows a **Billable on** /
   **Billable off** toast so the change is visible without pulling
   attention.
-- **Timezone label** (desktop only) — which timezone Clockinoff uses for
-  your display (see [Account & timezone]({{ '/account' | relative_url }})).
 
-The details section closes again on the next chevron click.
+On tablet / desktop (`md+`, ≥ 768 px wide) opening Details does **not**
+add a second row — the project dropdown and the Billable chip slot into
+the same horizontal band as the description, duration and Start, so the
+whole dock stays on one baseline. On phones the Project dropdown and the
+Billable chip stack below the Start row until you close Details again.
+
+The details section closes again on the next chevron click. On phones
+the entry list reserves extra scroll padding while Details is open so
+the expanded dock never permanently covers the first entry card — the
+list scrolls up to meet the dock instead of hiding under it.
+
+Your current timezone no longer appears inside the timer dock. It is
+shown in the desktop footer (as `Timely · <timezone>`) and on the
+[Account & timezone]({{ '/account' | relative_url }}) page.
 
 The **Already billed** flag is *not* available on the running dock —
 you can only mark an entry as billed after it has been stopped (see

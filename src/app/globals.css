@@ -401,6 +401,19 @@
     animation: quiet-pulse-spin 0.9s linear infinite;
     vertical-align: -3px;
   }
+  /* #64 mobile dock scroll padding. The mobile timer dock is fixed above the
+     bottom tab bar; `main` reserves 16rem of bottom padding for the collapsed
+     dock. When the user expands Details the dock grows by one more row, so
+     16rem is not enough and the first entry card ends up permanently covered
+     by the dock. We bump the padding to 22rem via :has() on the dock's
+     `data-timer-details-open="true"` attribute whenever the dock is in its
+     mobile position. md+ keeps `md:pb-6` from the layout — the dock there is
+     a header child, not a fixed overlay, so no padding bump is needed. */
+  @media (max-width: 767px) {
+    html:has([data-timer-dock-root][data-timer-details-open="true"]) main {
+      padding-bottom: calc(22rem + env(safe-area-inset-bottom));
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
     /* Zeroing --duration-breath is not enough for an infinite keyframe
        animation — the animation still runs, just with a 0ms cycle. Kill the
