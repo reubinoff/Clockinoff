@@ -322,6 +322,7 @@ of truth; the short version is:
    | `NEXTAUTH_URL` | Public URL of your Web App |
    | `NODE_ENV` | `production` |
    | `WEBSITE_NODE_DEFAULT_VERSION` | `~24` |
+   | `PG_MIGRATOR_CLIENT_ID` | ClientId of the migrator UAMI assigned to the Web App (required when `PG_AZURE_AD_AUTH=1`; see [Entra / Managed Identity for Postgres](#entra--managed-identity-for-postgres-optional)) |
    | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault reference to the App Insights connection string (optional — see below) |
 
 4. The CD job runs `npm run db:migrate` against the target DB before
@@ -339,11 +340,29 @@ The pool and the migrate script accept a passwordless `DATABASE_URL`
 backed by Microsoft Entra. When the URL has no password component —
 e.g. `postgresql://clockinoff-prod@<host>.postgres.database.azure.com:5432/<db>?sslmode=require` —
 the app mints a short-lived access token for the
-`https://ossrdbms-aad.database.windows.net/.default` scope via
-`DefaultAzureCredential` (the App Service system-assigned managed
-identity on Azure) and feeds it to `pg` as the password. Tokens are
-cached in-process until shortly before expiry and refreshed on new
-pool connections, so no second table or background job is required.
+`https://ossrdbms-aad.database.windows.net/.default` scope and feeds
+it to `pg` as the password. Tokens are cached in-process until shortly
+before expiry and refreshed on new pool connections, so no second
+table or background job is required.
+
+**Two identities, by design** (Clockinoff #75):
+
+- **Runtime pool** (`src/server/db/client.ts`) — authenticates via
+  `DefaultAzureCredential`, which on App Service binds to the
+  **system-assigned managed identity** (role `clockinoff-prod`,
+  DML-only). All request-handling queries go through this identity.
+- **Startup migrator** (`scripts/migrate.mjs`, run before `node
+  server.js`) — authenticates via `ManagedIdentityCredential` pinned
+  to a **user-assigned managed identity**, e.g.
+  `uami-clockinoff-migrator` in prod. That UAMI holds the Entra role
+  on database `clockinoff` with DDL grants on schema `public`. The
+  UAMI's clientId is read from the `PG_MIGRATOR_CLIENT_ID` App Setting
+  (**required** when `PG_AZURE_AD_AUTH` is on — the script fails fast
+  with a clear error if it is missing). Without this split the system
+  MI's DML-only role tripped `42501 permission denied for schema
+  public` on the first passwordless cutover.
+
+Mode selection:
 
 - Force the token path with `PG_AZURE_AD_AUTH=1`.
 - Force the static-password path with `PG_AZURE_AD_AUTH=0` (handy for
