@@ -1,4 +1,7 @@
-// Baseline security headers applied to every response (issues #34 + #35).
+// Baseline security headers applied to every response.
+//
+// Covers issues #34 / #43 (headers) and #35 / #44 (X-Powered-By suppression —
+// see `poweredByHeader: false` below).
 //
 // - `X-Content-Type-Options: nosniff` blocks MIME sniffing.
 // - `X-Frame-Options: DENY` + `Content-Security-Policy: frame-ancestors 'none'`
@@ -7,15 +10,75 @@
 // - `Strict-Transport-Security` pins clients to HTTPS in production. The
 //   header is harmless over HTTP (browsers ignore it) so we send it
 //   unconditionally rather than depending on runtime env-checks in the config.
+// - `Referrer-Policy` keeps third-party referers (e.g. clicked links out of
+//   the app) from leaking the authenticated path a user came from.
+// - `Content-Security-Policy` is a *pragmatic* enforce policy, not a locked-
+//   down one. See the long comment on `CSP` below for the explicit list of
+//   gaps and why they are deliberate for v1.
 //
-// Intentionally *not* setting `default-src` / `script-src` / `style-src`: a
-// stricter CSP would need nonces threaded through the Next.js runtime, and
-// v1 does not have that plumbing yet — a broken login page is worse than a
-// missing script-src directive.
+// Why both `X-Frame-Options` and CSP `frame-ancestors`: Chromium / Firefox
+// honour `frame-ancestors` and ignore the legacy header when both are
+// present; older/embedded browsers (Edge Legacy, in-app webviews) only
+// understand the legacy one. Sending both costs ~20 bytes per response and
+// removes a class of "which browser is this?" bugs.
+//
+// Why we still ship HSTS with `preload`: the production domain
+// (clockinoff.reubinoff.com) is already preloaded via the parent
+// `reubinoff.com` entry. Downgrading to the issue-#43-suggested
+// `max-age=31536000; includeSubDomains` would be a *regression* for existing
+// clients that have already pinned the longer window, so we hold the
+// stronger value and note the delta in the issue thread instead.
+//
+// Scope: these headers also go out on API JSON responses. That is
+// intentional — a JSON endpoint can still be the target of a mis-sniffed
+// script tag or an iframe, and the per-route cost of these headers is zero.
+const CSP = [
+  // Fall-through for every fetch destination that doesn't have a more
+  // specific directive below. 'self' only — no third-party CDNs are used.
+  "default-src 'self'",
+  // Scripts: 'self' + 'unsafe-inline'. The 'unsafe-inline' allowance covers
+  //   (a) Next.js App Router's inline runtime (`__NEXT_DATA__` hydration,
+  //       Fast Refresh dev bundle), and
+  //   (b) the appearance boot script injected via `dangerouslySetInnerHTML`
+  //       in `src/app/layout.tsx` + `src/app/global-error.tsx`, which has to
+  //       run before first paint so the dark theme doesn't flash.
+  // A nonce-based policy would be strictly stronger but requires threading
+  // a per-request nonce through every injection point, which the v1 tracer
+  // / standalone build does not do yet. Tracked as a follow-up to #43.
+  "script-src 'self' 'unsafe-inline'",
+  // Styles: 'self' + 'unsafe-inline'. Tailwind compiles to a plain CSS
+  // bundle (covered by 'self'), but the auth pages and global-error ship
+  // short inline `<style>` blocks and React injects inline styles on a
+  // handful of client components (TimerBar, EntryList). Same follow-up as
+  // scripts — move to nonces once the runtime supports it.
+  "style-src 'self' 'unsafe-inline'",
+  // Images: 'self' plus `data:` for the small inline SVG icons React
+  // produces and `blob:` for the PDF export preview URL
+  // (`URL.createObjectURL(blob)` in `src/components/ExportPanel.tsx`).
+  "img-src 'self' data: blob:",
+  // Fonts: 'self' only. We bundle the InterVariable + Noto Sans TTFs under
+  // `public/` and `src/server/assets/fonts/`; no fonts.googleapis.com.
+  "font-src 'self' data:",
+  // XHR / fetch / EventSource targets: same origin only. Azure Monitor
+  // runs server-side (see `src/instrumentation.node.ts`) so the browser
+  // never calls out to it.
+  "connect-src 'self'",
+  // Clickjacking mitigation — see the `X-Frame-Options` header above.
+  "frame-ancestors 'none'",
+  // Lock the base URI so an injected `<base>` tag can't rewrite every
+  // relative URL on the page to an attacker-controlled host.
+  "base-uri 'self'",
+  // All <form action> targets go to the Next route handlers on this origin.
+  "form-action 'self'",
+  // No <object>/<embed> plug-in content — PDFs are downloaded as blobs.
+  "object-src 'none'",
+].join("; ");
+
 const SECURITY_HEADERS = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
-  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "Content-Security-Policy", value: CSP },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
@@ -26,7 +89,7 @@ const SECURITY_HEADERS = [
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
-  // Drop the `X-Powered-By: Next.js` framework banner (issue #35).
+  // Drop the `X-Powered-By: Next.js` framework banner (issues #35 and #44).
   poweredByHeader: false,
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
