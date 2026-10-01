@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicOrigin } from "@/lib/base-url";
 
 const SESSION_COOKIE = "timely_session";
 const PROTECTED_APP_PREFIX = "/app";
@@ -29,10 +30,15 @@ export function middleware(req: NextRequest): NextResponse {
       { status: 401 },
     );
   }
-  const url = req.nextUrl.clone();
-  url.pathname = "/login";
-  url.searchParams.set("next", pathname);
-  return NextResponse.redirect(url);
+  // Same bug class as the Google OAuth NXDOMAIN incident: `req.nextUrl`
+  // carries the internal container hostname behind Azure's reverse proxy,
+  // so cloning it leaks `e0a475862be8:3000` into the Location of every
+  // unauth /app visit. Resolve the origin through `publicOrigin()` so the
+  // Location stays on the configured public domain whenever NEXTAUTH_URL
+  // is set, and falls back to the request's own origin for local dev.
+  const target = new URL("/login", publicOrigin(req));
+  target.searchParams.set("next", pathname);
+  return NextResponse.redirect(target);
 }
 
 export const config = {
