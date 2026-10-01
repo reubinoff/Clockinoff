@@ -19,9 +19,18 @@ test("timer project dropdown updates after project create", async ({ page }) => 
 
   // V2-5: dock details (project + billable + tz) are collapsed by default —
   // expand them so the project dropdown is in the accessibility tree.
-  await page.getByRole("button", { name: "Show timer details" }).click();
+  const timerDock = page.locator(".timer-dock");
+  await timerDock
+    .getByRole("button", { name: "Show timer details" })
+    .click();
 
-  const projectSelect = page.getByRole("combobox", { name: "Project" });
+  // The entry list also renders a "Filter by project" combobox, so a
+  // page-wide getByRole({ name: "Project" }) is ambiguous under strict mode
+  // (substring match). Scope to the dock + require an exact accessible name.
+  const projectSelect = timerDock.getByRole("combobox", {
+    name: "Project",
+    exact: true,
+  });
   await expect(projectSelect).toBeVisible();
   // Before creating the project, the dropdown only offers the sentinel option.
   await expect(projectSelect.locator("option")).toHaveText(["No project"]);
@@ -29,7 +38,9 @@ test("timer project dropdown updates after project create", async ({ page }) => 
   await page.goto("/app/projects");
   // Full navigation remounts the dock; expand details again so the
   // dropdown re-enters the DOM.
-  await page.getByRole("button", { name: "Show timer details" }).click();
+  await timerDock
+    .getByRole("button", { name: "Show timer details" })
+    .click();
   // The Name input is the required text input in the "Add project" form.
   await page.locator('form input[required]').first().fill(projectName);
   await page.click("button:has-text('Add')");

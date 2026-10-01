@@ -24,12 +24,20 @@ test.describe.serial("Timer smoke", () => {
     await page.click('button[type="submit"]');
     await page.waitForURL(/\/app/);
 
-    await page.fill('input[placeholder*="Start a new timer"]', description);
-    await page.click("button:has-text('Start')");
-    await expect(page.locator("button:has-text('Stop')")).toBeVisible();
+    // Scope every timer interaction to the TimerBar dock so we don't fight
+    // Playwright strict mode against stray buttons / inputs in panels (e.g.
+    // the entry list's "Filter by project" combobox or future dialogs).
+    const timerDock = page.locator(".timer-dock");
+    await timerDock.getByLabel("Timer description").fill(description);
+    await timerDock.getByRole("button", { name: "Start timer" }).click();
+    await expect(
+      timerDock.getByRole("button", { name: "Stop timer" }),
+    ).toBeVisible();
     await page.waitForTimeout(1500);
-    await page.click("button:has-text('Stop')");
-    await expect(page.locator("button:has-text('Start')")).toBeVisible();
+    await timerDock.getByRole("button", { name: "Stop timer" }).click();
+    await expect(
+      timerDock.getByRole("button", { name: "Start timer" }),
+    ).toBeVisible();
 
     // Entries list refresh: after Stop the just-recorded entry must be
     // visible without a manual reload (see EntryList `useEffect` on initial).
