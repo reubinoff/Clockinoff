@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { formatDurationHms } from "@/lib/tz";
 import { emitEntryAdded, emitToast, onProjectsChanged } from "@/lib/events";
+import { handleAuthFailure, isAuthFailure } from "@/lib/auth-ui";
 import {
   IconPlay,
   IconStop,
@@ -30,7 +30,6 @@ interface Project {
 }
 
 export default function TimerBar({ timezone }: { timezone: string }): JSX.Element {
-  const router = useRouter();
   const [entry, setEntry] = useState<Entry | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [description, setDescription] = useState("");
@@ -124,6 +123,11 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
   }, [description, projectId, billable, entry]);
 
   async function start(): Promise<void> {
+    // Shaul lock (#54): await the real /api/timer/start response, then set
+    // local state from the response body — no mandatory router.refresh().
+    // The dock swaps to the running wash as soon as `entry` is set, so
+    // `pending` clears after the start response (not after a second timer
+    // reload). Projects list is already in local state.
     setPending(true);
     try {
       const res = await fetch("/api/timer/start", {
@@ -136,21 +140,38 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
         }),
       });
       if (res.ok) {
-        await load();
-        router.refresh();
+        const started = (await res.json()) as Entry;
+        setEntry(started);
+        setDescription(started.description);
+        setProjectId(started.project_id ?? "");
+        setBillable(started.billable);
+        return;
       }
+      if (isAuthFailure(res.status)) {
+        handleAuthFailure({
+          rollback: () => {
+            setEntry(null);
+          },
+        });
+        return;
+      }
+      // Non-auth failure: leave the idle dock in place; no toast — the
+      // mutation didn't happen, so no "success" chrome is implied.
     } finally {
       setPending(false);
     }
   }
 
   async function stop(): Promise<void> {
+    // Shaul lock (#54): we already optimistically clear the dock + emit the
+    // just-stopped entry to EntryList via the module bus. The /api/timer/stop
+    // response gives us the authoritative row; EntryList dedupes by id.
+    // No router.refresh — the list state already matches the server body.
+    const previous = entry;
     setPending(true);
     try {
       const res = await fetch("/api/timer/stop", { method: "POST" });
       if (res.ok) {
-        // V2-6 §1: hand the just-stopped entry to EntryList so it can spring
-        // the new row in before router.refresh() reconciles the server list.
         const stopped = (await res.json()) as Entry;
         setEntry(null);
         setDescription("");
@@ -158,7 +179,18 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
         setBillable(true);
         emitEntryAdded(stopped);
         emitToast("Logged");
-        router.refresh();
+        return;
+      }
+      if (isAuthFailure(res.status)) {
+        // Ariel's rule: no "logged" toast or empty dock after an auth
+        // failure. Restore the running entry so the user sees exactly the
+        // pre-click state when they come back from re-auth.
+        handleAuthFailure({
+          rollback: () => {
+            if (previous) setEntry(previous);
+          },
+        });
+        return;
       }
     } finally {
       setPending(false);
@@ -167,6 +199,10 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
 
   async function discard(): Promise<void> {
     if (!confirm("Discard this running timer? This can’t be undone.")) return;
+    // Shaul lock (#54): optimistic clear + await DELETE. No router.refresh —
+    // the entry never belonged to any list, and TimerBar's own `entry` is
+    // the single source of truth for the dock state.
+    const previous = entry;
     setPending(true);
     try {
       const res = await fetch("/api/timer", { method: "DELETE" });
@@ -177,7 +213,15 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
         setBillable(true);
         // V2-6 §3: discard produces no list row — toast only.
         emitToast("Discarded");
-        router.refresh();
+        return;
+      }
+      if (isAuthFailure(res.status)) {
+        handleAuthFailure({
+          rollback: () => {
+            if (previous) setEntry(previous);
+          },
+        });
+        return;
       }
     } finally {
       setPending(false);
@@ -228,6 +272,7 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
                 disabled={pending}
                 onClick={discard}
                 aria-label="Discard running timer"
+                aria-busy={pending || undefined}
               >
                 <IconDiscard size={16} aria-hidden />
                 <span className="hidden sm:inline">Discard</span>
@@ -237,6 +282,8 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
                 disabled={pending}
                 onClick={stop}
                 aria-label="Stop timer"
+                aria-busy={pending || undefined}
+                data-timer-stop-btn="true"
               >
                 <IconStop size={16} aria-hidden />
                 <span>Stop</span>
@@ -248,6 +295,8 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
               disabled={pending}
               onClick={start}
               aria-label="Start timer"
+              aria-busy={pending || undefined}
+              data-timer-start-btn="true"
             >
               <IconPlay size={16} aria-hidden />
               <span>Start</span>
