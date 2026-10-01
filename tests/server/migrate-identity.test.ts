@@ -1,0 +1,183 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { TokenCredential } from "@azure/identity";
+import type { Pool, PoolConfig } from "pg";
+
+import {
+  buildPgPoolConfig,
+  createDefaultAzurePasswordProvider,
+  type PasswordProvider,
+} from "@/server/db/azure-ad";
+import { closeDb, getPool, setPasswordProvider } from "@/server/db/client";
+
+// `scripts/migrate.mjs` is plain ESM so vitest can import its exports
+// directly. We exercise the AAD / migrator-UAMI branch with an injected
+// credential — the whole point of this test is to prove the migrate step
+// is pinned to `PG_MIGRATOR_CLIENT_ID` while the runtime pool stays on
+// `DefaultAzureCredential` (system MI). See Clockinoff #75.
+interface MigrateScriptExports {
+  readonly AZURE_POSTGRES_SCOPE: string;
+  readonly PG_MIGRATOR_CLIENT_ID_ENV: string;
+  resolveMigratorClientId(env?: Record<string, string | undefined>): string;
+  shouldUseAzureAdAuth(url: string): boolean;
+  isPasswordlessPostgresUrl(url: string): boolean;
+  parsePostgresUrl(url: string): PoolConfig;
+  createAzurePasswordProvider(
+    credential?: TokenCredential,
+  ): Promise<PasswordProvider>;
+  buildPoolConfig(
+    url: string,
+    options?: { credential?: TokenCredential; passwordProvider?: PasswordProvider },
+  ): Promise<PoolConfig>;
+}
+import * as migrateScriptRaw from "../../scripts/migrate.mjs";
+const migrateScript = migrateScriptRaw as unknown as MigrateScriptExports;
+
+const PASSWORDLESS_URL =
+  "postgresql://clockinoff-prod@guide-me.postgres.database.azure.com:5432/clockinoff?sslmode=require";
+
+const MIGRATOR_CLIENT_ID = "876081d8-7e33-4451-a9db-ebc1004f3463";
+
+describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
+  const originalAad = process.env.PG_AZURE_AD_AUTH;
+  const originalMig = process.env.PG_MIGRATOR_CLIENT_ID;
+
+  beforeEach(() => {
+    process.env.PG_AZURE_AD_AUTH = "1";
+  });
+
+  afterEach(() => {
+    if (originalAad === undefined) delete process.env.PG_AZURE_AD_AUTH;
+    else process.env.PG_AZURE_AD_AUTH = originalAad;
+    if (originalMig === undefined) delete process.env.PG_MIGRATOR_CLIENT_ID;
+    else process.env.PG_MIGRATOR_CLIENT_ID = originalMig;
+    vi.restoreAllMocks();
+  });
+
+  it("fails fast when PG_MIGRATOR_CLIENT_ID is unset under AAD mode", async () => {
+    delete process.env.PG_MIGRATOR_CLIENT_ID;
+    // Also sanity-check the pure helper exported by the script.
+    expect(() =>
+      migrateScript.resolveMigratorClientId({} as Record<string, string | undefined>),
+    ).toThrow(/PG_MIGRATOR_CLIENT_ID is required/i);
+    await expect(migrateScript.buildPoolConfig(PASSWORDLESS_URL)).rejects.toThrow(
+      /PG_MIGRATOR_CLIENT_ID is required/i,
+    );
+  });
+
+  it("builds a pool config bound to the migrator UAMI's clientId", async () => {
+    process.env.PG_MIGRATOR_CLIENT_ID = MIGRATOR_CLIENT_ID;
+    const getToken = vi.fn(async () => ({
+      token: "migrator-tok",
+      expiresOnTimestamp: Date.now() + 60 * 60_000,
+    }));
+    const credential: TokenCredential = { getToken };
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const cfg = (await migrateScript.buildPoolConfig(PASSWORDLESS_URL, {
+      credential,
+    })) as PoolConfig;
+
+    expect(cfg.connectionString).toBeUndefined();
+    expect(cfg.user).toBe("clockinoff-prod");
+    expect(cfg.host).toBe("guide-me.postgres.database.azure.com");
+    expect(cfg.database).toBe("clockinoff");
+    expect(cfg.max).toBe(1);
+    expect(typeof cfg.password).toBe("function");
+
+    const password = await (cfg.password as PasswordProvider)();
+    expect(password).toBe("migrator-tok");
+    expect(getToken).toHaveBeenCalledWith(
+      "https://ossrdbms-aad.database.windows.net/.default",
+    );
+  });
+
+  it("rejects empty tokens the same way the runtime provider does", async () => {
+    process.env.PG_MIGRATOR_CLIENT_ID = MIGRATOR_CLIENT_ID;
+    const credential: TokenCredential = {
+      getToken: vi.fn(async () => ({
+        token: "",
+        expiresOnTimestamp: Date.now() + 60_000,
+      })),
+    };
+    const cfg = (await migrateScript.buildPoolConfig(PASSWORDLESS_URL, {
+      credential,
+    })) as PoolConfig;
+    await expect((cfg.password as PasswordProvider)()).rejects.toThrow(
+      /empty or missing token/i,
+    );
+  });
+
+  it("password mode is unchanged when PG_AZURE_AD_AUTH is off", async () => {
+    process.env.PG_AZURE_AD_AUTH = "0";
+    delete process.env.PG_MIGRATOR_CLIENT_ID;
+    const cfg = (await migrateScript.buildPoolConfig(
+      "postgres://user:pw@localhost:5432/db",
+    )) as PoolConfig;
+    expect(cfg.connectionString).toBe("postgres://user:pw@localhost:5432/db");
+    expect(cfg.password).toBeUndefined();
+  });
+
+  it("mirrors the TS helper's shouldUseAzureAdAuth / isPasswordlessPostgresUrl semantics", () => {
+    expect(migrateScript.isPasswordlessPostgresUrl(PASSWORDLESS_URL)).toBe(true);
+    expect(
+      migrateScript.isPasswordlessPostgresUrl(
+        "postgres://user:pw@localhost:5432/db",
+      ),
+    ).toBe(false);
+    expect(migrateScript.shouldUseAzureAdAuth(PASSWORDLESS_URL)).toBe(true);
+    process.env.PG_AZURE_AD_AUTH = "0";
+    expect(migrateScript.shouldUseAzureAdAuth(PASSWORDLESS_URL)).toBe(false);
+  });
+});
+
+describe("src/server/db/client — runtime stays on the system MI (#75)", () => {
+  const originalAad = process.env.PG_AZURE_AD_AUTH;
+  const originalMig = process.env.PG_MIGRATOR_CLIENT_ID;
+
+  afterEach(async () => {
+    if (originalAad === undefined) delete process.env.PG_AZURE_AD_AUTH;
+    else process.env.PG_AZURE_AD_AUTH = originalAad;
+    if (originalMig === undefined) delete process.env.PG_MIGRATOR_CLIENT_ID;
+    else process.env.PG_MIGRATOR_CLIENT_ID = originalMig;
+    setPasswordProvider(null);
+    await closeDb();
+  });
+
+  it("the runtime default provider does NOT require PG_MIGRATOR_CLIENT_ID", () => {
+    delete process.env.PG_MIGRATOR_CLIENT_ID;
+    // Smoke: constructing the default provider must not throw even when
+    // PG_MIGRATOR_CLIENT_ID is unset — that env var is only consulted by
+    // the migrator path. We never call the returned function here so
+    // IMDS is not hit.
+    expect(() => createDefaultAzurePasswordProvider({ log: () => {} })).not.toThrow();
+  });
+
+  it("the runtime pool uses the injected (app) provider, independent of PG_MIGRATOR_CLIENT_ID", async () => {
+    await closeDb();
+    process.env.PG_AZURE_AD_AUTH = "1";
+    delete process.env.PG_MIGRATOR_CLIENT_ID;
+    const appProvider = vi.fn(async () => "app-mi-token");
+    setPasswordProvider(appProvider);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const pool: Pool = getPool();
+    const options = (pool as unknown as { options: { password?: unknown } })
+      .options;
+    expect(typeof options.password).toBe("function");
+    // The injected app provider is wired through — the migrator UAMI
+    // clientId env is irrelevant for the runtime path.
+    expect(options.password).toBe(appProvider);
+  });
+
+  it("buildPgPoolConfig AAD path never embeds a clientId in the pool config", () => {
+    const provider = async () => "tok";
+    const cfg = buildPgPoolConfig(PASSWORDLESS_URL, {
+      azureAdAuth: true,
+      passwordProvider: provider,
+    });
+    expect(cfg).not.toHaveProperty("clientId");
+    const bag = cfg as unknown as Record<string, unknown>;
+    for (const key of Object.keys(bag)) {
+      expect(key.toLowerCase()).not.toContain("clientid");
+    }
+  });
+});

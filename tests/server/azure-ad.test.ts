@@ -3,7 +3,9 @@ import type { TokenCredential } from "@azure/identity";
 import { Pool } from "pg";
 import {
   AZURE_POSTGRES_SCOPE,
+  PG_MIGRATOR_CLIENT_ID_ENV,
   buildPgPoolConfig,
+  createMigratorAzurePasswordProvider,
   createTokenPasswordProvider,
   isPasswordlessPostgresUrl,
   shouldUseAzureAdAuth,
@@ -327,6 +329,80 @@ describe("buildPgPoolConfig", () => {
     expect(cfg.port).toBeUndefined();
     expect(cfg.user).toBe("clockinoff-prod");
     expect(cfg.password).toBe(provider);
+  });
+});
+
+describe("createMigratorAzurePasswordProvider (migrator UAMI contract — #75)", () => {
+  it("binds the credential to PG_MIGRATOR_CLIENT_ID and uses the AAD Postgres scope", async () => {
+    const fakeToken = { token: "migrator-tok", expiresOnTimestamp: Date.now() + 60 * 60_000 };
+    const getToken = vi.fn(async () => fakeToken);
+    const seenClientIds: string[] = [];
+    const credentialFactory = (clientId: string) => {
+      seenClientIds.push(clientId);
+      return { getToken } as TokenCredential;
+    };
+    const getPassword = createMigratorAzurePasswordProvider({
+      env: { [PG_MIGRATOR_CLIENT_ID_ENV]: "876081d8-7e33-4451-a9db-ebc1004f3463" },
+      credentialFactory,
+      log: () => {},
+    });
+    await expect(getPassword()).resolves.toBe("migrator-tok");
+    expect(seenClientIds).toEqual(["876081d8-7e33-4451-a9db-ebc1004f3463"]);
+    expect(getToken).toHaveBeenCalledWith(AZURE_POSTGRES_SCOPE);
+  });
+
+  it("trims surrounding whitespace off the clientId env", () => {
+    const credentialFactory = vi.fn(
+      (clientId: string): TokenCredential => {
+        expect(clientId).toBe("876081d8-7e33-4451-a9db-ebc1004f3463");
+        return { getToken: vi.fn(async () => null) };
+      },
+    );
+    createMigratorAzurePasswordProvider({
+      env: { [PG_MIGRATOR_CLIENT_ID_ENV]: "  876081d8-7e33-4451-a9db-ebc1004f3463  " },
+      credentialFactory,
+      log: () => {},
+    });
+    expect(credentialFactory).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails fast with a clear error when PG_MIGRATOR_CLIENT_ID is missing", () => {
+    expect(() => createMigratorAzurePasswordProvider({ env: {} })).toThrow(
+      /PG_MIGRATOR_CLIENT_ID is required/i,
+    );
+    expect(() =>
+      createMigratorAzurePasswordProvider({ env: { PG_MIGRATOR_CLIENT_ID: "" } }),
+    ).toThrow(/PG_MIGRATOR_CLIENT_ID is required/i);
+    expect(() =>
+      createMigratorAzurePasswordProvider({ env: { PG_MIGRATOR_CLIENT_ID: "   " } }),
+    ).toThrow(/PG_MIGRATOR_CLIENT_ID is required/i);
+  });
+
+  it("mentions the DDL-vs-DML contract so the operator sees the real cause", () => {
+    try {
+      createMigratorAzurePasswordProvider({ env: {} });
+      throw new Error("expected throw");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      expect(message).toMatch(/migrator user-assigned managed identity/i);
+      expect(message).toMatch(/system-assigned MI/i);
+      expect(message).toMatch(/#75/);
+    }
+  });
+
+  it("inherits Shaul's empty-token gate from the shared provider helper", async () => {
+    const credentialFactory = (): TokenCredential => ({
+      getToken: vi.fn(async () => ({
+        token: "",
+        expiresOnTimestamp: Date.now() + 60_000,
+      })),
+    });
+    const getPassword = createMigratorAzurePasswordProvider({
+      env: { [PG_MIGRATOR_CLIENT_ID_ENV]: "876081d8-7e33-4451-a9db-ebc1004f3463" },
+      credentialFactory,
+      log: () => {},
+    });
+    await expect(getPassword()).rejects.toThrow(/empty or missing token/i);
   });
 });
 

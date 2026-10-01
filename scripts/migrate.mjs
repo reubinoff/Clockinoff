@@ -23,12 +23,30 @@
 // standalone output. A regression test in
 // `tests/server/migrate-imports.test.ts` enforces this allowlist.
 //
-// Entra / Managed Identity support (#75 phase 1): when `DATABASE_URL`
-// has no password component, or `PG_AZURE_AD_AUTH` is explicitly on, the
-// pool password becomes a function that returns an AAD access token for
+// Entra / Managed Identity support (#75): when `DATABASE_URL` has no
+// password component, or `PG_AZURE_AD_AUTH` is explicitly on, the pool
+// password becomes a function that returns an AAD access token for
 // `https://ossrdbms-aad.database.windows.net/.default`. Falls back to
 // the static password path if the URL still carries a password or the
 // flag is `0`/`false`.
+//
+// MIGRATOR IDENTITY CONTRACT — DO NOT RELAX (Clockinoff #75):
+// Startup migrations must authenticate as the migrator user-assigned
+// managed identity (`uami-clockinoff-migrator` in prod — the only Entra
+// role with DDL grants on database `clockinoff`), NOT as the App Service
+// system-assigned MI (`clockinoff-prod` — DML-only). The 2026-10-01
+// passwordless cutover failed with `42501 permission denied for schema
+// public` because this script was using `DefaultAzureCredential`, which
+// on an App Service with both identities assigned binds to the system MI.
+//
+// Contract: when AAD mode is on, this script reads the migrator UAMI's
+// clientId from `PG_MIGRATOR_CLIENT_ID` and feeds it to
+// `ManagedIdentityCredential({ clientId })` so the token request is
+// pinned to that UAMI. We fail fast with a clear error if the env var is
+// missing — surface the real misconfig instead of letting Postgres
+// return a confusing permission error after reconnecting as the wrong
+// principal. The runtime app pool (`src/server/db/client.ts`) keeps
+// using `DefaultAzureCredential` so DML stays on the system MI.
 //
 // This file mirrors `src/server/db/azure-ad.ts` on purpose: both the
 // runtime and the migration runner must build the AAD pool config with
@@ -53,6 +71,7 @@ CREATE TABLE IF NOT EXISTS "__migrations" (
 const AZURE_POSTGRES_SCOPE =
   "https://ossrdbms-aad.database.windows.net/.default";
 const REFRESH_BUFFER_MS = 5 * 60_000;
+const PG_MIGRATOR_CLIENT_ID_ENV = "PG_MIGRATOR_CLIENT_ID";
 
 function resolveMigrationsDir() {
   if (process.env.MIGRATIONS_DIR) {
@@ -137,9 +156,33 @@ function parsePostgresUrl(url) {
   };
 }
 
-async function createAzurePasswordProvider() {
-  const { DefaultAzureCredential } = await import("@azure/identity");
-  const credential = new DefaultAzureCredential();
+function resolveMigratorClientId(env = process.env) {
+  const raw = env[PG_MIGRATOR_CLIENT_ID_ENV];
+  const clientId = typeof raw === "string" ? raw.trim() : "";
+  if (!clientId) {
+    throw new Error(
+      PG_MIGRATOR_CLIENT_ID_ENV +
+        " is required when PG_AZURE_AD_AUTH is enabled: startup migrations" +
+        " must authenticate as the migrator user-assigned managed identity" +
+        " (DDL-capable), not the App Service system-assigned MI (DML-only)." +
+        " See Clockinoff #75.",
+    );
+  }
+  return clientId;
+}
+
+async function createAzurePasswordProvider(credentialOverride) {
+  // In AAD mode the migrate step binds to the migrator UAMI's clientId via
+  // ManagedIdentityCredential. Tests may inject a fake credential to avoid
+  // hitting IMDS. See the MIGRATOR IDENTITY CONTRACT comment at the top.
+  let credential;
+  if (credentialOverride) {
+    credential = credentialOverride;
+  } else {
+    const clientId = resolveMigratorClientId();
+    const { ManagedIdentityCredential } = await import("@azure/identity");
+    credential = new ManagedIdentityCredential({ clientId });
+  }
   let cached = null;
   let inflight = null;
 
@@ -185,12 +228,14 @@ async function createAzurePasswordProvider() {
   };
 }
 
-async function buildPoolConfig(url) {
+async function buildPoolConfig(url, options = {}) {
   const overrides = { max: 1 };
   if (!shouldUseAzureAdAuth(url)) {
     return { connectionString: url, ...overrides };
   }
-  const password = await createAzurePasswordProvider();
+  const password =
+    options.passwordProvider ??
+    (await createAzurePasswordProvider(options.credential));
   // AAD mode: build discrete fields with our own URL parser (no
   // pg-connection-string import — see policy at top of file) and attach
   // the token provider. We never pass `connectionString` + `password`
@@ -268,7 +313,29 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Export the pure helpers so vitest can exercise the migrator-vs-runtime
+// credential split without spawning a child `node` process. The CD deploy
+// still runs this file as `node scripts/migrate.mjs`, which hits the
+// bottom-of-file entry point below.
+export {
+  AZURE_POSTGRES_SCOPE,
+  PG_MIGRATOR_CLIENT_ID_ENV,
+  buildPoolConfig,
+  createAzurePasswordProvider,
+  isPasswordlessPostgresUrl,
+  parsePostgresUrl,
+  resolveMigratorClientId,
+  shouldUseAzureAdAuth,
+};
+
+const invokedDirectly =
+  typeof process !== "undefined" &&
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
