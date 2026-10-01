@@ -2,9 +2,11 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   emitEntryAdded,
   emitProjectsChanged,
+  emitTimerChanged,
   emitToast,
   onEntryAdded,
   onProjectsChanged,
+  onTimerChanged,
   onToast,
   _resetProjectsChangedListenersForTests,
   _resetToastBufferForTests,
@@ -125,5 +127,47 @@ describe("entry-added event bus (V2-6/V2-7)", () => {
     });
     expect(() => emitEntryAdded({ id: "x" })).not.toThrow();
     expect(ok).toBe(1);
+  });
+});
+
+// #84 play-to-resume bus: EntryList emits when it starts a new timer from a
+// row, TimerBar re-reads /api/timer on the ping. Shape mirrors
+// `onProjectsChanged` exactly, so the contract we care about is: multiple
+// subscribers, clean unsubscribe, no payload, and listener errors never
+// break the fan-out.
+describe("timer-changed event bus (#84)", () => {
+  beforeEach(() => {
+    _resetProjectsChangedListenersForTests();
+  });
+
+  it("fans out emits to all subscribers", () => {
+    const seen: string[] = [];
+    onTimerChanged(() => seen.push("a"));
+    onTimerChanged(() => seen.push("b"));
+    emitTimerChanged();
+    expect(seen).toEqual(["a", "b"]);
+  });
+
+  it("unsubscribes cleanly", () => {
+    let count = 0;
+    const off = onTimerChanged(() => {
+      count += 1;
+    });
+    emitTimerChanged();
+    off();
+    emitTimerChanged();
+    expect(count).toBe(1);
+  });
+
+  it("keeps calling later subscribers when one throws", () => {
+    onTimerChanged(() => {
+      throw new Error("boom");
+    });
+    let reached = false;
+    onTimerChanged(() => {
+      reached = true;
+    });
+    expect(() => emitTimerChanged()).not.toThrow();
+    expect(reached).toBe(true);
   });
 });
