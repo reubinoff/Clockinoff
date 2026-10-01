@@ -9,6 +9,7 @@ import {
 } from "@/server/auth/google";
 import { SESSION_COOKIE } from "@/server/auth/session";
 import { logger } from "@/lib/logger";
+import { publicOrigin } from "@/lib/base-url";
 import { OAUTH_STATE_COOKIE, sanitiseNext } from "../start/route";
 
 export const runtime = "nodejs";
@@ -50,7 +51,10 @@ function redirectToLoginWithError(origin: string, error: ErrorCode): NextRespons
 
 export async function GET(req: Request): Promise<Response> {
   const url = new URL(req.url);
-  const origin = url.origin;
+  // Never trust req.url for building the Location — behind Azure App
+  // Service that resolves to the internal container hostname and the
+  // browser lands on NXDOMAIN after Google consent. See `publicOrigin`.
+  const origin = publicOrigin(req);
   const queryError = url.searchParams.get("error");
   const code = url.searchParams.get("code");
   const stateParam = url.searchParams.get("state");

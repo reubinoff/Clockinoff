@@ -5,6 +5,7 @@ const ENV_SNAPSHOT = {
   id: process.env.GOOGLE_CLIENT_ID,
   secret: process.env.GOOGLE_CLIENT_SECRET,
   redirect: process.env.GOOGLE_REDIRECT_URI,
+  nextauth: process.env.NEXTAUTH_URL,
 };
 
 function restoreEnv(): void {
@@ -14,6 +15,8 @@ function restoreEnv(): void {
   else delete process.env.GOOGLE_CLIENT_SECRET;
   if (ENV_SNAPSHOT.redirect) process.env.GOOGLE_REDIRECT_URI = ENV_SNAPSHOT.redirect;
   else delete process.env.GOOGLE_REDIRECT_URI;
+  if (ENV_SNAPSHOT.nextauth) process.env.NEXTAUTH_URL = ENV_SNAPSHOT.nextauth;
+  else delete process.env.NEXTAUTH_URL;
 }
 
 function configure(): void {
@@ -98,5 +101,17 @@ describe("GET /api/auth/google/start", () => {
     const loc = res.headers.get("location") ?? "";
     expect(new URL(loc).pathname).toBe("/login");
     expect(new URL(loc).searchParams.get("error")).toBe("network");
+  });
+
+  it("bounces to the NEXTAUTH_URL origin on config error, never the container host", async () => {
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+    process.env.NEXTAUTH_URL = "https://clockinoff.reubinoff.com";
+    const res = await GET(new Request("http://e0a475862be8:3000/api/auth/google/start"));
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.origin).toBe("https://clockinoff.reubinoff.com");
+    expect(loc.hostname).not.toBe("e0a475862be8");
+    expect(loc.pathname).toBe("/login");
+    expect(loc.searchParams.get("error")).toBe("network");
   });
 });

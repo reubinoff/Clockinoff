@@ -95,6 +95,7 @@ const ENV = {
   id: process.env.GOOGLE_CLIENT_ID,
   secret: process.env.GOOGLE_CLIENT_SECRET,
   redirect: process.env.GOOGLE_REDIRECT_URI,
+  nextauth: process.env.NEXTAUTH_URL,
 };
 function configure(): void {
   process.env.GOOGLE_CLIENT_ID = CLIENT_ID;
@@ -108,6 +109,8 @@ function restore(): void {
   else delete process.env.GOOGLE_CLIENT_SECRET;
   if (ENV.redirect) process.env.GOOGLE_REDIRECT_URI = ENV.redirect;
   else delete process.env.GOOGLE_REDIRECT_URI;
+  if (ENV.nextauth) process.env.NEXTAUTH_URL = ENV.nextauth;
+  else delete process.env.NEXTAUTH_URL;
 }
 
 describe("GET /api/auth/google/callback", () => {
@@ -255,6 +258,71 @@ describe("GET /api/auth/google/callback", () => {
     const secondCookie = extractCookie(second, SESSION_COOKIE);
     const secondUser = await getSessionUser(secondCookie!.value);
     expect(secondUser?.id).toBe(firstUser?.id);
+  });
+
+  describe("Azure reverse-proxy regression: Location must use NEXTAUTH_URL origin", () => {
+    beforeEach(() => {
+      process.env.NEXTAUTH_URL = "https://clockinoff.reubinoff.com";
+    });
+
+    // Simulate the production topology: Azure App Service forwards the
+    // request to the container, and `req.url` carries the internal
+    // container hostname. If we ever rebuild Locations from that URL
+    // again, the browser lands on DNS NXDOMAIN after Google consent.
+    function internalRequest(opts: {
+      code?: string | null;
+      state?: string | null;
+      cookie?: string;
+      errorParam?: string;
+    }): Request {
+      const url = new URL("http://e0a475862be8:3000/api/auth/google/callback");
+      if (opts.code) url.searchParams.set("code", opts.code);
+      if (opts.state) url.searchParams.set("state", opts.state);
+      if (opts.errorParam) url.searchParams.set("error", opts.errorParam);
+      const headers: Record<string, string> = {};
+      if (opts.cookie) headers.cookie = opts.cookie;
+      return new Request(url, { method: "GET", headers });
+    }
+
+    it("sends happy-path Location to the public origin, not the container host", async () => {
+      mockGoogleFetch({
+        idToken: makeIdToken({ sub: "google|public-1", email: "public@example.com" }),
+      });
+      const res = await GET(
+        internalRequest({ code: "code-1", state: "s1", cookie: stateCookie("s1") }),
+      );
+      const loc = new URL(res.headers.get("location") ?? "");
+      expect(loc.origin).toBe("https://clockinoff.reubinoff.com");
+      expect(loc.hostname).not.toBe("e0a475862be8");
+    });
+
+    it("sends the cancel bounce to the public origin on error=access_denied", async () => {
+      const res = await GET(
+        internalRequest({ errorParam: "access_denied", cookie: stateCookie("abc") }),
+      );
+      const loc = new URL(res.headers.get("location") ?? "");
+      expect(loc.origin).toBe("https://clockinoff.reubinoff.com");
+      expect(loc.searchParams.get("error")).toBe("cancelled");
+    });
+
+    it("sends the network-error bounce to the public origin on state mismatch", async () => {
+      const res = await GET(
+        internalRequest({ code: "abc", state: "attacker", cookie: stateCookie("real") }),
+      );
+      const loc = new URL(res.headers.get("location") ?? "");
+      expect(loc.origin).toBe("https://clockinoff.reubinoff.com");
+      expect(loc.searchParams.get("error")).toBe("network");
+    });
+
+    it("sends the unverified bounce to the public origin on email_verified=false", async () => {
+      mockGoogleFetch({ idToken: makeIdToken({ email_verified: false }) });
+      const res = await GET(
+        internalRequest({ code: "code-1", state: "s1", cookie: stateCookie("s1") }),
+      );
+      const loc = new URL(res.headers.get("location") ?? "");
+      expect(loc.origin).toBe("https://clockinoff.reubinoff.com");
+      expect(loc.searchParams.get("error")).toBe("unverified");
+    });
   });
 
   it("preserves a safe `next` from the state cookie when signing in an existing user", async () => {

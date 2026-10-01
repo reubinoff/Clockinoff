@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildAuthorizeUrl, getGoogleConfig, GoogleAuthError, newStateToken } from "@/server/auth/google";
 import { logger } from "@/lib/logger";
+import { publicOrigin } from "@/lib/base-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,12 +33,15 @@ export async function GET(req: Request): Promise<Response> {
     state = newStateToken();
     authorizeUrl = buildAuthorizeUrl({ config, state });
   } catch (err) {
+    // Resolve the user-visible origin from NEXTAUTH_URL so the error
+    // bounce doesn't leak the internal container hostname either.
+    const origin = publicOrigin(req);
     if (err instanceof GoogleAuthError) {
       logger.warn("[google] start aborted", { reason: err.reason });
-      return NextResponse.redirect(new URL("/login?error=network", url.origin), 302);
+      return NextResponse.redirect(new URL("/login?error=network", origin), 302);
     }
     logger.exception("[google] start unexpected failure", err);
-    return NextResponse.redirect(new URL("/login?error=network", url.origin), 302);
+    return NextResponse.redirect(new URL("/login?error=network", origin), 302);
   }
 
   const res = NextResponse.redirect(authorizeUrl, 302);
