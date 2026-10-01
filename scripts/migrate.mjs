@@ -48,6 +48,22 @@
 // principal. The runtime app pool (`src/server/db/client.ts`) keeps
 // using `DefaultAzureCredential` so DML stays on the system MI.
 //
+// MIGRATOR PG USER OVERRIDE — Ariel's oid-mismatch gate (Clockinoff #75):
+// Azure Postgres Entra auth does NOT ignore the libpq `user` field. The
+// server checks that the Entra OID carried in the access token matches
+// the OID stored on the Postgres role's `pgaadauth` security label and
+// rejects with SQLSTATE `28000` ("Authentication failed … principal id
+// mismatch") when they differ. The 2026-10-02 prod probe reproduced
+// this: a token minted for the migrator UAMI combined with
+// `user=clockinoff-prod` (from the passwordless `DATABASE_URL`) hit the
+// 28000 mismatch because the `clockinoff-prod` role is labelled with
+// the App Service system MI's OID, not the UAMI's. So in AAD mode we
+// override the discrete `user` field to the migrator role's exact Entra
+// Postgres role name — read from `PG_MIGRATOR_PG_USER`, defaulting to
+// `uami-clockinoff-migrator`. The runtime app pool keeps the URL's
+// `clockinoff-prod` user because the system MI's token matches that
+// role's label.
+//
 // This file mirrors `src/server/db/azure-ad.ts` on purpose: both the
 // runtime and the migration runner must build the AAD pool config with
 // discrete fields (never `connectionString` + `password` together), and
@@ -72,6 +88,8 @@ const AZURE_POSTGRES_SCOPE =
   "https://ossrdbms-aad.database.windows.net/.default";
 const REFRESH_BUFFER_MS = 5 * 60_000;
 const PG_MIGRATOR_CLIENT_ID_ENV = "PG_MIGRATOR_CLIENT_ID";
+const PG_MIGRATOR_PG_USER_ENV = "PG_MIGRATOR_PG_USER";
+const DEFAULT_MIGRATOR_PG_USER = "uami-clockinoff-migrator";
 
 function resolveMigrationsDir() {
   if (process.env.MIGRATIONS_DIR) {
@@ -171,6 +189,29 @@ function resolveMigratorClientId(env = process.env) {
   return clientId;
 }
 
+// Ariel's oid-mismatch gate (Clockinoff #75): the Postgres `user` field
+// in AAD mode must name the Entra Postgres role whose security-label OID
+// matches the token the pool is minting — overriding the role embedded in
+// the passwordless URL. Defaults to `uami-clockinoff-migrator`, overridable
+// via `PG_MIGRATOR_PG_USER` for non-prod environments / alt role names.
+// Fails fast under AAD if the resolved value is empty so we never silently
+// fall back to the URL's `clockinoff-prod` and reproduce the 28000 mismatch.
+function resolveMigratorPgUser(env = process.env) {
+  const raw = env[PG_MIGRATOR_PG_USER_ENV];
+  const explicit = typeof raw === "string" ? raw.trim() : "";
+  const user = explicit || DEFAULT_MIGRATOR_PG_USER;
+  if (!user) {
+    throw new Error(
+      PG_MIGRATOR_PG_USER_ENV +
+        " resolved to an empty value under PG_AZURE_AD_AUTH; the migrate" +
+        " step must set the Postgres user to the migrator Entra role" +
+        " (e.g. uami-clockinoff-migrator) to satisfy Azure Postgres" +
+        " Entra OID matching. See Clockinoff #75.",
+    );
+  }
+  return user;
+}
+
 async function createAzurePasswordProvider(credentialOverride) {
   // In AAD mode the migrate step binds to the migrator UAMI's clientId via
   // ManagedIdentityCredential. Tests may inject a fake credential to avoid
@@ -242,6 +283,10 @@ async function buildPoolConfig(url, options = {}) {
   // together, so pg's ConnectionParameters Object.assign cannot clobber
   // the callback with an empty parsed password.
   const discrete = parsePostgresUrl(url);
+  // Ariel's oid-mismatch gate: override the URL-derived `user` so the
+  // Postgres role matches the token's Entra OID (see header comment).
+  const migratorUser =
+    options.pgUser !== undefined ? options.pgUser : resolveMigratorPgUser();
   const config = {
     ...discrete,
     password,
@@ -251,10 +296,12 @@ async function buildPoolConfig(url, options = {}) {
     delete config.connectionString;
   }
   config.password = password;
+  config.user = migratorUser;
   console.log(
-    "[migrate] azureAdAuth=true passwordProvider=%s connectionString=%s",
+    "[migrate] azureAdAuth=true passwordProvider=%s connectionString=%s user=%s",
     typeof config.password,
     "connectionString" in config ? "present" : "absent",
+    config.user,
   );
   return config;
 }
@@ -319,12 +366,15 @@ async function main() {
 // bottom-of-file entry point below.
 export {
   AZURE_POSTGRES_SCOPE,
+  DEFAULT_MIGRATOR_PG_USER,
   PG_MIGRATOR_CLIENT_ID_ENV,
+  PG_MIGRATOR_PG_USER_ENV,
   buildPoolConfig,
   createAzurePasswordProvider,
   isPasswordlessPostgresUrl,
   parsePostgresUrl,
   resolveMigratorClientId,
+  resolveMigratorPgUser,
   shouldUseAzureAdAuth,
 };
 

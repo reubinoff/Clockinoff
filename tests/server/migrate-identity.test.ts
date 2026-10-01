@@ -16,8 +16,11 @@ import { closeDb, getPool, setPasswordProvider } from "@/server/db/client";
 // `DefaultAzureCredential` (system MI). See Clockinoff #75.
 interface MigrateScriptExports {
   readonly AZURE_POSTGRES_SCOPE: string;
+  readonly DEFAULT_MIGRATOR_PG_USER: string;
   readonly PG_MIGRATOR_CLIENT_ID_ENV: string;
+  readonly PG_MIGRATOR_PG_USER_ENV: string;
   resolveMigratorClientId(env?: Record<string, string | undefined>): string;
+  resolveMigratorPgUser(env?: Record<string, string | undefined>): string;
   shouldUseAzureAdAuth(url: string): boolean;
   isPasswordlessPostgresUrl(url: string): boolean;
   parsePostgresUrl(url: string): PoolConfig;
@@ -26,7 +29,11 @@ interface MigrateScriptExports {
   ): Promise<PasswordProvider>;
   buildPoolConfig(
     url: string,
-    options?: { credential?: TokenCredential; passwordProvider?: PasswordProvider },
+    options?: {
+      credential?: TokenCredential;
+      passwordProvider?: PasswordProvider;
+      pgUser?: string;
+    },
   ): Promise<PoolConfig>;
 }
 import * as migrateScriptRaw from "../../scripts/migrate.mjs";
@@ -40,6 +47,7 @@ const MIGRATOR_CLIENT_ID = "876081d8-7e33-4451-a9db-ebc1004f3463";
 describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
   const originalAad = process.env.PG_AZURE_AD_AUTH;
   const originalMig = process.env.PG_MIGRATOR_CLIENT_ID;
+  const originalPgUser = process.env.PG_MIGRATOR_PG_USER;
 
   beforeEach(() => {
     process.env.PG_AZURE_AD_AUTH = "1";
@@ -50,6 +58,8 @@ describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
     else process.env.PG_AZURE_AD_AUTH = originalAad;
     if (originalMig === undefined) delete process.env.PG_MIGRATOR_CLIENT_ID;
     else process.env.PG_MIGRATOR_CLIENT_ID = originalMig;
+    if (originalPgUser === undefined) delete process.env.PG_MIGRATOR_PG_USER;
+    else process.env.PG_MIGRATOR_PG_USER = originalPgUser;
     vi.restoreAllMocks();
   });
 
@@ -66,6 +76,7 @@ describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
 
   it("builds a pool config bound to the migrator UAMI's clientId", async () => {
     process.env.PG_MIGRATOR_CLIENT_ID = MIGRATOR_CLIENT_ID;
+    delete process.env.PG_MIGRATOR_PG_USER;
     const getToken = vi.fn(async () => ({
       token: "migrator-tok",
       expiresOnTimestamp: Date.now() + 60 * 60_000,
@@ -78,7 +89,12 @@ describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
     })) as PoolConfig;
 
     expect(cfg.connectionString).toBeUndefined();
-    expect(cfg.user).toBe("clockinoff-prod");
+    // Ariel's oid-mismatch gate (#75): migrate pool must override the
+    // URL-derived `clockinoff-prod` user with the migrator Entra role
+    // whose OID matches the UAMI token we just minted. Default is
+    // `uami-clockinoff-migrator` (prod role name).
+    expect(cfg.user).toBe("uami-clockinoff-migrator");
+    expect(cfg.user).not.toBe("clockinoff-prod");
     expect(cfg.host).toBe("guide-me.postgres.database.azure.com");
     expect(cfg.database).toBe("clockinoff");
     expect(cfg.max).toBe(1);
@@ -89,6 +105,62 @@ describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
     expect(getToken).toHaveBeenCalledWith(
       "https://ossrdbms-aad.database.windows.net/.default",
     );
+  });
+
+  it("honours PG_MIGRATOR_PG_USER override for alternate role names", async () => {
+    process.env.PG_MIGRATOR_CLIENT_ID = MIGRATOR_CLIENT_ID;
+    process.env.PG_MIGRATOR_PG_USER = "uami-clockinoff-stage-migrator";
+    const credential: TokenCredential = {
+      getToken: vi.fn(async () => ({
+        token: "stage-tok",
+        expiresOnTimestamp: Date.now() + 60 * 60_000,
+      })),
+    };
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const cfg = (await migrateScript.buildPoolConfig(PASSWORDLESS_URL, {
+      credential,
+    })) as PoolConfig;
+    expect(cfg.user).toBe("uami-clockinoff-stage-migrator");
+  });
+
+  it("trims whitespace off PG_MIGRATOR_PG_USER", () => {
+    expect(
+      migrateScript.resolveMigratorPgUser({
+        PG_MIGRATOR_PG_USER: "  uami-clockinoff-migrator  ",
+      }),
+    ).toBe("uami-clockinoff-migrator");
+  });
+
+  it("defaults the migrator pg user to uami-clockinoff-migrator", () => {
+    expect(migrateScript.DEFAULT_MIGRATOR_PG_USER).toBe(
+      "uami-clockinoff-migrator",
+    );
+    expect(migrateScript.resolveMigratorPgUser({})).toBe(
+      "uami-clockinoff-migrator",
+    );
+    expect(
+      migrateScript.resolveMigratorPgUser({ PG_MIGRATOR_PG_USER: "" }),
+    ).toBe("uami-clockinoff-migrator");
+    expect(
+      migrateScript.resolveMigratorPgUser({ PG_MIGRATOR_PG_USER: "   " }),
+    ).toBe("uami-clockinoff-migrator");
+  });
+
+  it("accepts an explicit pgUser option (test / ops injection)", async () => {
+    process.env.PG_MIGRATOR_CLIENT_ID = MIGRATOR_CLIENT_ID;
+    delete process.env.PG_MIGRATOR_PG_USER;
+    const credential: TokenCredential = {
+      getToken: vi.fn(async () => ({
+        token: "tok",
+        expiresOnTimestamp: Date.now() + 60 * 60_000,
+      })),
+    };
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const cfg = (await migrateScript.buildPoolConfig(PASSWORDLESS_URL, {
+      credential,
+      pgUser: "uami-explicit",
+    })) as PoolConfig;
+    expect(cfg.user).toBe("uami-explicit");
   });
 
   it("rejects empty tokens the same way the runtime provider does", async () => {
@@ -179,5 +251,20 @@ describe("src/server/db/client — runtime stays on the system MI (#75)", () => 
     for (const key of Object.keys(bag)) {
       expect(key.toLowerCase()).not.toContain("clientid");
     }
+  });
+
+  it("runtime AAD pool keeps the URL user clockinoff-prod (never the migrator role)", () => {
+    // Ariel's oid-mismatch gate flips the migrate pool's `user` to the
+    // migrator UAMI role. The runtime pool must stay on the system MI
+    // mapping (`clockinoff-prod` from the URL) so DML queries continue
+    // to match the system MI's token OID. This test pins that split so
+    // a future refactor cannot accidentally regress both paths.
+    const provider = async () => "tok";
+    const cfg = buildPgPoolConfig(PASSWORDLESS_URL, {
+      azureAdAuth: true,
+      passwordProvider: provider,
+    });
+    expect(cfg.user).toBe("clockinoff-prod");
+    expect(cfg.user).not.toBe("uami-clockinoff-migrator");
   });
 });
