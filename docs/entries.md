@@ -56,15 +56,17 @@ On a phone each entry renders as a card with:
 
 - A **two-line description** (whatever you typed in the timer bar; long
   text is clamped to two lines).
-- A right-aligned **duration** (hours, e.g. `1.25h`).
+- A right-aligned trailing cluster on the first line with the
+  **duration** (hours, e.g. `1.25h`), the **edit** control (pencil icon,
+  44 × 44 px tap target) that opens the edit sheet, and the **more**
+  control (**⋯**) with Mark as billed / Mark as unbilled / Delete. The
+  three sit on one horizontal baseline so the ⋯ never wraps to a second
+  row even when the description clamps to two lines.
 - A meta line with the **time range** (start–end in your timezone; end is
   `…` for a running entry, only visible if you filter it in) followed by
   the project name if the entry has one.
 - Tag chips underneath and, if the entry has been marked as billed, a
   muted **Billed** pill — no loud badge, no colour.
-- An **edit** control (pencil icon, 44 × 44 px tap target) that opens
-  the edit sheet, and a **more** control (**⋯**) with Mark as billed /
-  Mark as unbilled / Delete.
 
 On tablets and desktops (`md+`, ≥ 768 px wide) the same data lays out
 as a **flat one-line row**: description · project chip (on `lg+`) ·

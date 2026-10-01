@@ -633,6 +633,16 @@ export default function EntryList({
                           />
                         )}
                         <div className="min-w-0 flex-1 space-y-1">
+                          {/* #63B mobile Today-row action baseline: duration +
+                               Edit + ⋯ are a single horizontal cluster at the
+                               top-right of the card, aligned with the first
+                               line of the description. The old `flex-col`
+                               wrapper let ⋯ wrap to a second row on wider
+                               descriptions; keeping the whole trailing
+                               cluster in one `flex items-center` row with
+                               `shrink-0` targets guarantees a single baseline
+                               even when the description clamps to two lines
+                               or wraps around the duration digit. */}
                           <div className="flex items-start justify-between gap-3">
                             <p className="text-body-sm text-ink line-clamp-2 break-words min-w-0 flex-1">
                               {e.description || (
@@ -641,12 +651,37 @@ export default function EntryList({
                                 </span>
                               )}
                             </p>
-                            <span className="text-body-sm text-ink tabular-nums shrink-0">
-                              <span className="timer-digits">
-                                {formatDurationHours(e.duration_seconds)}
+                            <div className="flex shrink-0 items-center gap-1">
+                              <span className="text-body-sm text-ink tabular-nums">
+                                <span className="timer-digits">
+                                  {formatDurationHours(e.duration_seconds)}
+                                </span>
+                                h
                               </span>
-                              h
-                            </span>
+                              {!inSelect && !e.running && (
+                                <>
+                                  <button
+                                    className="btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0"
+                                    onClick={() => beginEdit(e)}
+                                    aria-label="Edit entry"
+                                    title="Edit"
+                                  >
+                                    <IconEdit size={16} aria-hidden />
+                                  </button>
+                                  <RowMoreMenu
+                                    entry={e}
+                                    open={menuOpenId === e.id}
+                                    marking={rowPending}
+                                    onOpenChange={(open) =>
+                                      setMenuOpenId(open ? e.id : null)
+                                    }
+                                    onMarkBilled={() => void patchSingleBilled(e.id, true)}
+                                    onMarkUnbilled={() => void patchSingleBilled(e.id, false)}
+                                    onDelete={() => void remove(e.id)}
+                                  />
+                                </>
+                              )}
+                            </div>
                           </div>
                           <p className="text-xs text-muted tabular-nums">
                             {formatTime(s, timezone)}–
@@ -683,33 +718,6 @@ export default function EntryList({
                             </div>
                           )}
                         </div>
-                        {!inSelect && (
-                          <div className="flex shrink-0 flex-col items-end gap-1.5">
-                            {!e.running && (
-                              <button
-                                className="btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0"
-                                onClick={() => beginEdit(e)}
-                                aria-label="Edit entry"
-                                title="Edit"
-                              >
-                                <IconEdit size={16} aria-hidden />
-                              </button>
-                            )}
-                            {!e.running && (
-                              <RowMoreMenu
-                                entry={e}
-                                open={menuOpenId === e.id}
-                                marking={rowPending}
-                                onOpenChange={(open) =>
-                                  setMenuOpenId(open ? e.id : null)
-                                }
-                                onMarkBilled={() => void patchSingleBilled(e.id, true)}
-                                onMarkUnbilled={() => void patchSingleBilled(e.id, false)}
-                                onDelete={() => void remove(e.id)}
-                              />
-                            )}
-                          </div>
-                        )}
                       </div>
                     </li>
                   );
