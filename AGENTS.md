@@ -14,14 +14,21 @@
 
 **Clockinoff / Timely v1** — a tiny, solo time tracker. Manual entries + one
 running timer + projects/clients/tags + CSV/PDF export. No calendar, no teams,
-no Clockify sync, no Google auth. The full product scope lives in
-[`README.md`](./README.md); read it before making non-trivial changes.
+no Clockify sync. Auth is email + password with an optional
+**Continue with Google** button on `/login` + `/register` (enabled per
+deploy via `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`; see the
+Authentication section in [`README.md`](./README.md)). The full product
+scope lives in [`README.md`](./README.md); read it before making
+non-trivial changes.
 
 ### Stack (short)
 
 - **Next.js 16** App Router · React 19 · TypeScript · Tailwind
 - **Postgres 16** · **Drizzle ORM** (`drizzle-kit` migrations under `./drizzle`)
-- **Auth**: email + password (argon2id) + DB sessions + `httpOnly` cookie
+- **Auth**: email + password (argon2id) + DB sessions + `httpOnly` cookie;
+  optional **Continue with Google** (OAuth 2.0 / OIDC) when
+  `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` are set — same session
+  cookie, no second user table
 - **PDF/CSV export**: `@react-pdf/renderer` + hand-rolled CSV
 - **Tests**: Vitest (unit + API) + Playwright (smoke)
 - **CI**: GitHub Actions with a Postgres 16 service container and a **≥90%
@@ -55,17 +62,24 @@ tests/
 
 ### Invariants an agent must not silently break
 
-- **User documentation is part of the surface area.** The end-user site
-  lives in [`/docs`](./docs) (published from GitHub Pages) and is linked
-  from the authenticated app shell (top header on all sizes, plus the
+- **User documentation is part of the surface area.** The markdown
+  source lives in [`/docs`](./docs) and the **primary** rendering is
+  the in-app `/docs` route (Next.js — `src/app/docs/*` +
+  `src/lib/docs-content.ts`) served on the same origin as the app, so
+  the Docs link in the app shell always resolves. The GitHub Pages
+  mirror at <https://reubinoff.github.io/Clockinoff/> is an optional
+  secondary rendering of the same files. The Docs link is wired from
+  the authenticated app shell (top header on all sizes, plus the
   desktop footer) and from the login/register screens via
-  `src/lib/docs.ts`. Any change
-  that alters user-visible behaviour — new UI, new/renamed page, new
-  filter, new export column, changed defaults, changed error text —
-  **must update the matching page under `/docs` in the same commit**.
-  If you cannot update the docs in the same commit, open a follow-up
-  issue and link it from the commit body. See §10 for the mapping from
-  code to doc page.
+  `src/lib/docs.ts`. Any change that alters user-visible behaviour —
+  new UI, new/renamed page, new filter, new export column, changed
+  defaults, changed error text — **must update the matching page under
+  `/docs` in the same commit** (which updates both the in-app route and
+  the Pages mirror automatically, since they share the source). If you
+  add a new doc page, also add it to `DOC_PAGES` in
+  `src/lib/docs-content.ts`. If you cannot update the docs in the same
+  commit, open a follow-up issue and link it from the commit body. See
+  §10 for the mapping from code to doc page.
 - **One running timer per user** — enforced by a partial unique index
   (`WHERE end_at IS NULL`). Second start returns HTTP 409
   `TIMER_ALREADY_RUNNING` with `entry_id`. Do not drop the index.
@@ -284,8 +298,11 @@ is done.
 
 - Do **not** invent secrets, API keys, database URLs, or OAuth client IDs.
   Use placeholders in `.env.example` and stop.
-- Do **not** add new third-party integrations that weren’t explicitly asked
-  for (no Clockify sync, no Google auth, no analytics SDKs, no telemetry).
+- Do **not** add new unsolicited third-party integrations (no Clockify
+  sync, no analytics SDKs, no additional OAuth providers, no telemetry
+  SDKs). The existing **Continue with Google** OAuth path on `/login`
+  and `/register` is in-scope and may be maintained; do not remove it
+  or regress its account-attach rules without an explicit ask.
 - Do **not** relax the coverage gate, the timer unique index, the
   `start_at < end_at` check, or ownership scoping to make a test pass.
 - Do **not** rewrite committed migrations. Add a new one.

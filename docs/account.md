@@ -43,6 +43,13 @@ you lose your password, either:
   for local dev setup), or
 - Ask the operator of your instance to reset your session.
 
+If you created your account by clicking **Continue with Google** on
+`/register`, it has **no password** at all — the only way to sign back
+in is to use **Continue with Google** again from the same Google
+account. See
+[Continue with Google]({{ '/getting-started' | relative_url }}#or-continue-with-google)
+for the full flow.
+
 ---
 
 ## Timezone

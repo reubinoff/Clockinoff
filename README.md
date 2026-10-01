@@ -70,6 +70,12 @@ run a company, Clockinoff is the opposite of that.
 - **In-app documentation** at `/docs` — the same markdown is served inside
   the running app so the "Docs" link always resolves regardless of GitHub
   Pages state.
+- **Email + password or Continue with Google.** Register and sign in with
+  an email + password (argon2id hashes, DB sessions, `httpOnly` cookie),
+  or use the **Continue with Google** button on `/login` and `/register`
+  when the deployer has configured the OAuth client. See
+  [Authentication](#authentication) for the exact env wiring and
+  attach-vs-create rules.
 - **MIT licensed** and small enough to read end-to-end.
 
 ## Not in v1
@@ -79,7 +85,11 @@ By design — these are not "coming soon", they are "not what this product is":
 - No teams, workspaces, or shared entries.
 - No calendar view or dashboards beyond the entry list + exports.
 - No Clockify / Toggl / third-party sync.
-- No Google / OAuth login — email + password only (argon2id + DB sessions).
+- No OAuth providers beyond the single **Continue with Google** button
+  on `/login` and `/register` (optional, enabled only when the deployer
+  sets `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` — see
+  [Authentication](#authentication)). Email + password with argon2id
+  remains the primary path.
 
 See the [FAQ](https://clockinoff.reubinoff.com/docs/faq) for the longer
 version.
@@ -147,7 +157,9 @@ point at a Pages mirror or an internal fork.
 - **Next.js 16** (App Router, webpack build) · **React 19** · **TypeScript** · **Tailwind CSS 3**
 - **Postgres 16** · **Drizzle ORM** · `drizzle-kit` migrations under [`./drizzle`](./drizzle)
 - **Auth**: email + password with **argon2id**, **database sessions**, and a
-  `httpOnly / Secure / SameSite=Lax` cookie — no OAuth providers
+  `httpOnly / Secure / SameSite=Lax` cookie; optional **Continue with
+  Google** (OAuth 2.0 / OIDC) when `GOOGLE_CLIENT_ID` and
+  `GOOGLE_CLIENT_SECRET` are configured. No other OAuth providers.
 - **PDF**: [`@react-pdf/renderer`](https://react-pdf.org/) · **CSV**: hand-rolled streaming writer
 - **Testing**: [Vitest](https://vitest.dev/) (unit + API) + [Playwright](https://playwright.dev/) (smoke)
 - **Observability**: [`@azure/monitor-opentelemetry`](https://learn.microsoft.com/azure/azure-monitor/app/opentelemetry-enable?tabs=nodejs) with a strict redaction contract
@@ -168,6 +180,8 @@ services in `src/server/services/*`. Every error is shaped as
 | `POST` | `/api/auth/login` | `{ email, password }` → 200 |
 | `POST` | `/api/auth/logout` | 204, clears cookie |
 | `GET` / `PATCH` | `/api/auth/me` | current user; `PATCH { timezone }` |
+| `GET` | `/api/auth/google/start` | begins the **Continue with Google** flow; 302 to Google (fail-closed to `/login?error=network` when Google env vars are blank) |
+| `GET` | `/api/auth/google/callback` | OIDC callback; 302 to `/app` on success, `/login?error=...` on cancel / unverified / network |
 | CRUD | `/api/clients`, `/api/projects`, `/api/tags` | `?archived=true` includes archived |
 | `GET` | `/api/timer` | running entry or `null` |
 | `POST` | `/api/timer/start` | 201 running entry; 409 `TIMER_ALREADY_RUNNING` with `entry_id` |
@@ -186,6 +200,49 @@ services in `src/server/services/*`. Every error is shaped as
 - **Overlaps between *closed* entries are allowed by design** — e.g. for corrections after a forgotten stop.
 - **`amount` is derived**: `billable ? duration_hours * effective_rate : null`, where `effective_rate = entry.rate ?? project.default_rate`. Clients never POST a monetary amount.
 - **Every row is scoped by `user_id`.** Every service verifies ownership — a new service without an ownership check is treated as a bug.
+
+## Authentication
+
+Clockinoff has two sign-in paths that share one user table:
+
+1. **Email + password** (primary). Passwords are stored as **argon2id**
+   hashes; the plaintext is never persisted or logged. Sessions are rows
+   in the `sessions` table, referenced by an
+   `httpOnly / SameSite=Lax` cookie called `timely_session` (also
+   `Secure` in production).
+2. **Continue with Google** (optional, deployer-configured). A single
+   secondary button on `/login` and `/register` runs a server-side
+   OAuth 2.0 / OIDC flow against Google, verifies the `id_token`, and
+   issues the same session cookie as the password path. Account rules:
+   - **Verified email, no existing user** → create a passwordless user,
+     attach the Google `sub`, sign in.
+   - **Verified email, existing user without a Google `sub`** → attach
+     the `sub` to that user. The existing password keeps working;
+     nothing is replaced.
+   - **Verified email, existing user with the same `sub`** → sign in.
+   - **Verified email, existing user with a *different* `sub`** →
+     fail closed (anomaly; never show "account exists").
+   - **Email not verified at Google** → fail closed.
+
+### Google env vars
+
+Set in [`.env.example`](./.env.example) locally and in Azure Web App
+Configuration (or your platform's equivalent) in production:
+
+| Variable | Required | Notes |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` | Yes to enable the button | OAuth 2.0 client ID from Google Cloud Console |
+| `GOOGLE_CLIENT_SECRET` | Yes to enable the button | Matching client secret |
+| `GOOGLE_REDIRECT_URI` | Optional | Overrides the default `<NEXTAUTH_URL>/api/auth/google/callback`. Production value is `https://clockinoff.reubinoff.com/api/auth/google/callback` |
+
+Leave `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` blank and the
+`/api/auth/google/start` route fail-closes to `/login?error=network` —
+the button is still rendered on the auth screens but clicking it just
+returns the user to `/login` with the generic error. Email + password
+continues to work.
+
+See the user-facing walkthrough in
+[`docs/getting-started.md`](./docs/getting-started.md#or-continue-with-google).
 
 ## Timezones
 
@@ -269,7 +326,12 @@ of truth; the short version is:
 
 4. The CD job runs `npm run db:migrate` against the target DB before
    starting the app. There is nothing else to wire — no Clockify, no
-   Google, no calendar callbacks. Outbound only.
+   calendar callbacks. Outbound only. If you want the **Continue with
+   Google** button to work on your deploy, also set the three
+   `GOOGLE_*` App Settings described in
+   [Authentication](#authentication); leaving them blank disables the
+   button path (`/api/auth/google/start` fail-closes to
+   `/login?error=network`) and the rest of the app keeps working.
 
 ### Application Insights
 
