@@ -10,7 +10,10 @@ import {
   IconDiscard,
   IconBillable,
   IconChevronDown,
+  IconEdit,
 } from "@/components/icons";
+import ManualEntryForm from "@/components/ManualEntryForm";
+import ManualEntrySheet from "@/components/ManualEntrySheet";
 
 interface Entry {
   id: string;
@@ -31,10 +34,11 @@ interface Project {
 
 // `timezone` is still accepted so the server layout keeps supplying it, but
 // per #64 the timezone label no longer renders inside the dock — it lives in
-// the desktop footer / Account page only. Keeping the prop avoids a layout
-// refactor and preserves the public shape for tests + other callers.
+// the desktop footer / Account page only. #65 Manual mode and #83 mobile
+// Manual sheet both need it, so it is forwarded to ManualEntryForm /
+// ManualEntrySheet so start/end time inputs resolve in the user's zone.
 export default function TimerBar({
-  timezone: _timezone,
+  timezone,
 }: {
   timezone: string;
 }): JSX.Element {
@@ -51,6 +55,14 @@ export default function TimerBar({
   // V2-5 Shaul lock: Details (project + billable + tz) collapsed by default.
   // Description stays visible because it's the primary interaction.
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // #65 Manual mode: md+ dock toggle Timer ↔ Manual. Default Timer. While a
+  // timer is running the toggle is hidden and `mode` is forced back to
+  // "timer" so the running wash + Stop/Discard are never obscured.
+  const [mode, setMode] = useState<"timer" | "manual">("timer");
+  // #83 mobile Manual entry — the dock button opens a V2-9 bottom sheet
+  // that renders the same ManualEntryForm. State lives here so the sheet
+  // sees the latest projects list without re-fetching on open.
+  const [manualSheetOpen, setManualSheetOpen] = useState(false);
   const patchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadProjects = useCallback(async () => {
@@ -254,6 +266,17 @@ export default function TimerBar({
     ? Math.max(0, Math.floor((now - new Date(entry.start_at).getTime()) / 1000))
     : 0;
   const running = entry !== null;
+  // Lock mode to "timer" while running — a Manual Add during a live timer
+  // would compete with the running wash and the Stop/Discard primaries,
+  // and the locked brief says Manual is only an idle-state entry point.
+  // We derive `manualActive` from both state and running so no effect is
+  // needed to clamp mode; the toggle itself is also hidden while running.
+  const showManualToggle = !running;
+  const showMobileManualBtn = !running;
+  const manualActive = mode === "manual" && !running;
+  const sheetShouldBeOpen = manualSheetOpen && !running;
+
+  const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }));
 
   return (
     <div
@@ -269,8 +292,69 @@ export default function TimerBar({
       // expanded dock never permanently covers the first entry row.
       data-timer-dock-root="true"
       data-timer-details-open={detailsOpen ? "true" : "false"}
+      data-timer-mode={manualActive ? "manual" : "timer"}
     >
-      <div className="mx-auto max-w-6xl px-4 py-2 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3">
+      {/* #65 md+ mode toggle. Quiet segmented control, hidden on mobile and
+          while a timer is running. Sits on its own narrow strip above the
+          dock row so the main dock baseline keeps the locked #64 order. */}
+      {showManualToggle && (
+        <div className="hidden md:flex mx-auto max-w-6xl px-4 pt-2">
+          <div
+            className="inline-flex items-center rounded-full border border-border bg-surface p-0.5"
+            role="tablist"
+            aria-label="Entry mode"
+            data-timer-mode-toggle="true"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!manualActive}
+              onClick={() => setMode("timer")}
+              className={
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-body-sm transition-colors min-h-[36px] " +
+                (manualActive
+                  ? "text-muted hover:text-ink"
+                  : "bg-canvas-2 text-ink")
+              }
+              data-timer-mode-timer="true"
+            >
+              <IconPlay size={14} aria-hidden />
+              <span>Timer</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={manualActive}
+              onClick={() => setMode("manual")}
+              className={
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-body-sm transition-colors min-h-[36px] " +
+                (manualActive
+                  ? "bg-canvas-2 text-ink"
+                  : "text-muted hover:text-ink")
+              }
+              data-timer-mode-manual="true"
+            >
+              <IconEdit size={14} aria-hidden />
+              <span>Manual</span>
+            </button>
+          </div>
+        </div>
+      )}
+      {manualActive && (
+        <div className="hidden md:block mx-auto max-w-6xl px-4 py-2">
+          <ManualEntryForm
+            projects={projectOptions}
+            timezone={timezone}
+            layout="inline"
+          />
+        </div>
+      )}
+      <div
+        className={
+          "mx-auto max-w-6xl px-4 py-2 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3 " +
+          (manualActive ? "md:hidden" : "")
+        }
+      >
         {/* #64 md+ dock lock (Moshe product-lock 2026-10-01):
               description | Project ▾ | Billable chip | 00:00:00 | Start
             is one `items-center` baseline. On md+ we flow every control into
@@ -322,17 +406,36 @@ export default function TimerBar({
               </button>
             </>
           ) : (
-            <button
-              className="btn btn-primary timer-start-idle press-scale flex-1 md:flex-none md:order-6"
-              disabled={pending}
-              onClick={start}
-              aria-label="Start timer"
-              aria-busy={pending || undefined}
-              data-timer-start-btn="true"
-            >
-              <IconPlay size={16} aria-hidden />
-              <span>Start</span>
-            </button>
+            <>
+              {/* #83 mobile Manual entry. Secondary (ghost outline) button —
+                   purple stays reserved for Start so there are never two
+                   competing primaries. Hidden on md+ because desktop uses
+                   the segmented Timer | Manual toggle at the top of the
+                   dock instead. */}
+              {showMobileManualBtn && (
+                <button
+                  type="button"
+                  className="btn md:hidden shrink-0 min-h-[44px]"
+                  onClick={() => setManualSheetOpen(true)}
+                  aria-label="Add manual entry"
+                  data-timer-manual-mobile-btn="true"
+                >
+                  <IconEdit size={16} aria-hidden />
+                  <span>Manual</span>
+                </button>
+              )}
+              <button
+                className="btn btn-primary timer-start-idle press-scale flex-1 md:flex-none md:order-6"
+                disabled={pending}
+                onClick={start}
+                aria-label="Start timer"
+                aria-busy={pending || undefined}
+                data-timer-start-btn="true"
+              >
+                <IconPlay size={16} aria-hidden />
+                <span>Start</span>
+              </button>
+            </>
           )}
           <button
             type="button"
@@ -405,6 +508,13 @@ export default function TimerBar({
           </div>
         )}
       </div>
+      {sheetShouldBeOpen && (
+        <ManualEntrySheet
+          projects={projectOptions}
+          timezone={timezone}
+          onClose={() => setManualSheetOpen(false)}
+        />
+      )}
     </div>
   );
 }

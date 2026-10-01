@@ -99,10 +99,15 @@ so if you host your own instance you can update entries from a script.
 
 **Can I add an entry without running a timer?**
 
-The v1 UI does not have a "New entry" form — every entry is created by
-starting a timer and later stopping it. The API accepts manual entry
-creation (`POST /api/entries`), so scripted imports work; a UI for it is
-not part of v1.
+Yes. The timer dock has a **Timer | Manual** toggle (desktop) and a
+secondary **Manual** button next to **Start** (mobile) while idle;
+either opens the manual-entry form, where you type a description,
+start / end times, and a date, and the duration is derived for you.
+See [Using the timer → Add a manual entry]({{ '/timer' | relative_url }}#add-a-manual-entry)
+for the full flow.
+
+The underlying `POST /api/entries` endpoint is the same one the UI
+calls, so scripted imports still work.
 
 ## Empty exports
 
