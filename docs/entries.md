@@ -74,24 +74,28 @@ On a phone each entry renders as a card with:
 - A **two-line description** (whatever you typed in the timer bar; long
   text is clamped to two lines).
 - A right-aligned trailing cluster on the first line with the
-  **duration** (hours, e.g. `1.25h`), the **edit** control (pencil icon,
-  44 × 44 px tap target) that opens the edit sheet, and the **more**
-  control (**⋯**) with Mark as billed / Mark as unbilled / Delete. The
-  three sit on one horizontal baseline so the ⋯ never wraps to a second
-  row even when the description clamps to two lines.
+  **duration** (hours, e.g. `1.25h`), the **play** control (▶, start a
+  new timer from this entry — see [Resume an entry](#resume-an-entry)
+  below), the **edit** control (pencil icon, 44 × 44 px tap target)
+  that opens the edit sheet, and the **more** control (**⋯**) with
+  Mark as billed / Mark as unbilled / Delete. All four sit on one
+  horizontal baseline so the ⋯ never wraps to a second row even when
+  the description clamps to two lines.
+- A **project chip** underneath — a small coloured dot plus the project
+  name, so you can tell projects apart at a glance before you read the
+  times. Entries with no project skip the chip entirely.
 - A meta line with the **time range** (start–end in your timezone; end is
-  `…` for a running entry, only visible if you filter it in) followed by
-  the project name if the entry has one.
+  `…` for a running entry, only visible if you filter it in).
 - Tag chips underneath and, if the entry has been marked as billed, a
   muted **Billed** pill — no loud badge, no colour.
 
 On tablets and desktops (`md+`, ≥ 768 px wide) the same data lays out
-as a **flat one-line row**: description · project chip (on `lg+`) ·
-muted **Billed** pill (if billed) · time range · right-aligned
-duration · Edit · **⋯**. The old permanent red × delete column is
-gone — Delete now lives inside the **⋯** menu for a quieter default
-view. Day groups still render as rounded cards with hairline dividers
-between rows.
+as a **flat one-line row**: description · project chip with the same
+coloured dot (on `lg+`) · muted **Billed** pill (if billed) · time
+range · right-aligned duration · Play · Edit · **⋯**. The old
+permanent red × delete column is gone — Delete now lives inside the
+**⋯** menu for a quieter default view. Day groups still render as
+rounded cards with hairline dividers between rows.
 
 The billable amount uses the *effective rate* stored on the entry —
 either the entry's own rate or, if that is null, the project's
@@ -156,6 +160,28 @@ flash em-dash while the request is pending.
 
 You cannot delete the currently running entry from this list — for that
 use **Discard** on the timer bar (see [Using the timer]({{ '/timer' | relative_url }}#discard-a-timer)).
+
+---
+
+## Resume an entry
+
+Tap the **▶ play** icon on an entry's row to pick up where you left
+off. Clockinoff starts a **brand-new** timer with that entry's
+description, project, billable flag, and tags copied forward — the
+historical row stays untouched in the list, and a fresh entry begins
+in the timer dock with `start_at = now`. A short **Timer resumed**
+toast confirms the hand-off.
+
+Because Clockinoff only allows **one running timer at a time**, the
+Play button is dimmed while a timer is already running. If you tap it
+anyway (for example right as another tab started one), the server
+rejects the second start with `TIMER_ALREADY_RUNNING` and Clockinoff
+shows the gentle *A timer is already running* toast instead of
+double-starting. Stop or Discard the current timer first, then try
+again.
+
+Resume is not offered for the currently running entry — it is already
+live in the dock.
 
 ---
 

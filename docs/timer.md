@@ -145,6 +145,11 @@ Trying to start a second timer while one is already running is rejected by
 the server (error code `TIMER_ALREADY_RUNNING`, with the id of the entry
 that is already running). The UI does not offer a "start" button while a
 timer is active — you must **Stop** or **Discard** the current one first.
+The same rule applies to the per-entry **▶ play** button on the
+[entries list]({{ '/entries' | relative_url }}#resume-an-entry): while
+a timer is running, every row's Play button is dimmed; if a race still
+lands a tap, the server rejects it and Clockinoff surfaces a short
+*A timer is already running* toast instead of double-starting.
 
 ---
 
