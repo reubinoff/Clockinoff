@@ -6,6 +6,8 @@ import {
   formatDayLabel,
   formatDurationHours,
   formatTime,
+  formatWeekRangeLabel,
+  startOfIsoWeekKey,
 } from "@/lib/tz";
 import { emitToast, onEntryAdded } from "@/lib/events";
 import { handleAuthFailure, isAuthFailure } from "@/lib/auth-ui";
@@ -43,31 +45,58 @@ interface DayGroup {
   entries: Entry[];
 }
 
-// V2-7 §Day groups: bucket the filtered list by zoned day-key, preserving the
-// server's newest-first order. `now` is passed in so Today/Yesterday labels
-// track the user's clock without re-rendering every second — the daily
-// boundary is stable within a session for practical purposes.
-function groupByDay(entries: Entry[], timezone: string, now: Date): DayGroup[] {
-  const groups: DayGroup[] = [];
-  const byKey = new Map<string, DayGroup>();
+// #81 Mobile Week → Day → Entry: each week carries its Monday-first date-
+// range label plus the day groups that fall inside it. We keep the day-group
+// shape and totalling untouched so the per-day card chrome keeps working
+// identically; the week wrapper is purely additive.
+interface WeekGroup {
+  key: string;
+  label: string;
+  totalSeconds: number;
+  days: DayGroup[];
+}
+
+// V2-7 §Day groups → #81 Week → Day groups: bucket the filtered list by
+// zoned day-key first, then by that day's ISO (Monday-first) week-key,
+// preserving the server's newest-first order. `now` is passed in so
+// Today/Yesterday labels + the "This week" week-label track the user's
+// clock without re-rendering every second — both boundaries are stable
+// within a session for practical purposes.
+function groupByWeek(entries: Entry[], timezone: string, now: Date): WeekGroup[] {
+  const weeks: WeekGroup[] = [];
+  const byWeekKey = new Map<string, WeekGroup>();
+  const byDayKey = new Map<string, DayGroup>();
   for (const e of entries) {
     const start = new Date(e.start_at);
-    const key = formatDate(start, timezone);
-    let g = byKey.get(key);
-    if (!g) {
-      g = {
-        key,
+    const dayKey = formatDate(start, timezone);
+    const weekKey = startOfIsoWeekKey(start, timezone);
+    let w = byWeekKey.get(weekKey);
+    if (!w) {
+      w = {
+        key: weekKey,
+        label: formatWeekRangeLabel(weekKey, now, timezone),
+        totalSeconds: 0,
+        days: [],
+      };
+      byWeekKey.set(weekKey, w);
+      weeks.push(w);
+    }
+    let d = byDayKey.get(dayKey);
+    if (!d) {
+      d = {
+        key: dayKey,
         label: formatDayLabel(start, timezone, now),
         totalSeconds: 0,
         entries: [],
       };
-      byKey.set(key, g);
-      groups.push(g);
+      byDayKey.set(dayKey, d);
+      w.days.push(d);
     }
-    g.entries.push(e);
-    g.totalSeconds += e.duration_seconds;
+    d.entries.push(e);
+    d.totalSeconds += e.duration_seconds;
+    w.totalSeconds += e.duration_seconds;
   }
-  return groups;
+  return weeks;
 }
 
 // Shaul-locked (2026-10-01) billed redesign: a closed billable entry is the
@@ -184,11 +213,12 @@ export default function EntryList({
     if (pruned) setSelectedIds(next);
   }, [filtered, selectedIds]);
 
-  // Recompute Today/Yesterday labels on mount so a client whose clock advances
-  // past midnight since SSR still sees the correct label after hydration.
+  // Recompute Today/Yesterday + "This week" labels on mount so a client
+  // whose clock advances past midnight since SSR still sees the correct
+  // labels after hydration.
   const now = useMemo(() => new Date(), []);
-  const groups = useMemo(
-    () => groupByDay(filtered, timezone, now),
+  const weeks = useMemo(
+    () => groupByWeek(filtered, timezone, now),
     [filtered, timezone, now],
   );
 
@@ -502,14 +532,64 @@ export default function EntryList({
             : "No entries yet. Start the timer above."}
         </div>
       ) : (
-        <div className="space-y-5">
-          {groups.map((g) => (
-            <section key={g.key} aria-label={g.label} className="space-y-2">
+        <div className="space-y-6" data-entries-weeks="true">
+          {weeks.map((w) => (
+            <section
+              key={w.key}
+              aria-label={w.label}
+              className="space-y-3"
+              data-entries-week={w.key}
+            >
+              {/* #81 Week band: sticks just under the sticky app header on
+                  scroll so the user always sees which week the current
+                  rows belong to while scanning down a long range. The
+                  band is a flat canvas-tinted surface — not a card — so
+                  it reads as a header rather than a competing card. z
+                  stays below the app header (z-20) and below the mobile
+                  timer dock (z-30) so neither is covered. */}
+              <header
+                className={
+                  // Mobile app header is logo-row + 44px user menu + 10px pad
+                  // top/bottom + 1px border ≈ 65px tall, so pin the week band
+                  // right below it. z-[5] stays under the app header (z-20)
+                  // and the mobile timer dock (z-30) so neither is covered.
+                  "sticky top-[64px] z-[5] -mx-4 px-4 py-2 border-b border-border " +
+                  "bg-canvas/95 backdrop-blur supports-[backdrop-filter]:bg-canvas/80 " +
+                  "md:static md:mx-0 md:px-1 md:py-1 md:border-0 md:bg-transparent md:backdrop-blur-0"
+                }
+                data-entries-week-header="true"
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <h2 className="text-body-sm font-semibold tracking-tight text-ink">
+                    {w.label}
+                  </h2>
+                  <span
+                    className="text-xs text-muted tabular-nums shrink-0"
+                    data-entries-week-total={w.key}
+                  >
+                    <span className="timer-digits text-ink">
+                      {formatDurationHours(w.totalSeconds)}
+                    </span>
+                    h total
+                  </span>
+                </div>
+              </header>
+              <div className="space-y-5">
+          {w.days.map((g) => (
+            <section
+              key={g.key}
+              aria-label={g.label}
+              className="space-y-2"
+              data-entries-day={g.key}
+            >
               <header className="flex items-baseline justify-between px-1">
                 <h3 className="text-body-sm font-semibold text-ink">
                   {g.label}
                 </h3>
-                <span className="text-xs text-muted tabular-nums">
+                <span
+                  className="text-xs text-muted tabular-nums"
+                  data-entries-day-total={g.key}
+                >
                   <span className="timer-digits">
                     {formatDurationHours(g.totalSeconds)}
                   </span>
@@ -723,6 +803,9 @@ export default function EntryList({
                   );
                 })}
               </ul>
+            </section>
+          ))}
+              </div>
             </section>
           ))}
         </div>
