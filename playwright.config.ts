@@ -7,6 +7,11 @@ const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  // Run `tests/e2e/global-setup.ts` before anything else (including the
+  // webServer). It migrates the Playwright app DB using the same
+  // `runMigrations()` path unit tests use. If migrations throw, Playwright
+  // aborts and the CI job fails hard — see GitHub issue #55.
+  globalSetup: "./tests/e2e/global-setup.ts",
   timeout: 60_000,
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,

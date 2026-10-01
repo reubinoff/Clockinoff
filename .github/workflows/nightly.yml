@@ -103,8 +103,11 @@ jobs:
 
       - name: Run Playwright e2e
         env:
-          # `next start` runs here in NODE_ENV=production; leave test DB
-          # untouched and use the main dev DB the migrations already prepared.
+          # `next start` runs here in NODE_ENV=production and reads
+          # DATABASE_URL (= the `timely` DB). Playwright's globalSetup
+          # (`tests/e2e/global-setup.ts`) runs the same migrations unit
+          # tests use against that DB before the webServer listens; if
+          # migrate fails the whole job fails. See GitHub issue #55.
           NODE_ENV: production
         run: npm run test:e2e
 
