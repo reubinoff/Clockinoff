@@ -9,6 +9,31 @@ env:
   NODE_VERSION: "24"
 
 jobs:
+  # Fast "linters check" (issue #58): runs ESLint (and the cheap TypeScript
+  # typecheck) with no Postgres service, so a lint-only regression fails in
+  # ~a minute on push and PR instead of waiting on DB bootstrap in `test`.
+  # The same checks still run inside `test` as a safety net.
+  lint:
+    name: Linters
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
   test:
     name: Unit + API tests
     runs-on: ubuntu-latest
