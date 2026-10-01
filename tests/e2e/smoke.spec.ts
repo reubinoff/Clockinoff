@@ -16,8 +16,14 @@ const description = `playwright smoke ${Date.now()}`;
 test.describe.serial("Timer smoke", () => {
   test("register → start/stop timer → entries list refreshes → CSV + PDF export", async ({
     page,
-    request,
   }) => {
+    // Use `page.request` (== page.context().request) so API calls share the
+    // same cookie jar as the browser session we just registered in. The
+    // top-level `request` fixture is a stand-alone APIRequestContext that
+    // does not inherit the page's cookies — authenticated endpoints like
+    // /api/export/* reject it with 401. Shaul lock: no weakening of the
+    // assertions themselves (we still expect 200 + the correct bodies).
+    const request = page.request;
     await page.goto("/register");
     await page.fill('input[type="email"]', email);
     await page.fill('input[type="password"]', password);
