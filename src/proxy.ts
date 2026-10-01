@@ -18,7 +18,11 @@ function isProtected(pathname: string): boolean {
   return PROTECTED_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-export function middleware(req: NextRequest): NextResponse {
+// Next 16 renamed the `middleware` file+export convention to `proxy`.
+// The behaviour is identical: gate `/app/*` and the authenticated API tree
+// on the session cookie, return 401 JSON for APIs and redirect `/app` to
+// `/login` with a `?next=` return URL.
+export function proxy(req: NextRequest): NextResponse {
   const { pathname } = req.nextUrl;
   const hasCookie = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
   if (!isProtected(pathname)) return NextResponse.next();
