@@ -277,6 +277,11 @@ export default function TimerBar({
   const sheetShouldBeOpen = manualSheetOpen && !running;
 
   const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }));
+  // #82 mobile collapsed band preview: show the typed/running description
+  // if there is one, otherwise fall back to the same placeholder the input
+  // uses so the band reads as an invitation to tap in. We trim so a stray
+  // leading space doesn't suppress the placeholder.
+  const hasDescription = description.trim().length > 0;
 
   return (
     <div
@@ -290,10 +295,116 @@ export default function TimerBar({
       // #64 mobile scroll padding: globals.css uses :has() on this
       // attribute to bump `main`'s mobile pb when Details is open, so the
       // expanded dock never permanently covers the first entry row.
+      // #82 the attribute now also drives the collapsed-vs-expanded mobile
+      // layout — the collapsed band is a thin description/elapsed/Stop
+      // strip, the expanded panel adds the full input + project + billable.
       data-timer-dock-root="true"
       data-timer-details-open={detailsOpen ? "true" : "false"}
       data-timer-mode={manualActive ? "manual" : "timer"}
     >
+      {/* #82 mobile grabber (md:hidden). Thin pill handle at the top of the
+          dock that toggles the expanded panel. Button itself is 32px tall
+          but hitArea pads up to ≥44px via the surrounding py-2 on the band
+          below — the grabber plus the first row give a comfortable tap
+          target even for the handle alone. */}
+      <button
+        type="button"
+        className="md:hidden flex w-full items-center justify-center py-1.5 group min-h-[20px]"
+        onClick={() => setDetailsOpen((v) => !v)}
+        aria-expanded={detailsOpen}
+        aria-controls="timer-mobile-expanded"
+        aria-label={
+          detailsOpen ? "Collapse timer details" : "Expand timer details"
+        }
+        data-timer-grabber="true"
+      >
+        <span
+          className="block h-1 w-10 rounded-full bg-border-strong group-hover:bg-muted transition-colors"
+          aria-hidden
+        />
+      </button>
+      {/* #82 mobile collapsed band — thin description / elapsed / primary.
+          Tapping the description area expands the full editor so the
+          running description stays editable, matching the competitor
+          dock without a visible input in the collapsed state. Hidden on
+          md+ (desktop keeps the one-baseline band from #64). */}
+      <div
+        className={
+          "md:hidden mx-auto max-w-6xl px-4 pb-2 items-center gap-2 " +
+          (detailsOpen ? "hidden" : "flex")
+        }
+        data-timer-mobile-collapsed="true"
+      >
+        <button
+          type="button"
+          onClick={() => setDetailsOpen(true)}
+          className="flex-1 min-w-0 inline-flex items-center min-h-[44px] text-left truncate text-body transition-colors hover:text-ink"
+          aria-label={
+            hasDescription
+              ? "Edit timer description"
+              : "What are you working on?"
+          }
+          data-timer-mobile-desc-trigger="true"
+        >
+          <span
+            className={
+              "block w-full truncate " +
+              (hasDescription ? "text-ink" : "text-muted")
+            }
+          >
+            {hasDescription ? description : "What are you working on?"}
+          </span>
+        </button>
+        <span
+          className={
+            "timer-digits text-timer-md shrink-0 text-right text-ink min-w-[76px]" +
+            (running ? " timer-running-pulse" : "")
+          }
+          aria-live="polite"
+          aria-label={running ? "Elapsed time" : "Timer idle"}
+        >
+          {running ? formatDurationHms(seconds) : "00:00:00"}
+        </span>
+        {running ? (
+          <button
+            className="btn btn-primary press-scale shrink-0 min-h-[44px] !px-4"
+            disabled={pending}
+            onClick={stop}
+            aria-label="Stop timer"
+            aria-busy={pending || undefined}
+            data-timer-stop-btn="true"
+          >
+            <IconStop size={16} aria-hidden />
+            <span>Stop</span>
+          </button>
+        ) : (
+          <>
+            {showMobileManualBtn && (
+              <button
+                type="button"
+                className="btn shrink-0 min-h-[44px] !px-3"
+                onClick={() => setManualSheetOpen(true)}
+                aria-label="Add manual entry"
+                data-timer-manual-mobile-btn="true"
+              >
+                <IconEdit size={16} aria-hidden />
+                <span className="sr-only">Manual</span>
+              </button>
+            )}
+            <button
+              className="btn btn-primary timer-start-idle press-scale shrink-0 min-h-[44px] !px-4"
+              disabled={pending}
+              onClick={start}
+              aria-label="Start timer"
+              aria-busy={pending || undefined}
+              data-timer-start-btn="true"
+            >
+              <IconPlay size={16} aria-hidden />
+              <span>Start</span>
+            </button>
+          </>
+        )}
+      </div>
       {/* #65 md+ mode toggle. Quiet segmented control, hidden on mobile and
           while a timer is running. Sits on its own narrow strip above the
           dock row so the main dock baseline keeps the locked #64 order. */}
@@ -350,8 +461,14 @@ export default function TimerBar({
         </div>
       )}
       <div
+        id="timer-mobile-expanded"
         className={
-          "mx-auto max-w-6xl px-4 py-2 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3 " +
+          // #82 mobile: this row is the EXPANDED panel — only shown when the
+          // grabber is open. md+ keeps the one-baseline inline dock from
+          // #64 (always visible). The desktop manual-form sub-tree still
+          // hides the whole timer row via `md:hidden` on itself below.
+          "mx-auto max-w-6xl px-4 py-2 flex-col gap-2 md:flex md:flex-row md:flex-wrap md:items-center md:gap-3 " +
+          (detailsOpen ? "flex " : "hidden ") +
           (manualActive ? "md:hidden" : "")
         }
       >
@@ -439,7 +556,7 @@ export default function TimerBar({
           )}
           <button
             type="button"
-            className="btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2 shrink-0 md:order-7"
+            className="btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2 shrink-0 md:order-7 hidden md:inline-flex"
             onClick={() => setDetailsOpen((v) => !v)}
             aria-expanded={detailsOpen}
             aria-controls="timer-details"

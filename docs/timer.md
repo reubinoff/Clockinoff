@@ -34,25 +34,37 @@ The timer dock is always visible while you're signed in:
   idle so you can switch between starting a live timer and logging past
   time (see [Add a manual entry](#add-a-manual-entry)).
 - **Mobile** — it sticks to the bottom of the screen, floating just
-  above the bottom tab bar. While idle the dock shows a secondary
-  **Manual** button alongside the primary purple **Start** so you can
-  open the manual-entry sheet without leaving the page.
+  above the bottom tab bar as a **thin collapsed band** by default.
+  While idle the band shows a secondary **Manual** button alongside the
+  primary purple **Start** so you can open the manual-entry sheet
+  without leaving the page.
 
 The dock stays compact by default and contains, left to right (or top
 to bottom on narrow screens):
 
-- **Description field** — free text for "What are you working on?".
+- **Description** — free text for "What are you working on?".
+  On tablet/desktop this is an inline input you can type into right in
+  the dock. On phones the collapsed band shows the description as a
+  tappable label — tap it (or the grabber above the band) to open the
+  expanded editor with a full input.
 - **Elapsed time** — `HH:MM:SS`, updates every second while a timer is
   running.
-- **Buttons** — **Start** when idle, or **Discard** and **Stop** while a
-  timer is running. **Start** is the sole solid-purple primary; **Discard**
-  is a quiet ghost button so it doesn't compete with **Stop**.
-- **Details chevron** — expands the Project dropdown and the Billable
-  chip inline on tablet/desktop, or on a separate row on phones.
+- **Buttons** — **Start** when idle, or **Stop** while a timer is
+  running. **Start** is the sole solid-purple primary. On
+  tablet/desktop a quiet **Discard** ghost button sits next to **Stop**
+  while running; on phones **Discard** lives in the expanded panel so
+  the collapsed band stays focused on the primary action.
+- **Grabber / details chevron** — on phones a short pill-shaped
+  grabber at the top of the dock expands the full editor (description
+  input, project, billable, Discard). On tablet/desktop a chevron
+  button on the right of the dock expands the Project dropdown and
+  the Billable chip inline.
 
 ### Details (collapsed by default)
 
-Click the chevron on the right of the dock to reveal:
+On phones, tap the grabber at the top of the dock (or the description
+label) to expand the editor. On tablet/desktop, click the chevron on
+the right of the dock. In both cases the expanded panel reveals:
 
 - **Project dropdown** — pick a project you already created, or leave as
   **No project**.
@@ -71,10 +83,13 @@ the same horizontal band as the description, duration and Start, so the
 whole dock stays on one baseline. On phones the Project dropdown and the
 Billable chip stack below the Start row until you close Details again.
 
-The details section closes again on the next chevron click. On phones
-the entry list reserves extra scroll padding while Details is open so
-the expanded dock never permanently covers the first entry card — the
-list scrolls up to meet the dock instead of hiding under it.
+The expanded panel closes again on the next grabber tap (phones) or
+chevron click (tablet/desktop). On phones the entry list reserves
+extra scroll padding while the panel is open so the expanded dock
+never permanently covers the first entry card — the list scrolls up
+to meet the dock instead of hiding under it. The collapsed band
+itself is thin by design, so the first entry card is always visible
+in the default state.
 
 Your current timezone no longer appears inside the timer dock. It is
 shown in the desktop footer (as `Clockinoff · <timezone>`) and on the

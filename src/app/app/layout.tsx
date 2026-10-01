@@ -82,8 +82,14 @@ export default async function AppLayout({
       <main
         className={
           "flex-1 mx-auto max-w-6xl w-full px-4 py-6 " +
-          // Reserve room for docked timer + bottom tab bar on mobile.
-          "pb-[calc(16rem+env(safe-area-inset-bottom))] md:pb-6"
+          // #82 Reserve room for docked timer + bottom tab bar on mobile.
+          // The dock is now a thin collapsed band by default (grabber + one
+          // row of description/elapsed/primary), so the base reservation is
+          // smaller than the previous 16rem. When the grabber is expanded,
+          // globals.css bumps this to 22rem via :has() on the dock's
+          // `data-timer-details-open="true"` attribute so the expanded
+          // panel never permanently covers the first entry row.
+          "pb-[calc(9rem+env(safe-area-inset-bottom))] md:pb-6"
         }
       >
         {children}
