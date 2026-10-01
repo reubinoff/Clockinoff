@@ -27,7 +27,7 @@ export default function AppError({
             aria-hidden
             className="inline-block h-2 w-2 rounded-full bg-accent"
           />
-          Timely
+          Clockinoff
         </span>
         <h1 className="mt-5 text-2xl font-semibold tracking-tight">
           We&rsquo;ll be right back

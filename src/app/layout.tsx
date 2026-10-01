@@ -24,20 +24,20 @@ function resolveMetadataBase(): URL {
 export const metadata: Metadata = {
   metadataBase: resolveMetadataBase(),
   title: {
-    default: "Timely",
-    template: "%s · Timely",
+    default: "Clockinoff",
+    template: "%s · Clockinoff",
   },
   description: "Solo time tracker — one running timer, that's it.",
-  applicationName: "Timely",
+  applicationName: "Clockinoff",
   openGraph: {
-    title: "Timely — solo time tracker",
+    title: "Clockinoff — solo time tracker",
     description: "One running timer. That's it.",
     type: "website",
-    siteName: "Timely",
+    siteName: "Clockinoff",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Timely — solo time tracker",
+    title: "Clockinoff — solo time tracker",
     description: "One running timer. That's it.",
   },
 };

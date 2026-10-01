@@ -12,7 +12,7 @@ type Props = SVGProps<SVGSVGElement> & { size?: number | string; title?: string 
 // instead of letting the right-leaning tip visually pull the mark to the
 // right. Same geometry is mirrored in app/icon.svg, app/apple-icon.svg and
 // app/opengraph-image.tsx so every rendering of the mark stays identical.
-export function Mark({ size = 40, title = "Timely", ...rest }: Props): JSX.Element {
+export function Mark({ size = 40, title = "Clockinoff", ...rest }: Props): JSX.Element {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -53,7 +53,7 @@ export function Wordmark({
 }): JSX.Element {
   return (
     <span className={className} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-      <Mark size={markSize} title="Timely" />
+      <Mark size={markSize} title="Clockinoff" />
       <span
         style={{
           fontWeight: 600,
@@ -63,7 +63,7 @@ export function Wordmark({
           lineHeight: 1,
         }}
       >
-        Timely
+        Clockinoff
       </span>
     </span>
   );

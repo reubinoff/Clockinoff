@@ -25,7 +25,7 @@ export default function GlobalError({
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="noindex" />
-        <title>Service unavailable · Timely</title>
+        <title>Service unavailable · Clockinoff</title>
         <script dangerouslySetInnerHTML={{ __html: appearanceBootScript() }} />
         <style>{globalErrorCss}</style>
       </head>
@@ -34,10 +34,10 @@ export default function GlobalError({
           <section className="card" role="alert" aria-live="polite">
             <span className="badge">
               <span className="dot" aria-hidden="true" />
-              Timely
+              Clockinoff
             </span>
             <h1>We&rsquo;ll be right back</h1>
-            <p>Timely hit an unexpected error and is temporarily unavailable.</p>
+            <p>Clockinoff hit an unexpected error and is temporarily unavailable.</p>
             <p>Your data is safe. You can retry, or wait a moment and reload.</p>
             <div className="actions">
               <button

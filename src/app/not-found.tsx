@@ -4,7 +4,7 @@ export default function NotFound(): JSX.Element {
   return (
     <main className="min-h-[calc(100vh-1px)] grid place-items-center p-6">
       <section className="card w-full max-w-lg p-8 text-center">
-        <span className="tag">Timely</span>
+        <span className="tag">Clockinoff</span>
         <h1 className="mt-5 text-2xl font-semibold tracking-tight">
           Page not found
         </h1>

@@ -2,13 +2,13 @@
 title: Home
 layout: default
 nav_order: 1
-description: "Clockinoff / Timely — user documentation home."
+description: "Clockinoff — user documentation home."
 permalink: /
 ---
 
 # Clockinoff user guide
 
-Clockinoff (internally named **Timely**) is a small, single-user time tracker
+Clockinoff is a small, single-user time tracker
 built for freelancers and solo consultants who want to log hours without
 learning enterprise software.
 

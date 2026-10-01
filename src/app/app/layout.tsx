@@ -31,10 +31,10 @@ export default async function AppLayout({
           <Link
             href="/app"
             className="inline-flex items-center gap-2 font-semibold tracking-tight text-ink shrink-0"
-            aria-label="Timely home"
+            aria-label="Clockinoff home"
           >
             <Mark size={24} />
-            <span className="text-sm">Timely</span>
+            <span className="text-sm">Clockinoff</span>
           </Link>
           <div className="hidden md:block">
             <AppNav />
@@ -89,7 +89,7 @@ export default async function AppLayout({
         {children}
       </main>
       <footer className="hidden md:block border-t border-border py-4 text-center text-xs text-muted">
-        <span>Timely · {user.timezone}</span>
+        <span>Clockinoff · {user.timezone}</span>
         <span aria-hidden="true"> · </span>
         <a
           className="hover:text-ink underline underline-offset-2"
