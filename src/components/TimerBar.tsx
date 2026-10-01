@@ -53,6 +53,19 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
     }
   }, []);
 
+  // Shaul/Ariel lock (#54, #67): on initial mount `description`, `projectId`,
+  // `billable` are the user's input surface — they can start typing into
+  // the dock BEFORE the GET /api/timer response arrives. If that response
+  // says "no running entry" we must NOT blow their input away. Only clear
+  // the dock-local inputs when the running entry we had locally has
+  // disappeared server-side (e.g. stopped or discarded in another tab).
+  // `prevEntryRef` mirrors `entry` so we can detect that transition
+  // without creating a stale closure in `load`.
+  const prevEntryRef = useRef<Entry | null>(null);
+  useEffect(() => {
+    prevEntryRef.current = entry;
+  }, [entry]);
+
   const load = useCallback(async () => {
     const [tRes, pRes] = await Promise.all([
       fetch("/api/timer", { cache: "no-store" }),
@@ -60,12 +73,13 @@ export default function TimerBar({ timezone }: { timezone: string }): JSX.Elemen
     ]);
     if (tRes.ok) {
       const data = (await tRes.json()) as Entry | null;
+      const hadEntry = prevEntryRef.current !== null;
       setEntry(data);
       if (data) {
         setDescription(data.description);
         setProjectId(data.project_id ?? "");
         setBillable(data.billable);
-      } else {
+      } else if (hadEntry) {
         setDescription("");
         setProjectId("");
         setBillable(true);
