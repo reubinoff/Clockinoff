@@ -27,6 +27,12 @@ top of this list (and a **Logged** toast confirms it). If you press
 **Discard** instead, no card is added and a **Discarded** toast is shown.
 Saving an edit on an existing entry shows a **Saved** toast.
 
+While the page is still loading entries from the server (first paint, or
+when you navigate back to `/app` from another page) you'll see 3–5 soft
+grey skeleton rows under a day header instead of a blank screen. If your
+system has **reduce motion** turned on the skeletons stay as a static
+soft wash rather than pulsing.
+
 ---
 
 ## Day groups
@@ -115,6 +121,20 @@ The card is removed. Any tags attached to the entry are detached, but the
 tags themselves are kept. Projects and clients are never deleted by
 deleting an entry.
 
+Delete, Mark as billed, and Save are **optimistic**: the row disappears
+or updates immediately and Clockinoff then confirms with the server. If
+the server rejects the change (session expired, network drop, or a
+validation error) Clockinoff puts the row back where it was and shows a
+*Couldn't delete entry. Try again.* / *Couldn't update entry. Try
+again.* toast — the UI never leaves a "ghost" delete or a half-saved
+state on screen. If your session has expired Clockinoff takes you back
+to the sign-in page preserving the current URL.
+
+While a row's mutation is in flight the row body dims to ~70 % opacity
+and its action menu is locked, so a double-tap can't fire two requests
+on top of each other. Day totals keep their last value — they don't
+flash em-dash while the request is pending.
+
 You cannot delete the currently running entry from this list — for that
 use **Discard** on the timer bar (see [Using the timer]({{ '/timer' | relative_url }}#discard-a-timer)).
 
@@ -191,6 +211,14 @@ entries at once.
 5. When the request succeeds the selection clears, select mode exits,
    and a counted toast confirms: *Marked N as billed.* or *Marked N as
    unbilled.*
+
+While the batch is in flight the active primary button in the sticky
+bar swaps its label to **Saving…** and shows a small Quiet Pulse
+spinner; the other sticky controls are all disabled so you can't
+re-send the batch or clear mid-flight. If the server rejects the batch
+Clockinoff puts every row back to its pre-click state and shows a
+*Couldn't update entries. Try again.* toast — the selection stays so
+you can retry without re-ticking.
 
 The request is **all-or-nothing**: if any row in the batch is not
 yours, is non-billable, or is unknown to the server, no rows change

@@ -69,6 +69,24 @@ While a timer is running the whole dock swaps to a soft purple tint —
 the same accent-soft colour used elsewhere in the app — so it's obvious
 at a glance that time is currently being tracked.
 
+### Pending feedback (never frozen)
+
+Clockinoff's clicks are not sync — pressing **Start**, **Stop**, or
+**Discard** fires a request to the server and waits for the response.
+While that request is in flight:
+
+- The button you clicked is disabled (greyed out) so a double-tap
+  doesn't fire a second request.
+- The elapsed digits keep ticking if a timer is already running.
+- The dock swaps to the running wash (or back to idle) as soon as the
+  server responds — not after a second reload. If your network is
+  slow this is where the lag shows up, but the dock never looks
+  frozen: the primary button stays in its pending state until the
+  response lands.
+- If your session has expired, Clockinoff takes you back to the
+  sign-in page (preserving where you came from) instead of leaving a
+  stale "Logged" or empty dock on screen.
+
 ---
 
 ## Start a timer
