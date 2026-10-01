@@ -127,4 +127,57 @@ export function endOfDayExclusiveInZone(input: string, tz: string = DEFAULT_TZ):
   return new Date(d0.getTime() + 24 * 60 * 60 * 1000);
 }
 
+// #81 Mobile Week → Day → Entry grouping. We bucket entries by ISO week
+// (Monday-first) so Clockify-adjacent competitors align — the week label
+// just reads "Mon dd – Sun dd" and the key is the Monday's zoned
+// YYYY-MM-DD. We avoid subtracting 86_400_000 ms from the entry's UTC
+// timestamp because that can straddle a DST boundary and roll back by
+// one hour (ending up on the wrong Monday); instead we take the zoned
+// calendar date and march back by whole calendar days using UTC date
+// arithmetic, which has no DST surprises.
+function pureUtcDate(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+function keyFromPureUtc(d: Date): string {
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+export function startOfIsoWeekKey(d: Date, tz: string = DEFAULT_TZ): string {
+  const dayKey = formatDate(d, tz);
+  const utc = pureUtcDate(dayKey);
+  const dow = utc.getUTCDay(); // 0 = Sun .. 6 = Sat
+  const back = dow === 0 ? 6 : dow - 1; // march back to Monday
+  const monday = new Date(utc.getTime() - back * 24 * 60 * 60 * 1000);
+  return keyFromPureUtc(monday);
+}
+
+function shortMonthDay(d: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+  }).format(d);
+}
+
+export function formatWeekRangeLabel(
+  weekStartKey: string,
+  now: Date = new Date(),
+  tz: string = DEFAULT_TZ,
+): string {
+  const monday = pureUtcDate(weekStartKey);
+  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const thisWeekKey = startOfIsoWeekKey(now, tz);
+  const prefix =
+    weekStartKey === thisWeekKey
+      ? "This week · "
+      : weekStartKey ===
+          keyFromPureUtc(new Date(pureUtcDate(thisWeekKey).getTime() - 7 * 24 * 60 * 60 * 1000))
+        ? "Last week · "
+        : "";
+  // En dash between start and end for the quiet-pulse typographic tone.
+  return `${prefix}${shortMonthDay(monday)} – ${shortMonthDay(sunday)}`;
+}
+
 export { DEFAULT_TZ };

@@ -35,11 +35,25 @@ soft wash rather than pulsing.
 
 ---
 
-## Day groups
+## Week and day groups
 
-Entries are bucketed into a section per day, using the start date in
-your timezone. Each section has a header with the day label and a
-muted total showing the sum of all durations for that day (in hours).
+Entries are bucketed Week → Day → Entry, newest first. Each week
+section starts with a thin **week band** showing the Monday-first
+range (e.g. **`Sep 14 – Sep 20`**) with a right-aligned **hours
+total** for the whole week. The current week is prefixed **This
+week ·** and the previous week **Last week ·** so you don't have to
+read the dates to orient yourself.
+
+On a phone the week band is **sticky** below the top app header, so
+as you scroll a long range you always see which week the rows
+underneath belong to. On tablet / desktop (`md+`, ≥ 768 px) the band
+sits inline above its day sections — no sticky offset is needed at
+that width.
+
+Inside each week, entries are then bucketed into a section per day,
+using the start date in your timezone. Each day section has a header
+with the day label and a muted total showing the sum of all durations
+for that day (in hours).
 
 Day labels use this format:
 
@@ -47,6 +61,9 @@ Day labels use this format:
 - **Yesterday** — for entries that started the previous day.
 - **`Mon, Sep 28`** — weekday + month + day (short forms) for anything
   older.
+
+Weeks are **ISO weeks** (Monday → Sunday) regardless of your locale,
+so the week boundary never shifts when you switch regions.
 
 ---
 
