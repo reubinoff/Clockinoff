@@ -48,7 +48,15 @@ import {
   type TokenCredential,
 } from "@azure/identity";
 import type { PoolConfig } from "pg";
-import { parse as parseConnectionString } from "pg-connection-string";
+
+// NB: we deliberately do NOT import `pg-connection-string` here. The
+// migration runner at `scripts/migrate.mjs` mirrors this file, and the
+// CD workflow copies only that script into the Next.js standalone deploy
+// bundle. `pg-connection-string` is a transitive of `pg` that Next's
+// output tracing does not pull in, so an import here (which would get
+// copied/mirrored into migrate.mjs) crashes App Service startup with
+// `ERR_MODULE_NOT_FOUND`. Parse Postgres URLs with WHATWG `URL`
+// instead — see `parsePostgresUrlFields` below.
 
 export const AZURE_POSTGRES_SCOPE =
   "https://ossrdbms-aad.database.windows.net/.default";
@@ -166,6 +174,56 @@ export interface BuildPoolConfigOptions {
   passwordProvider?: PasswordProvider;
 }
 
+// Parse a Postgres URL into pg's discrete `PoolConfig` fields using
+// WHATWG `URL`. See the top-of-file note on why we do not use
+// `pg-connection-string` here.
+function parsePostgresUrlFields(url: string): PoolConfig {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("DATABASE_URL is not a valid URL");
+  }
+  if (!/^postgres(ql)?:$/i.test(parsed.protocol)) {
+    throw new Error(
+      `DATABASE_URL protocol must be postgres: or postgresql:, got ${parsed.protocol}`,
+    );
+  }
+  const fields: PoolConfig = {};
+  if (parsed.username !== "") {
+    fields.user = decodeURIComponent(parsed.username);
+  }
+  if (parsed.hostname !== "") {
+    fields.host = decodeURIComponent(parsed.hostname);
+  }
+  if (parsed.port !== "") {
+    const port = Number.parseInt(parsed.port, 10);
+    if (!Number.isNaN(port)) fields.port = port;
+  }
+  if (parsed.pathname && parsed.pathname !== "/") {
+    const db = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+    if (db) fields.database = db;
+  }
+  const sslmode = (parsed.searchParams.get("sslmode") ?? "").toLowerCase();
+  switch (sslmode) {
+    case "require":
+    case "verify-ca":
+    case "verify-full":
+      fields.ssl = {};
+      break;
+    case "prefer":
+    case "allow":
+      fields.ssl = { rejectUnauthorized: false };
+      break;
+    case "disable":
+      fields.ssl = false;
+      break;
+    default:
+      break;
+  }
+  return fields;
+}
+
 // Single source of truth for turning a `DATABASE_URL` into a pg PoolConfig.
 // In password mode we keep the current `{ connectionString }` shape so
 // nothing changes for the rollback path. In AAD mode we parse the URL
@@ -189,19 +247,8 @@ export function buildPgPoolConfig(
       "buildPgPoolConfig: passwordProvider is required when azureAdAuth is enabled",
     );
   }
-  const parsed = parseConnectionString(url);
-  // Drop the parsed password: on a passwordless Azure Postgres URL it is
-  // `''`, and surviving into the final config would overwrite
-  // `password: provider` via pg's Object.assign-based merge.
-  const { password: _parsedPassword, port: parsedPort, ...rest } = parsed;
-  void _parsedPassword;
-  const port =
-    parsedPort != null && parsedPort !== ""
-      ? Number.parseInt(String(parsedPort), 10)
-      : undefined;
   const base: PoolConfig = {
-    ...(rest as Record<string, unknown>),
-    ...(port != null && !Number.isNaN(port) ? { port } : {}),
+    ...parsePostgresUrlFields(url),
     password: opts.passwordProvider,
   } as PoolConfig;
   const final: PoolConfig = { ...base, ...overrides };

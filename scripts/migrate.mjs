@@ -31,12 +31,21 @@
 //      or an empty-string token (length === 0). We never send an empty
 //      password.
 //   3. Safe log reports token length + TTL only — never the token.
+//
+// --- Clockinoff hotfix (tip 0eb44e6 → production 503) ---
+// This script may ONLY import `pg`, `@azure/identity`, and `node:*`
+// builtins. The CD workflow copies the file verbatim into the Next.js
+// standalone deploy bundle (see .github/workflows/cd.yml) and that bundle
+// only contains dependencies traced from `src/`, plus the belt-and-braces
+// re-copies listed in cd.yml. Importing anything else — most recently
+// `pg-connection-string` — produces `ERR_MODULE_NOT_FOUND` at startup,
+// which crash-loops migrate and blocks every HTTP request with a 503.
+// `tests/scripts/migrate-imports.test.ts` enforces this allowlist.
 
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { parse as parseConnectionString } from "pg-connection-string";
 
 const { Pool } = pg;
 
@@ -138,25 +147,69 @@ async function createAzurePasswordProvider() {
   };
 }
 
+// Parse a Postgres URL into pg's discrete `PoolConfig` fields using
+// WHATWG `URL`. Deliberately avoids `pg-connection-string` so this
+// script can run against the standalone deploy `node_modules`, which
+// only contains dependencies traced from `src/`. See the header comment.
+function parsePostgresUrlFields(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("DATABASE_URL is not a valid URL");
+  }
+  if (!/^postgres(ql)?:$/i.test(parsed.protocol)) {
+    throw new Error(
+      "DATABASE_URL protocol must be postgres: or postgresql:, got " +
+        parsed.protocol,
+    );
+  }
+  const fields = {};
+  if (parsed.username !== "") {
+    fields.user = decodeURIComponent(parsed.username);
+  }
+  if (parsed.hostname !== "") {
+    fields.host = decodeURIComponent(parsed.hostname);
+  }
+  if (parsed.port !== "") {
+    const port = Number.parseInt(parsed.port, 10);
+    if (!Number.isNaN(port)) fields.port = port;
+  }
+  if (parsed.pathname && parsed.pathname !== "/") {
+    const db = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+    if (db) fields.database = db;
+  }
+  const sslmode = (parsed.searchParams.get("sslmode") ?? "").toLowerCase();
+  switch (sslmode) {
+    case "require":
+    case "verify-ca":
+    case "verify-full":
+      fields.ssl = {};
+      break;
+    case "prefer":
+    case "allow":
+      fields.ssl = { rejectUnauthorized: false };
+      break;
+    case "disable":
+      fields.ssl = false;
+      break;
+    default:
+      break;
+  }
+  return fields;
+}
+
 async function buildPoolConfig(url) {
   const overrides = { max: 1 };
   if (!shouldUseAzureAdAuth(url)) {
     return { connectionString: url, ...overrides };
   }
   const password = await createAzurePasswordProvider();
-  const parsed = parseConnectionString(url);
-  // Drop the parsed password (empty on passwordless URLs) so pg cannot
-  // Object.assign it over our token provider. See the file header
-  // comment.
-  const { password: _parsedPassword, port: parsedPort, ...rest } = parsed;
-  void _parsedPassword;
-  const port =
-    parsedPort != null && parsedPort !== ""
-      ? Number.parseInt(String(parsedPort), 10)
-      : undefined;
+  // Discrete fields: never pass `connectionString` + `password` together
+  // (see file header). We parse the URL ourselves with `node:url` so this
+  // script has no runtime dependency on `pg-connection-string`.
   const config = {
-    ...rest,
-    ...(port != null && !Number.isNaN(port) ? { port } : {}),
+    ...parsePostgresUrlFields(url),
     password,
     ...overrides,
   };
