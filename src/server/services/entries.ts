@@ -13,6 +13,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
+import { pgErrorCode } from "@/server/db/errors";
 import {
   clients,
   projects,
@@ -278,7 +279,7 @@ export async function startTimer(userId: string, input: StartTimerInput = {}): P
     if (tagIds.length > 0) await setEntryTags(row.id, tagIds);
     return await getEntryById(userId, row.id);
   } catch (err) {
-    const code = (err as { code?: string })?.code;
+    const code = pgErrorCode(err);
     if (code === "23505") {
       const running = await getRunningEntry(userId);
       if (running) throw errors.timerAlreadyRunning(running.id);
