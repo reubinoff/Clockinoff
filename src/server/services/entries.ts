@@ -501,6 +501,69 @@ export async function deleteEntry(userId: string, id: string): Promise<void> {
   if (res.length === 0) throw errors.notFound("Entry not found");
 }
 
+// Shaul-locked (2026-10-01): batched Mark-as-billed / Mark-as-unbilled.
+// All-or-nothing — if *any* id is unknown, foreign, or non-billable, the
+// whole request fails with 400 VALIDATION and no row is written. The server
+// is the source of truth: the client ships only the eligible subset, but
+// we re-verify ownership + billable on the server because the client has
+// no authority. Keeps the server-side invariant `billed only when billable`
+// intact for bulk flows too.
+export interface BatchBilledResult {
+  updated: number;
+}
+
+const MAX_BATCH_IDS = 500;
+
+export async function batchSetBilled(
+  userId: string,
+  ids: string[],
+  billed: boolean,
+): Promise<BatchBilledResult> {
+  if (!Array.isArray(ids)) throw errors.validation("ids must be an array");
+  if (ids.length === 0) throw errors.validation("ids must not be empty");
+  if (ids.length > MAX_BATCH_IDS) {
+    throw errors.validation(`Too many ids (max ${MAX_BATCH_IDS})`);
+  }
+  const unique = Array.from(new Set(ids));
+  for (const id of unique) {
+    if (typeof id !== "string" || id.length === 0) {
+      throw errors.validation("Invalid id in batch");
+    }
+  }
+
+  const db = getDb();
+  // Single-shot verify: every id must exist, be owned by caller, and be
+  // billable. If the count or any flag disagrees we throw before any write.
+  const owned = await db
+    .select({
+      id: timeEntries.id,
+      billable: timeEntries.billable,
+      endAt: timeEntries.endAt,
+    })
+    .from(timeEntries)
+    .where(and(eq(timeEntries.userId, userId), inArray(timeEntries.id, unique)));
+  if (owned.length !== unique.length) {
+    throw errors.validation("Unknown or non-owned entry id in batch");
+  }
+  for (const row of owned) {
+    if (!row.billable) {
+      throw errors.validation("All entries must be billable");
+    }
+    if (row.endAt === null) {
+      // Running timer is never selectable in the UI; belt-and-braces here so
+      // a crafted client can't bulk-mark a running row as billed.
+      throw errors.validation("Running entries cannot be billed");
+    }
+  }
+
+  const res = await db
+    .update(timeEntries)
+    .set({ billed })
+    .where(and(eq(timeEntries.userId, userId), inArray(timeEntries.id, unique)))
+    .returning({ id: timeEntries.id });
+  return { updated: res.length };
+}
+
 export interface ListEntriesFilters {
   from?: Date;
   to?: Date;
