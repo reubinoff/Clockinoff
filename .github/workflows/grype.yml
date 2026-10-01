@@ -63,7 +63,14 @@ jobs:
         run: npm ci --omit=dev --ignore-scripts
 
       - name: Scan with Grype
-        uses: anchore/scan-action@v4
+        # Pinned to v7: older majors (v3/v4) ship a Grype binary that
+        # still fetches the deprecated v5 vulnerability DB, which
+        # Anchore stopped refreshing in early 2026. Any job using them
+        # now aborts with "the vulnerability database was built N
+        # weeks ago (max allowed age is 5 days)" because the v5 feed
+        # is frozen. v7 bundles a Grype that uses the maintained v6
+        # DB and downloads a fresh copy on every run.
+        uses: anchore/scan-action@v7
         with:
           path: "."
           severity-cutoff: high
