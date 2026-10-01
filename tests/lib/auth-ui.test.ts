@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   AUTH_FAILURE_STATUSES,
@@ -51,9 +52,47 @@ describe("auth-ui", () => {
     expect(navigate).toHaveBeenCalledWith("/login?next=%2Fapp%2Fexport");
   });
 
-  it("works without a rollback or path", () => {
+  it("works without a rollback and uses the provided path", () => {
     const navigate = vi.fn();
-    handleAuthFailure({ navigate });
+    handleAuthFailure({ navigate, path: "/app" });
     expect(navigate).toHaveBeenCalledWith("/login?next=%2Fapp");
+  });
+
+  describe("default browser hookup", () => {
+    const originalLocation = window.location;
+    let assignSpy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      assignSpy = vi.fn();
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: {
+          ...originalLocation,
+          pathname: "/app/export",
+          search: "?from=2026-10-01",
+          assign: assignSpy,
+        },
+      });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: originalLocation,
+      });
+    });
+
+    it("reads the current path from window when no override is provided", () => {
+      const navigate = vi.fn();
+      handleAuthFailure({ navigate });
+      expect(navigate).toHaveBeenCalledWith(
+        "/login?next=%2Fapp%2Fexport%3Ffrom%3D2026-10-01",
+      );
+    });
+
+    it("falls back to window.location.assign when navigate is omitted", () => {
+      handleAuthFailure({ path: "/app/entries" });
+      expect(assignSpy).toHaveBeenCalledWith("/login?next=%2Fapp%2Fentries");
+    });
   });
 });
