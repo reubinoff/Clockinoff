@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   formatDate,
   formatDayLabel,
@@ -9,6 +8,7 @@ import {
   formatTime,
 } from "@/lib/tz";
 import { emitToast, onEntryAdded } from "@/lib/events";
+import { handleAuthFailure, isAuthFailure } from "@/lib/auth-ui";
 import { IconBillable, IconCheck, IconEdit, IconX } from "@/components/icons";
 import EditEntrySheet, { type EditableEntry } from "@/components/EditEntrySheet";
 
@@ -89,7 +89,6 @@ export default function EntryList({
   tags: Option[];
   timezone: string;
 }): JSX.Element {
-  const router = useRouter();
   const [entries, setEntries] = useState(initial);
   const [filterProject, setFilterProject] = useState("");
   // Dana lock: single "Unbilled" chip on the day-entries list — default off.
@@ -100,7 +99,11 @@ export default function EntryList({
   const [filterQ, setFilterQ] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-  const [markingId, setMarkingId] = useState<string | null>(null);
+  // #54 Shaul lock: track every row currently in flight (Save / Delete /
+  // Mark billed single-row) so the row can carry the Quiet Pulse dim wash.
+  // A set — rather than a single id — lets rapid clicks on different rows
+  // all surface pending chrome without one stepping on the other.
+  const [pendingRowIds, setPendingRowIds] = useState<Set<string>>(() => new Set());
   // Shaul-locked billed redesign: select mode + checked ids. Entering select
   // mode replaces per-row Edit/⋯/Delete chrome with a 44px checkbox so a
   // single tap toggles instead of opening the sheet. Any filter / search
@@ -113,10 +116,11 @@ export default function EntryList({
   // (e.g. filter changes) don't re-play the animation on the same row.
   const [springIds, setSpringIds] = useState<Set<string>>(() => new Set());
 
-  // Slice D (#47): after TimerBar Stop/Discard (or any timer→entry mutation)
-  // the server component re-runs via router.refresh() and passes a fresh
-  // `initial` prop, but useState only reads it on mount. Sync it so the list
-  // reflects the just-stopped row without a hard reload.
+  // #54 Shaul lock: before dropping router.refresh() the server component
+  // used to re-run on every mutation and push a fresh `initial` prop into
+  // the list; we now rely on the local optimistic/response state as the
+  // source of truth. We still sync the prop so a real cross-tree refresh
+  // (e.g. navigation back to /app) still reconciles.
   useEffect(() => {
     setEntries(initial);
   }, [initial]);
@@ -213,19 +217,65 @@ export default function EntryList({
     visibleSelectable.length > 0 &&
     visibleSelectable.every((e) => selectedIds.has(e.id));
 
+  function markRowPending(id: string, pending: boolean): void {
+    setPendingRowIds((cur) => {
+      const has = cur.has(id);
+      if (pending && has) return cur;
+      if (!pending && !has) return cur;
+      const next = new Set(cur);
+      if (pending) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
   async function remove(id: string): Promise<void> {
     setMenuOpenId(null);
     if (!confirm("Delete this entry?")) return;
-    const res = await fetch(`/api/entries/${id}`, { method: "DELETE" });
-    if (res.ok) {
-      setEntries((cur) => cur.filter((e) => e.id !== id));
-      setSelectedIds((cur) => {
-        if (!cur.has(id)) return cur;
-        const next = new Set(cur);
-        next.delete(id);
-        return next;
-      });
-      router.refresh();
+    // #54 Shaul lock: optimistic remove. On auth failure we restore the
+    // row; on other failures we also restore so the user doesn't see a
+    // ghost delete that never happened.
+    const snapshot = entries;
+    const previous = entries.find((e) => e.id === id) ?? null;
+    const previousIndex = entries.findIndex((e) => e.id === id);
+    markRowPending(id, true);
+    setEntries((cur) => cur.filter((e) => e.id !== id));
+    setSelectedIds((cur) => {
+      if (!cur.has(id)) return cur;
+      const next = new Set(cur);
+      next.delete(id);
+      return next;
+    });
+    try {
+      const res = await fetch(`/api/entries/${id}`, { method: "DELETE" });
+      if (res.ok) return;
+      if (isAuthFailure(res.status)) {
+        handleAuthFailure({
+          rollback: () => setEntries(snapshot),
+        });
+        return;
+      }
+      // Non-auth failure: put the row back where it was so the UI doesn't
+      // imply a successful delete.
+      if (previous) {
+        setEntries((cur) => {
+          if (cur.some((e) => e.id === previous.id)) return cur;
+          const next = cur.slice();
+          const idx = previousIndex >= 0 ? previousIndex : next.length;
+          next.splice(Math.min(idx, next.length), 0, previous);
+          return next;
+        });
+      }
+      emitToast("Couldn't delete entry. Try again.");
+    } catch {
+      if (previous) {
+        setEntries((cur) =>
+          cur.some((e) => e.id === previous.id) ? cur : [previous, ...cur],
+        );
+      }
+      emitToast("Couldn't delete entry. Try again.");
+    } finally {
+      markRowPending(id, false);
     }
   }
 
@@ -234,7 +284,12 @@ export default function EntryList({
   // "Marked as billed" / "Marked as unbilled" toast.
   async function patchSingleBilled(id: string, billed: boolean): Promise<void> {
     setMenuOpenId(null);
-    setMarkingId(id);
+    // #54 Shaul lock: optimistic flip; rollback on failure. The /api/entries
+    // PATCH response body is the full updated entry — we take it as the
+    // authoritative shape, so no router.refresh() is needed to re-fetch.
+    const previous = entries.find((e) => e.id === id) ?? null;
+    markRowPending(id, true);
+    setEntries((cur) => cur.map((e) => (e.id === id ? { ...e, billed } : e)));
     try {
       const res = await fetch(`/api/entries/${id}`, {
         method: "PATCH",
@@ -245,16 +300,46 @@ export default function EntryList({
         const updated = (await res.json()) as Entry;
         setEntries((cur) => cur.map((e) => (e.id === id ? updated : e)));
         emitToast(billed ? "Marked as billed" : "Marked as unbilled");
-        router.refresh();
+        return;
       }
+      if (isAuthFailure(res.status)) {
+        handleAuthFailure({
+          rollback: () => {
+            if (previous)
+              setEntries((cur) =>
+                cur.map((e) => (e.id === id ? previous : e)),
+              );
+          },
+        });
+        return;
+      }
+      if (previous) {
+        setEntries((cur) => cur.map((e) => (e.id === id ? previous : e)));
+      }
+      emitToast("Couldn't update entry. Try again.");
+    } catch {
+      if (previous) {
+        setEntries((cur) => cur.map((e) => (e.id === id ? previous : e)));
+      }
+      emitToast("Couldn't update entry. Try again.");
     } finally {
-      setMarkingId(null);
+      markRowPending(id, false);
     }
   }
 
   async function runBatch(ids: string[], billed: boolean): Promise<void> {
     if (ids.length === 0 || bulkPending) return;
+    // #54 Shaul lock: optimistic apply + rollback on failure. The server
+    // returns `{ updated }` — our local list already matches the shape it
+    // enforces (billable && billed === billed), so no router.refresh.
+    const snapshot = entries;
+    const previousById = new Map<string, Entry>();
+    for (const e of entries) if (ids.includes(e.id)) previousById.set(e.id, e);
     setBulkPending(true);
+    for (const id of ids) markRowPending(id, true);
+    setEntries((cur) =>
+      cur.map((e) => (ids.includes(e.id) ? { ...e, billed } : e)),
+    );
     try {
       const res = await fetch("/api/entries/batch-billed", {
         method: "POST",
@@ -263,9 +348,6 @@ export default function EntryList({
       });
       if (res.ok) {
         const body = (await res.json()) as { updated: number };
-        setEntries((cur) =>
-          cur.map((e) => (ids.includes(e.id) ? { ...e, billed } : e)),
-        );
         setSelectedIds(new Set());
         setSelectMode(false);
         emitToast(
@@ -273,13 +355,21 @@ export default function EntryList({
             ? `Marked ${body.updated} as billed.`
             : `Marked ${body.updated} as unbilled.`,
         );
-        router.refresh();
-      } else {
-        emitToast("Couldn't update entries. Try again.");
+        return;
       }
+      if (isAuthFailure(res.status)) {
+        handleAuthFailure({
+          rollback: () => setEntries(snapshot),
+        });
+        return;
+      }
+      setEntries(snapshot);
+      emitToast("Couldn't update entries. Try again.");
     } catch {
+      setEntries(snapshot);
       emitToast("Couldn't update entries. Try again.");
     } finally {
+      for (const id of ids) markRowPending(id, false);
       setBulkPending(false);
     }
   }
@@ -301,13 +391,14 @@ export default function EntryList({
   }
 
   function onSaved(updated: EditableEntry): void {
+    // #54 Shaul lock: the edit sheet already awaited PATCH and gives us the
+    // authoritative row — merge and keep going. No router.refresh.
     setEntries((cur) =>
       cur.map((e) => (e.id === updated.id ? ({ ...e, ...(updated as Partial<Entry>) } as Entry) : e)),
     );
     setEditingId(null);
     // V2-6 §2: locked copy — "Saved" fires on successful entry edit.
     emitToast("Saved");
-    router.refresh();
   }
 
   function toggleSelected(id: string): void {
@@ -435,6 +526,7 @@ export default function EntryList({
                   const selectable = isSelectable(e);
                   const selected = selectedIds.has(e.id);
                   const inSelect = selectMode;
+                  const rowPending = pendingRowIds.has(e.id);
                   return (
                     <li
                       key={e.id}
@@ -442,10 +534,13 @@ export default function EntryList({
                         "entry-row relative px-3 py-2.5 md:px-4 md:py-2 " +
                         (selected ? "bg-accent-soft " : "") +
                         (springIds.has(e.id) ? "entry-spring-in " : "") +
+                        (rowPending ? "entry-row-pending " : "") +
                         "transition-colors"
                       }
                       data-entry-id={e.id}
                       data-entry-selected={selected ? "true" : "false"}
+                      data-entry-pending={rowPending ? "true" : "false"}
+                      aria-busy={rowPending || undefined}
                     >
                       {/* md+ flat row */}
                       <div className="hidden md:flex md:items-center md:gap-3">
@@ -509,7 +604,7 @@ export default function EntryList({
                               <RowMoreMenu
                                 entry={e}
                                 open={menuOpenId === e.id}
-                                marking={markingId === e.id}
+                                marking={rowPending}
                                 onOpenChange={(open) =>
                                   setMenuOpenId(open ? e.id : null)
                                 }
@@ -604,7 +699,7 @@ export default function EntryList({
                               <RowMoreMenu
                                 entry={e}
                                 open={menuOpenId === e.id}
-                                marking={markingId === e.id}
+                                marking={rowPending}
                                 onOpenChange={(open) =>
                                   setMenuOpenId(open ? e.id : null)
                                 }
@@ -732,6 +827,7 @@ function RowMoreMenu({
         aria-label="More actions"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-busy={marking || undefined}
         title="More"
         data-entry-more-btn={entry.id}
       >
@@ -771,6 +867,7 @@ function RowMoreMenu({
             role="menuitem"
             type="button"
             className="w-full text-left px-3 py-2 text-body-sm text-danger hover:bg-danger-soft"
+            disabled={marking}
             onClick={onDelete}
           >
             Delete
@@ -804,10 +901,19 @@ function BulkActionBar({
   onMarkBilled: () => void;
   onMarkUnbilled: () => void;
 }): JSX.Element {
+  // Dana lock (#54): exact copy on the primary while a bulk mutation is
+  // in flight is "Saving…". We swap only the active side so the other
+  // button keeps its stable label (and stays disabled via `pending`).
+  const primaryIsBillAction = canMarkBilled;
+  const billedLabel =
+    pending && primaryIsBillAction ? "Saving…" : "Mark as billed";
+  const unbilledLabel =
+    pending && !primaryIsBillAction ? "Saving…" : "Mark as unbilled";
   return (
     <div
       role="toolbar"
       aria-label="Bulk entry actions"
+      aria-busy={pending || undefined}
       // Mobile: dock above the bottom tab bar (3.5rem) + safe-area inset so
       // tabs stay reachable. Desktop: inline floating card at the bottom
       // right of the main column, matching the Quiet Pulse surface.
@@ -818,6 +924,7 @@ function BulkActionBar({
         "md:shadow-card-lg md:max-w-xl"
       }
       data-bulk-action-bar="true"
+      data-bulk-pending={pending ? "true" : "false"}
     >
       <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:gap-3 md:py-2.5">
         <div className="flex items-center justify-between gap-3 md:justify-start">
@@ -830,6 +937,7 @@ function BulkActionBar({
               type="button"
               className="text-xs text-muted hover:text-ink underline underline-offset-2"
               onClick={onToggleSelectAll}
+              disabled={pending}
               data-bulk-select-all="true"
             >
               {allSelected ? "Clear all" : "Select all"}
@@ -839,6 +947,7 @@ function BulkActionBar({
             type="button"
             className="btn btn-ghost btn-sm min-h-[36px]"
             onClick={onClear}
+            disabled={pending}
             data-bulk-clear="true"
             aria-label="Clear selection"
           >
@@ -852,20 +961,28 @@ function BulkActionBar({
             className="btn btn-sm min-h-[44px] flex-1 md:flex-none"
             onClick={onMarkUnbilled}
             disabled={!canMarkUnbilled || pending}
+            aria-busy={pending && !primaryIsBillAction ? true : undefined}
             data-bulk-mark-unbilled="true"
             title={canMarkUnbilled ? undefined : "Nothing billed in selection"}
           >
-            Mark as unbilled
+            {pending && !primaryIsBillAction && (
+              <span className="quiet-pulse-spinner" aria-hidden />
+            )}
+            {unbilledLabel}
           </button>
           <button
             type="button"
             className="btn btn-primary btn-sm min-h-[44px] flex-1 md:flex-none"
             onClick={onMarkBilled}
             disabled={!canMarkBilled || pending}
+            aria-busy={pending && primaryIsBillAction ? true : undefined}
             data-bulk-mark-billed="true"
             title={canMarkBilled ? undefined : "Already billed"}
           >
-            Mark as billed
+            {pending && primaryIsBillAction && (
+              <span className="quiet-pulse-spinner" aria-hidden />
+            )}
+            {billedLabel}
           </button>
         </div>
       </div>
