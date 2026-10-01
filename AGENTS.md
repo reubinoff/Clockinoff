@@ -19,7 +19,7 @@ no Clockify sync, no Google auth. The full product scope lives in
 
 ### Stack (short)
 
-- **Next.js 14** App Router · React 18 · TypeScript · Tailwind
+- **Next.js 16** App Router · React 19 · TypeScript · Tailwind
 - **Postgres 16** · **Drizzle ORM** (`drizzle-kit` migrations under `./drizzle`)
 - **Auth**: email + password (argon2id) + DB sessions + `httpOnly` cookie
 - **PDF/CSV export**: `@react-pdf/renderer` + hand-rolled CSV
