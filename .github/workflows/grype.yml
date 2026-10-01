@@ -1,0 +1,80 @@
+name: Grype vulnerability scan
+
+# Anchore Grype scan against the surface that actually ships to Azure
+# Web App: the Next.js standalone bundle only carries the production
+# dependency tree, so we install deps with `--omit=dev` and point
+# Grype at the resulting node_modules. There is no root Dockerfile to
+# scan — see AGENTS.md and cd.yml for how the app is packaged.
+#
+# Policy:
+#   * Fail only on Critical or High (`severity-cutoff: high`). Medium
+#     and below are reported for visibility but must NOT brick CD, so
+#     the Azure deploy path in cd.yml stays green through transient
+#     noise. Known Medium noise (and any temporarily-accepted
+#     Critical/High) is baselined via the checked-in `.grype.yaml`,
+#     each entry with a short rationale + FIXME.
+#   * Runs on pushes to main and on pull requests so a regression is
+#     caught before merge; a weekly cron re-runs the scan against the
+#     same tree so newly disclosed vulns surface without needing a
+#     code change.
+#
+# This workflow is intentionally decoupled from cd.yml — Azure deploy
+# is not gated on it. Treat a red Grype run as a bug to triage, not a
+# release blocker, until the policy is tightened.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "15 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: grype-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  grype:
+    name: Grype (prod deps, fail on High+)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install production dependencies only
+        # Mirrors the deployed surface: cd.yml ships
+        # `.next/standalone` whose bundled node_modules is the prod
+        # dep tree. `--ignore-scripts` keeps native postinstalls
+        # (argon2 prebuild fetch) off the scan runner — Grype reads
+        # the package manifests directly, so native binaries aren't
+        # needed for a correct scan.
+        run: npm ci --omit=dev --ignore-scripts
+
+      - name: Scan with Grype
+        # Pinned to v7: older majors (v3/v4) ship a Grype binary that
+        # still fetches the deprecated v5 vulnerability DB, which
+        # Anchore stopped refreshing in early 2026. Any job using them
+        # now aborts with "the vulnerability database was built N
+        # weeks ago (max allowed age is 5 days)" because the v5 feed
+        # is frozen. v7 bundles a Grype that uses the maintained v6
+        # DB and downloads a fresh copy on every run.
+        uses: anchore/scan-action@v7
+        with:
+          path: "."
+          severity-cutoff: high
+          fail-build: true
+          only-fixed: false
+          output-format: table
+          add-cpes-if-none: true
