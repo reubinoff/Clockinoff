@@ -2,9 +2,26 @@
 // Runtime-safe migration runner used by the Azure App Service startup command.
 // Deliberately plain ESM JavaScript so it can run under `node` directly on the
 // deployed Next.js standalone bundle, without needing `tsx`, `ts-node`, or any
-// TypeScript toolchain in production. It depends on `pg` and (when AAD
-// mode is on) `@azure/identity`, both of which are production dependencies
-// and therefore always present in the standalone `node_modules`.
+// TypeScript toolchain in production.
+//
+// IMPORT POLICY — DO NOT RELAX (Clockinoff #75 / 2026-10-01 incident):
+// This file is copied verbatim into the Azure Web App deploy bundle by
+// `.github/workflows/cd.yml` and runs *before* `node server.js`. The deploy
+// bundle only contains `node_modules` traced by `next build` (standalone
+// output), plus a short overlay allowlist (argon2, pdfkit/fontkit,
+// @react-pdf/*). Any bare import added here must be one of:
+//
+//   * A `node:` builtin, OR
+//   * A package tracing/overlay guarantees is on disk at startup. The
+//     current guaranteed set is `pg` and `@azure/identity`.
+//
+// Adding anything else (even a transitive like `pg-connection-string`) will
+// crash-loop App Service with `ERR_MODULE_NOT_FOUND` the moment the
+// migrate step runs, and /login will 503 until it is reverted. The 2026-10-01
+// 503 incident was caused by a static import of pg-connection-string here:
+// it is a transitive of pg that `next build`'s tracer did not pull into the
+// standalone output. A regression test in
+// `tests/server/migrate-imports.test.ts` enforces this allowlist.
 //
 // Entra / Managed Identity support (#75 phase 1): when `DATABASE_URL`
 // has no password component, or `PG_AZURE_AD_AUTH` is explicitly on, the
@@ -13,30 +30,16 @@
 // the static password path if the URL still carries a password or the
 // flag is `0`/`false`.
 //
-// --- Clockinoff #75 production fix (do not relax) ---
-// This file mirrors `src/server/db/azure-ad.ts` on purpose: the CD
-// workflow only copies `scripts/migrate.mjs` into the standalone deploy
-// bundle, so the migration runner must stay self-contained. The guard
-// rails below are the same ones baked into the TS helper:
-//
-//   1. In AAD mode we never pass `connectionString` and `password`
-//      together — pg's ConnectionParameters does
-//      `Object.assign({}, config, parse(connectionString))`, and a
-//      passwordless URL parses as `password: ''`, which silently
-//      overwrites the token-provider callback. The 2026-10-01 cutover
-//      crash-looped migrate with `28P01 Password returned by client is
-//      empty` because of this. Discrete fields keep the provider.
-//   2. Shaul's gate: the token provider hard-aborts before pg opens a
-//      socket when the credential returns no token, a non-string token,
-//      or an empty-string token (length === 0). We never send an empty
-//      password.
-//   3. Safe log reports token length + TTL only — never the token.
+// This file mirrors `src/server/db/azure-ad.ts` on purpose: both the
+// runtime and the migration runner must build the AAD pool config with
+// discrete fields (never `connectionString` + `password` together), and
+// both must hard-abort if the credential returns an empty/missing token.
+// See the TS helper for the full rationale.
 
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { parse as parseConnectionString } from "pg-connection-string";
 
 const { Pool } = pg;
 
@@ -88,6 +91,50 @@ function shouldUseAzureAdAuth(url) {
     return true;
   }
   return isPasswordlessPostgresUrl(url);
+}
+
+// Minimal, dependency-free parser for the subset of PostgreSQL connection
+// strings Clockinoff emits: `postgres[ql]://user[:pw]@host[:port]/db?sslmode=...`.
+// Returns `pg`-compatible discrete fields. We intentionally do NOT import
+// pg-connection-string here — see the import policy at the top of this file.
+function parsePostgresUrl(url) {
+  const parsed = new URL(url);
+  const user = parsed.username ? decodeURIComponent(parsed.username) : undefined;
+  const host = parsed.hostname ? decodeURIComponent(parsed.hostname) : undefined;
+  const portRaw = parsed.port;
+  const port =
+    portRaw !== "" ? Number.parseInt(portRaw, 10) : undefined;
+  const dbPath = parsed.pathname.startsWith("/")
+    ? parsed.pathname.slice(1)
+    : parsed.pathname;
+  const database = dbPath ? decodeURIComponent(dbPath) : undefined;
+  const sslmode = parsed.searchParams.get("sslmode");
+  // Match pg-connection-string's SSL semantics for our deployed modes:
+  // `disable` -> false; anything requiring TLS -> truthy object so pg
+  // enables TLS. We never set sslcert/sslkey/sslrootcert from the URL.
+  let ssl;
+  if (sslmode === "disable") {
+    ssl = false;
+  } else if (sslmode === "no-verify") {
+    ssl = { rejectUnauthorized: false };
+  } else if (
+    sslmode === "prefer" ||
+    sslmode === "require" ||
+    sslmode === "verify-ca" ||
+    sslmode === "verify-full"
+  ) {
+    ssl = {};
+  }
+  const application_name =
+    parsed.searchParams.get("application_name") ?? undefined;
+  return {
+    user,
+    host,
+    ...(port != null && !Number.isNaN(port) ? { port } : {}),
+    ...(database != null ? { database } : {}),
+    ...(ssl !== undefined ? { ssl } : {}),
+    ...(application_name != null ? { application_name } : {}),
+  };
 }
 
 async function createAzurePasswordProvider() {
@@ -144,19 +191,14 @@ async function buildPoolConfig(url) {
     return { connectionString: url, ...overrides };
   }
   const password = await createAzurePasswordProvider();
-  const parsed = parseConnectionString(url);
-  // Drop the parsed password (empty on passwordless URLs) so pg cannot
-  // Object.assign it over our token provider. See the file header
-  // comment.
-  const { password: _parsedPassword, port: parsedPort, ...rest } = parsed;
-  void _parsedPassword;
-  const port =
-    parsedPort != null && parsedPort !== ""
-      ? Number.parseInt(String(parsedPort), 10)
-      : undefined;
+  // AAD mode: build discrete fields with our own URL parser (no
+  // pg-connection-string import — see policy at top of file) and attach
+  // the token provider. We never pass `connectionString` + `password`
+  // together, so pg's ConnectionParameters Object.assign cannot clobber
+  // the callback with an empty parsed password.
+  const discrete = parsePostgresUrl(url);
   const config = {
-    ...rest,
-    ...(port != null && !Number.isNaN(port) ? { port } : {}),
+    ...discrete,
     password,
     ...overrides,
   };
