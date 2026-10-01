@@ -42,10 +42,16 @@ jobs:
       - name: Build Next.js (standalone output)
         env:
           NEXT_TELEMETRY_DISABLED: "1"
-          # Placeholder values so that build-time env validation (if any) passes.
-          # Real values are configured on the Azure Web App via App Settings / Key Vault refs.
+          # NEXTAUTH_SECRET is a build-time placeholder; the real value is
+          # configured on the Azure Web App via App Settings / Key Vault refs.
           NEXTAUTH_SECRET: build-time-placeholder-build-time-placeholder
-          NEXTAUTH_URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net
+          # NEXTAUTH_URL is baked into the standalone bundle and used by
+          # src/app/layout.tsx to resolve metadata.metadataBase for OG/Twitter
+          # tags. Point it at the public custom domain so social previews
+          # resolve to https://clockinoff.reubinoff.com and not the
+          # azurewebsites.net origin. Runtime App Settings still override this
+          # for anything that reads NEXTAUTH_URL at request time.
+          NEXTAUTH_URL: https://clockinoff.reubinoff.com
         run: npm run build
 
       - name: Assemble deployment package
