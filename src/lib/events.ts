@@ -19,6 +19,32 @@ export function emitProjectsChanged(): void {
   }
 }
 
+// #84 play-to-resume: EntryList can start a brand-new timer from a stopped
+// row's project/description. The dock (TimerBar) owns the running state
+// and needs to re-read /api/timer after that happens, so we broadcast a
+// cheap "something about the timer changed" ping and let it reload. This
+// mirrors the shape of `onProjectsChanged` on purpose — a tiny bus with
+// no payload, swallowing listener errors so one bad subscriber can't
+// break the rest of the UI.
+const timerChangedListeners = new Set<Listener>();
+
+export function onTimerChanged(cb: Listener): () => void {
+  timerChangedListeners.add(cb);
+  return () => {
+    timerChangedListeners.delete(cb);
+  };
+}
+
+export function emitTimerChanged(): void {
+  for (const cb of timerChangedListeners) {
+    try {
+      cb();
+    } catch {
+      // Never let one bad listener break the rest.
+    }
+  }
+}
+
 // V2-6 Quiet Pulse: minimal toast + entry-added bus. In-memory only — no
 // persistence, no queue beyond the short replay buffer described below. The
 // Toaster mounted in the app layout subscribes and renders; TimerBar /
@@ -116,6 +142,7 @@ export function emitEntryAdded<T = unknown>(entry: T): void {
 
 export function _resetProjectsChangedListenersForTests(): void {
   projectsChangedListeners.clear();
+  timerChangedListeners.clear();
   toastListeners.clear();
   entryAddedListeners.clear();
   _resetToastBufferForTests();

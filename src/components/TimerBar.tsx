@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDurationHms } from "@/lib/tz";
-import { emitEntryAdded, emitToast, onProjectsChanged } from "@/lib/events";
+import {
+  emitEntryAdded,
+  emitToast,
+  onProjectsChanged,
+  onTimerChanged,
+} from "@/lib/events";
 import { handleAuthFailure, isAuthFailure } from "@/lib/auth-ui";
 import {
   IconPlay,
@@ -113,6 +118,17 @@ export default function TimerBar({
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // #84 play-to-resume: EntryList starts a fresh timer from a stopped
+  // entry's project/description. The dock owns the running state, so
+  // re-read /api/timer when that happens; the running wash + Stop
+  // controls then light up without the user having to touch the dock.
+  useEffect(() => {
+    const unsubscribe = onTimerChanged(() => {
+      void load();
+    });
+    return unsubscribe;
   }, [load]);
 
   // Keep the project dropdown in sync when projects are created/archived/deleted
