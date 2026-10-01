@@ -17,6 +17,9 @@ concurrency:
   group: nightly-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  NODE_VERSION: "24"
+
 jobs:
   regression:
     name: Regression (unit + e2e)
@@ -51,7 +54,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Install dependencies
@@ -100,9 +103,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*.{js,jsx,ts,tsx}', 'next.config.mjs', 'tsconfig.json') }}
+          key: ${{ runner.os }}-node${{ env.NODE_VERSION }}-nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*.{js,jsx,ts,tsx}', 'next.config.mjs', 'tsconfig.json') }}
           restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-
+            ${{ runner.os }}-node${{ env.NODE_VERSION }}-nextjs-${{ hashFiles('package-lock.json') }}-
 
       # e2e boots `next start` against the same Postgres, so build first.
       - name: Build Next.js app
