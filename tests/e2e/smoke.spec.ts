@@ -29,7 +29,16 @@ test.describe.serial("Timer smoke", () => {
     // the entry list's "Filter by project" combobox or future dialogs).
     const timerDock = page.locator(".timer-dock");
     await timerDock.getByLabel("Timer description").fill(description);
-    await timerDock.getByRole("button", { name: "Start timer" }).click();
+    // The idle Start button carries a `.timer-start-idle` breath animation
+    // (see src/app/globals.css). Playwright's actionability check reports
+    // "element is not stable" if we click into that animation, so we both
+    // emulate prefers-reduced-motion (playwright.config.ts) *and* assert the
+    // button is actually enabled before the click so a regression here fails
+    // loudly instead of timing out as a stability flake. Shaul lock: no
+    // `{ force: true }`.
+    const startBtn = timerDock.getByRole("button", { name: "Start timer" });
+    await expect(startBtn).toBeEnabled();
+    await startBtn.click();
     await expect(
       timerDock.getByRole("button", { name: "Stop timer" }),
     ).toBeVisible();

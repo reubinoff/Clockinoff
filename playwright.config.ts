@@ -17,6 +17,16 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   use: {
     baseURL: externalBaseUrl ?? "http://localhost:3000",
+    // Emulate `prefers-reduced-motion: reduce` so the TimerBar's idle Start
+    // button (`.timer-start-idle` → `start-idle-breath` keyframes in
+    // src/app/globals.css) and the running-pulse are suppressed. Without
+    // this Playwright reports "element is not stable" when clicking Start
+    // because the infinite breath animation keeps nudging transform.
+    // The CSS already honours this media query (reduced-motion block at
+    // `.timer-running-pulse, .timer-start-idle { animation: none; }`), so
+    // this is a harness-only tweak — product motion stays intact for
+    // humans.
+    reducedMotion: "reduce",
     trace: "retain-on-failure",
     video: "retain-on-failure",
     screenshot: "only-on-failure",
