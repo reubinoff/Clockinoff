@@ -70,15 +70,32 @@ describe("db/client — Azure AD mode", () => {
     const provider = vi.fn(async () => "fake-token");
     setPasswordProvider(provider);
     process.env.PG_AZURE_AD_AUTH = "1";
-    const pool = getPool();
-    expect(isAzureAdMode()).toBe(true);
-    // `pg` wires the password function straight through to Client config;
-    // we assert on the pool's internal option bag instead of actually
-    // opening a socket to a non-AAD server.
-    const options = (
-      pool as unknown as { options: { password?: unknown } }
-    ).options;
-    expect(typeof options.password).toBe("function");
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const pool = getPool();
+      expect(isAzureAdMode()).toBe(true);
+      // `pg` wires the password function straight through to Client config;
+      // we assert on the pool's internal option bag instead of actually
+      // opening a socket to a non-AAD server.
+      const options = (
+        pool as unknown as { options: { password?: unknown } }
+      ).options;
+      expect(typeof options.password).toBe("function");
+      // Clockinoff #75 regression guard: in AAD mode the pool config must
+      // never carry `connectionString` + `password` together — pg's
+      // ConnectionParameters would then Object.assign-merge the parsed
+      // (empty) password over the provider.
+      expect(
+        "connectionString" in (options as unknown as Record<string, unknown>),
+      ).toBe(false);
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining("azureAdAuth=true"),
+        "function",
+        "absent",
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 
   it("stays in password mode when PG_AZURE_AD_AUTH=0 even if URL is passwordless", async () => {
@@ -102,9 +119,14 @@ describe("db/client — Azure AD mode", () => {
     await closeDb();
     setPasswordProvider(async () => "fake-token");
     process.env.PG_AZURE_AD_AUTH = "1";
-    const db1 = getDb();
-    const db2 = getDb();
-    expect(db1).toBe(db2);
-    expect(isAzureAdMode()).toBe(true);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const db1 = getDb();
+      const db2 = getDb();
+      expect(db1).toBe(db2);
+      expect(isAzureAdMode()).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 });
