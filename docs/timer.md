@@ -68,7 +68,7 @@ the expanded dock never permanently covers the first entry card — the
 list scrolls up to meet the dock instead of hiding under it.
 
 Your current timezone no longer appears inside the timer dock. It is
-shown in the desktop footer (as `Timely · <timezone>`) and on the
+shown in the desktop footer (as `Clockinoff · <timezone>`) and on the
 [Account & timezone]({{ '/account' | relative_url }}) page.
 
 The **Already billed** flag is *not* available on the running dock —

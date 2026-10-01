@@ -29,7 +29,7 @@ export function AuthShell({
           <div className="flex items-center gap-3">
             <Mark size={40} />
             <span className="text-lg font-semibold leading-none tracking-[-0.01em] text-ink">
-              Timely
+              Clockinoff
             </span>
           </div>
           <div className="space-y-1">

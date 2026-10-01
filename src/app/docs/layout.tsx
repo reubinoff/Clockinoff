@@ -5,7 +5,7 @@ import { listDocPages } from "@/lib/docs-content";
 
 export const metadata = {
   title: "User docs",
-  description: "Clockinoff / Timely — user documentation.",
+  description: "Clockinoff — user documentation.",
 };
 
 export default function DocsLayout({
@@ -21,10 +21,10 @@ export default function DocsLayout({
           <Link
             href="/"
             className="inline-flex items-center gap-2 font-semibold tracking-tight text-ink shrink-0"
-            aria-label="Timely home"
+            aria-label="Clockinoff home"
           >
             <Mark size={24} />
-            <span className="text-sm">Timely</span>
+            <span className="text-sm">Clockinoff</span>
           </Link>
           <span
             className="text-xs uppercase tracking-wide text-muted border-l border-border pl-4"
@@ -78,7 +78,7 @@ export default function DocsLayout({
         </main>
       </div>
       <footer className="border-t border-border py-4 text-center text-xs text-muted">
-        <span>Timely user docs</span>
+        <span>Clockinoff user docs</span>
         <span aria-hidden="true"> · </span>
         <Link href="/" className="hover:text-ink underline underline-offset-2">
           Back to app
