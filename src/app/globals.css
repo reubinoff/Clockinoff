@@ -358,12 +358,65 @@
       transform-origin: center center;
     }
   }
+  /* #54 Quiet Pulse pending/skeleton (Dana lock). Soft opacity pulse at 1.2s,
+     clamped to muted/border tokens so light + dark both read as "intentional
+     wait, not frozen". Also used by the row-dim overlay while a per-row
+     mutation (Save, Delete, Mark billed) is in flight. Reduced-motion wipes
+     the animation outright below so the skeleton stays as a flat soft wash
+     with no shimmer. */
+  @keyframes skeleton-pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+  .skeleton-pulse {
+    background-color: var(--color-border);
+    animation: skeleton-pulse 1.2s ease-in-out infinite;
+  }
+  /* Row-level pending wash for optimistic mutations. Applies the same soft
+     pulse to the row body so it's clear the action is in flight; pointer
+     events are blocked so the user can't double-tap into a half-saved
+     state. We lower opacity to ~0.72 to match Dana's row-dim spec. */
+  .entry-row-pending {
+    pointer-events: none;
+    opacity: 0.72;
+    animation: skeleton-pulse 1.2s ease-in-out infinite;
+  }
+  /* Tiny inline spinner for action buttons that stay mounted while pending —
+     e.g. the sticky bulk bar primary. Uses the accent token so it reads as
+     Quiet Pulse accent, not the browser-default teal. */
+  @keyframes quiet-pulse-spin {
+    to { transform: rotate(360deg); }
+  }
+  .quiet-pulse-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    border: 2px solid var(--color-accent-soft);
+    border-top-color: var(--color-accent);
+    animation: quiet-pulse-spin 0.9s linear infinite;
+    vertical-align: -3px;
+  }
   @media (prefers-reduced-motion: reduce) {
     /* Zeroing --duration-breath is not enough for an infinite keyframe
        animation — the animation still runs, just with a 0ms cycle. Kill the
        decorative motion outright, same as .timer-running-pulse. */
     .timer-running-pulse,
     .timer-start-idle {
+      animation: none;
+    }
+    /* Dana lock: skeletons must become a static soft wash — no shimmer. The
+     row-pending overlay still dims to signal "in flight", just without
+     pulse. Spinners also pin to a frame rather than rotating. */
+    .skeleton-pulse,
+    .entry-row-pending {
+      animation: none;
+    }
+    .quiet-pulse-spinner {
       animation: none;
     }
     /* V2-6 rule: spring insert and toast enter must be instant under
