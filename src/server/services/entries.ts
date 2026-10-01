@@ -247,7 +247,7 @@ export async function startTimer(userId: string, input: StartTimerInput = {}): P
   const startAt = input.start_at ? parseDate(input.start_at, "start_at") : new Date();
 
   let billable = input.billable;
-  let effectiveEntryRate = rate;
+  const effectiveEntryRate = rate;
   if (projectId && (billable === undefined || effectiveEntryRate === undefined)) {
     const db = getDb();
     const [proj] = await db
