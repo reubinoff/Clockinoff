@@ -10,10 +10,10 @@ describe("DOCS_URL", () => {
     else process.env.NEXT_PUBLIC_DOCS_URL = orig;
   });
 
-  it("defaults to the GitHub Pages URL when env is unset", async () => {
+  it("defaults to the in-app /docs route when env is unset", async () => {
     delete process.env.NEXT_PUBLIC_DOCS_URL;
     const mod = await import("@/lib/docs");
-    expect(mod.DOCS_URL).toBe("https://reubinoff.github.io/Clockinoff/");
+    expect(mod.DOCS_URL).toBe("/docs");
   });
 
   it("honours a NEXT_PUBLIC_DOCS_URL override, trimming whitespace", async () => {

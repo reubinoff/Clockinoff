@@ -6,14 +6,12 @@ Built to the [attached tech design](uploads/timely-tech-design.md).
 
 ## Documentation
 
-End-user documentation (how to register, use the timer, manage projects/clients/tags, and export CSV/PDF) lives in [`/docs`](./docs) and is published as a GitHub Pages site.
+End-user documentation (how to register, use the timer, manage projects/clients/tags, and export CSV/PDF) lives in [`/docs`](./docs/index.md) as plain markdown and is served two ways:
 
-- Live docs: <https://reubinoff.github.io/Clockinoff/>
-- Source markdown: [`/docs`](./docs/index.md)
+- **In-app, on the same public origin** at `/docs` (e.g. <https://clockinoff.reubinoff.com/docs>). The Next.js app renders the same markdown via `src/app/docs/*` and `src/lib/docs-content.ts`, so the "Docs" link in the app shell always resolves regardless of GitHub Pages state. Set `NEXT_PUBLIC_DOCS_URL` to override the destination (e.g. point at a Pages mirror).
+- **Optionally**, as a Jekyll / `just-the-docs` [GitHub Pages site](https://reubinoff.github.io/Clockinoff/). The `/docs` folder is already a valid Jekyll site; enabling Pages requires no code change. If you fork this repo and want the Pages mirror, go to **Settings → Pages → Build and deployment** and select **Source: Deploy from a branch**, **Branch: `main`**, **Folder: `/docs`**.
 
-The `/docs` folder is a Jekyll site (using the `just-the-docs` remote theme) that GitHub Pages builds automatically. It is completely independent of the Next.js app and does not affect the Azure Web App CD workflow.
-
-To enable Pages on a fork: in the GitHub repo, go to **Settings → Pages → Build and deployment** and select **Source: Deploy from a branch**, **Branch: `main`**, **Folder: `/docs`**.
+Both renderings read the same markdown, so edits land everywhere at once. The Azure Web App CD workflow is unaffected either way.
 
 ## Stack
 

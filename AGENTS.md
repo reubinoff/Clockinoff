@@ -310,13 +310,17 @@ For higher-level onboarding aimed at humans, see
 
 ## 10. User docs — keep them in sync
 
-Clockinoff ships an end-user documentation site at
-<https://reubinoff.github.io/Clockinoff/>, built from Markdown under
-[`/docs`](./docs) by GitHub Pages (Jekyll + `just-the-docs` remote theme).
-The web app links to it from the app-shell header (visible on both
-mobile and desktop) and the desktop footer, plus the login/register
-screens, via `src/lib/docs.ts` (`DOCS_URL`, override with
-`NEXT_PUBLIC_DOCS_URL`).
+Clockinoff ships an end-user documentation site built from Markdown under
+[`/docs`](./docs). The default production target is the **in-app `/docs`
+route** rendered by `src/app/docs/*` + `src/lib/docs-content.ts` on the
+same public origin as the app (e.g. `https://clockinoff.reubinoff.com/docs`),
+so the Docs link never 404s regardless of whether an external mirror is
+enabled. The same `/docs` folder also happens to be a valid Jekyll /
+`just-the-docs` site (optional GitHub Pages mirror at
+<https://reubinoff.github.io/Clockinoff/>). The web app links to the
+docs from the app-shell header (visible on both mobile and desktop) and
+the desktop footer, plus the login/register screens, via `src/lib/docs.ts`
+(`DOCS_URL`, override with `NEXT_PUBLIC_DOCS_URL`).
 
 **Whenever you change user-visible behaviour, update the matching doc
 page in the same commit.** Use this mapping:
@@ -337,16 +341,32 @@ page in the same commit.** Use this mapping:
 Rules of the road for `/docs`:
 
 - The docs describe **actual v1 UI behaviour**, not roadmap items. If a
-  feature only exists in the API, say so explicitly (see the tags and
-  entries pages for the current tone).
-- Do not add build steps to `/docs`. GitHub Pages builds it for free —
-  keep it that way so the Azure App Service CD workflow is not affected.
+ feature only exists in the API, say so explicitly (see the tags and
+ entries pages for the current tone).
+- Do not add build steps to `/docs`. The in-app renderer is deliberately
+ small (markdown + a tiny Jekyll-syntax preprocessor; see
+ `src/lib/docs-content.ts`) and GitHub Pages builds the same tree for
+ free when enabled — keep both paths dependency-free so the Azure App
+ Service CD workflow is not affected.
+- If you add a new doc page, add it to `DOC_PAGES` in
+ `src/lib/docs-content.ts` so the in-app sidebar and the static
+ `generateStaticParams` list see it, and update the mapping table above.
 - Do not link back into the running app from `/docs` with absolute
-  URLs; use relative paths (`/register`, `/app`, …) so the docs work
-  against any instance.
-- If you rename or delete a doc page, update the internal cross-links
-  and the mapping table above.
+ URLs; use relative paths (`/register`, `/app`, …) so the docs work
+ against any instance.
+- If you rename or delete a doc page, update the internal cross-links,
+ the `DOC_PAGES` list, and the mapping table above.
 
 If a change is genuinely docs-only (typo, wording, screenshot), a
 docs-only commit straight to `main` is fine — CD will re-run but is a
 no-op because no application code changed.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
