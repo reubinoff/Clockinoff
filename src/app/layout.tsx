@@ -3,7 +3,26 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { appearanceBootScript } from "@/lib/appearance";
 
+function resolveMetadataBase(): URL {
+  // Mirrors `publicOrigin` from `src/lib/base-url.ts`, but Next.js runs
+  // this during build / server render where no Request is available, so
+  // we lean on NEXTAUTH_URL and fall back to the Next.js default only
+  // when it isn't set (local dev). Without this, Next.js emits
+  // `http://localhost:3000` into the generated OG / Twitter tags in prod.
+  const configured = process.env.NEXTAUTH_URL?.trim();
+  if (configured) {
+    try {
+      return new URL(configured);
+    } catch {
+      // Fall through — a malformed NEXTAUTH_URL is a config bug but we
+      // still prefer the local-dev default over crashing the build.
+    }
+  }
+  return new URL("http://localhost:3000");
+}
+
 export const metadata: Metadata = {
+  metadataBase: resolveMetadataBase(),
   title: {
     default: "Timely",
     template: "%s · Timely",
