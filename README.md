@@ -323,6 +323,7 @@ of truth; the short version is:
    | `NODE_ENV` | `production` |
    | `WEBSITE_NODE_DEFAULT_VERSION` | `~24` |
    | `PG_MIGRATOR_CLIENT_ID` | ClientId of the migrator UAMI assigned to the Web App (required when `PG_AZURE_AD_AUTH=1`; see [Entra / Managed Identity for Postgres](#entra--managed-identity-for-postgres-optional)) |
+   | `PG_MIGRATOR_PG_USER` | Optional override for the Postgres role the migrate step connects as under `PG_AZURE_AD_AUTH=1`. Defaults to `uami-clockinoff-migrator`; leave unset in prod |
    | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault reference to the App Insights connection string (optional — see below) |
 
 4. The CD job runs `npm run db:migrate` against the target DB before
@@ -358,8 +359,16 @@ table or background job is required.
   on database `clockinoff` with DDL grants on schema `public`. The
   UAMI's clientId is read from the `PG_MIGRATOR_CLIENT_ID` App Setting
   (**required** when `PG_AZURE_AD_AUTH` is on — the script fails fast
-  with a clear error if it is missing). Without this split the system
-  MI's DML-only role tripped `42501 permission denied for schema
+  with a clear error if it is missing). The migrate step also
+  **overrides the Postgres `user`** to the migrator role's exact
+  Entra-mapped name (`uami-clockinoff-migrator` by default, overridable
+  with `PG_MIGRATOR_PG_USER`); the passwordless URL's `clockinoff-prod`
+  user is only correct for the runtime pool. Ariel's 2026-10-02 prod
+  probe showed Azure Postgres rejects a UAMI token sent with
+  `user=clockinoff-prod` with SQLSTATE `28000` (principal id mismatch),
+  because the Entra OID in the token must match the OID stored on the
+  Postgres role's `pgaadauth` security label. Without this split the
+  system MI's DML-only role tripped `42501 permission denied for schema
   public` on the first passwordless cutover.
 
 Mode selection:
