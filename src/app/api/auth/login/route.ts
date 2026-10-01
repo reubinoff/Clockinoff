@@ -4,6 +4,7 @@ import { login } from "@/server/auth/service";
 import { SESSION_COOKIE } from "@/server/auth/session";
 import {
   isLoginRateLimited,
+  loginRetryAfterSeconds,
   recordLoginFailure,
   recordLoginSuccess,
 } from "@/server/auth/rate-limit";
@@ -22,7 +23,10 @@ export async function POST(req: Request): Promise<Response> {
     // Fail closed *before* the credential check so we never leak whether the
     // account exists once the (email + IP) bucket is exhausted.
     if (email.trim().length > 0 && isLoginRateLimited(email, ip)) {
-      throw errors.rateLimited();
+      throw errors.rateLimited(
+        "Too many login attempts. Please try again later.",
+        loginRetryAfterSeconds(email, ip),
+      );
     }
     const { user, session } = await login(body);
     recordLoginSuccess(email, ip);

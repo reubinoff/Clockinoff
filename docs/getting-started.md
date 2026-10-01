@@ -103,6 +103,12 @@ and you *don't* know whether you have an account, try signing in — the
 sign-in page's failure message is equally generic but a valid password
 just works.
 
+Clockinoff also caps the number of registration attempts from the same
+network within a short window. If you exceed the budget — regardless
+of whether each attempt succeeded — the server responds with
+`429 Too many sign-up attempts. Please try again later.` and a
+`Retry-After` header. Wait a few minutes and try again.
+
 ---
 
 ## Sign in later
@@ -119,9 +125,10 @@ that case Clockinoff returns you to the page you were trying to reach.
 After a handful of failed login attempts for the same email from the same
 network within a short window, Clockinoff temporarily blocks further
 attempts and responds with `429 Too many login attempts. Please try again
-later.` Wait a few minutes and try again — a successful sign-in clears the
-counter immediately. The message is deliberately generic and does not
-reveal whether the email is registered.
+later.` with a `Retry-After` header telling the client how long to wait.
+Wait a few minutes and try again — a successful sign-in clears the counter
+immediately. The message is deliberately generic and does not reveal
+whether the email is registered.
 
 ### Session lifetime
 

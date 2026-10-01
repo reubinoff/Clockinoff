@@ -6,7 +6,16 @@ import { SESSION_COOKIE, getSessionUser, type SessionUser } from "@/server/auth/
 
 export function jsonError(err: unknown): NextResponse {
   if (err instanceof ApiError) {
-    return NextResponse.json(toErrorBody(err), { status: err.status });
+    const res = NextResponse.json(toErrorBody(err), { status: err.status });
+    // Lift any ApiError-attached headers (e.g. `Retry-After` on 429) onto
+    // the response so callers see them without each route handler having
+    // to remember to.
+    if (err.headers) {
+      for (const [name, value] of Object.entries(err.headers)) {
+        res.headers.set(name, value);
+      }
+    }
+    return res;
   }
   logger.exception("[api] Unhandled error", err);
   const internal = errors.internal();

@@ -1,15 +1,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   LOGIN_RATE_LIMIT,
+  REGISTER_RATE_LIMIT,
   isLoginRateLimited,
+  isRegisterRateLimited,
+  loginRetryAfterSeconds,
   recordLoginFailure,
   recordLoginSuccess,
-  resetLoginRateLimit,
+  recordRegisterAttempt,
+  registerRetryAfterSeconds,
+  resetAuthRateLimits,
 } from "@/server/auth/rate-limit";
 
 describe("auth/rate-limit", () => {
   beforeEach(() => {
-    resetLoginRateLimit();
+    resetAuthRateLimits();
   });
 
   it("does not limit before the threshold is reached", () => {
@@ -68,5 +73,63 @@ describe("auth/rate-limit", () => {
     // the exhausted one.
     recordLoginFailure("a@example.com", "1.1.1.1", after);
     expect(isLoginRateLimited("a@example.com", "1.1.1.1", after)).toBe(false);
+  });
+
+  it("reports zero retry-after when no login bucket exists", () => {
+    expect(loginRetryAfterSeconds("fresh@example.com", "1.1.1.1")).toBe(0);
+  });
+
+  it("reports a positive retry-after once the login bucket is tripped", () => {
+    const start = 2_000_000;
+    for (let i = 0; i < LOGIN_RATE_LIMIT.maxFailures; i += 1) {
+      recordLoginFailure("a@example.com", "1.1.1.1", start);
+    }
+    const retry = loginRetryAfterSeconds("a@example.com", "1.1.1.1", start);
+    expect(retry).toBeGreaterThan(0);
+    expect(retry).toBeLessThanOrEqual(Math.ceil(LOGIN_RATE_LIMIT.windowMs / 1000));
+    // And drops back to 0 once the window closes.
+    const after = start + LOGIN_RATE_LIMIT.windowMs + 1;
+    expect(loginRetryAfterSeconds("a@example.com", "1.1.1.1", after)).toBe(0);
+  });
+
+  // -------- register limiter --------------------------------------------
+
+  it("does not limit register before the per-IP threshold", () => {
+    for (let i = 0; i < REGISTER_RATE_LIMIT.maxAttempts - 1; i += 1) {
+      recordRegisterAttempt("5.5.5.5");
+      expect(isRegisterRateLimited("5.5.5.5")).toBe(false);
+    }
+  });
+
+  it("limits register after the per-IP threshold within the window", () => {
+    for (let i = 0; i < REGISTER_RATE_LIMIT.maxAttempts; i += 1) {
+      recordRegisterAttempt("5.5.5.5");
+    }
+    expect(isRegisterRateLimited("5.5.5.5")).toBe(true);
+    // A different IP is untouched.
+    expect(isRegisterRateLimited("6.6.6.6")).toBe(false);
+  });
+
+  it("expires the register bucket once the window passes", () => {
+    const start = 3_000_000;
+    for (let i = 0; i < REGISTER_RATE_LIMIT.maxAttempts; i += 1) {
+      recordRegisterAttempt("5.5.5.5", start);
+    }
+    expect(isRegisterRateLimited("5.5.5.5", start)).toBe(true);
+    const after = start + REGISTER_RATE_LIMIT.windowMs + 1;
+    expect(isRegisterRateLimited("5.5.5.5", after)).toBe(false);
+    recordRegisterAttempt("5.5.5.5", after);
+    expect(isRegisterRateLimited("5.5.5.5", after)).toBe(false);
+  });
+
+  it("reports retry-after for the register bucket", () => {
+    expect(registerRetryAfterSeconds("fresh-ip")).toBe(0);
+    const start = 4_000_000;
+    for (let i = 0; i < REGISTER_RATE_LIMIT.maxAttempts; i += 1) {
+      recordRegisterAttempt("7.7.7.7", start);
+    }
+    const retry = registerRetryAfterSeconds("7.7.7.7", start);
+    expect(retry).toBeGreaterThan(0);
+    expect(retry).toBeLessThanOrEqual(Math.ceil(REGISTER_RATE_LIMIT.windowMs / 1000));
   });
 });

@@ -17,18 +17,27 @@ export class ApiError extends Error {
   readonly code: ErrorCode;
   readonly details?: unknown;
   readonly extra?: Record<string, unknown>;
+  // Optional extra response headers (currently used by RATE_LIMITED to emit
+  // `Retry-After`). Not part of the JSON body — the route-level `jsonError`
+  // helper lifts them onto the Response.
+  readonly headers?: Record<string, string>;
 
   constructor(
     status: number,
     code: ErrorCode,
     message: string,
-    opts?: { details?: unknown; extra?: Record<string, unknown> },
+    opts?: {
+      details?: unknown;
+      extra?: Record<string, unknown>;
+      headers?: Record<string, string>;
+    },
   ) {
     super(message);
     this.status = status;
     this.code = code;
     this.details = opts?.details;
     this.extra = opts?.extra;
+    this.headers = opts?.headers;
   }
 }
 
@@ -52,7 +61,15 @@ export const errors = {
       extra: { entry_id: entryId },
     }),
   timerNotRunning: () => new ApiError(404, "TIMER_NOT_RUNNING", "No running timer"),
-  rateLimited: (message = "Too many login attempts. Please try again later.") =>
-    new ApiError(429, "RATE_LIMITED", message),
+  rateLimited: (
+    message = "Too many login attempts. Please try again later.",
+    retryAfterSeconds?: number,
+  ) =>
+    new ApiError(429, "RATE_LIMITED", message, {
+      headers:
+        typeof retryAfterSeconds === "number" && retryAfterSeconds > 0
+          ? { "Retry-After": String(Math.ceil(retryAfterSeconds)) }
+          : undefined,
+    }),
   internal: (message = "Internal server error") => new ApiError(500, "INTERNAL", message),
 };
