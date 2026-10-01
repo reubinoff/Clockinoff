@@ -333,6 +333,28 @@ of truth; the short version is:
    button path (`/api/auth/google/start` fail-closes to
    `/login?error=network`) and the rest of the app keeps working.
 
+#### Entra / Managed Identity for Postgres (optional)
+
+The pool and the migrate script accept a passwordless `DATABASE_URL`
+backed by Microsoft Entra. When the URL has no password component —
+e.g. `postgresql://clockinoff-prod@<host>.postgres.database.azure.com:5432/<db>?sslmode=require` —
+the app mints a short-lived access token for the
+`https://ossrdbms-aad.database.windows.net/.default` scope via
+`DefaultAzureCredential` (the App Service system-assigned managed
+identity on Azure) and feeds it to `pg` as the password. Tokens are
+cached in-process until shortly before expiry and refreshed on new
+pool connections, so no second table or background job is required.
+
+- Force the token path with `PG_AZURE_AD_AUTH=1`.
+- Force the static-password path with `PG_AZURE_AD_AUTH=0` (handy for
+  rollback while the KV reference flips back to a passworded URL).
+- Omit the flag and the mode is picked by URL shape: passwordless →
+  token, passworded → static. This lets prod flip modes by swapping
+  only the Key Vault secret the `DATABASE_URL` App Setting points at.
+
+Access tokens and the full connection string are never logged — see
+the redaction contract below.
+
 ### Application Insights
 
 Server-side telemetry (HTTP requests, exceptions, `pg` queries, `console.*`
