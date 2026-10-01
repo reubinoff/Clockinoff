@@ -7,7 +7,7 @@ import LibraryTabs from "@/components/LibraryTabs";
 export const dynamic = "force-dynamic";
 
 export default async function TagsPage(): Promise<JSX.Element> {
-  const sid = cookies().get(SESSION_COOKIE)?.value;
+  const sid = (await cookies()).get(SESSION_COOKIE)?.value;
   const user = await getSessionUser(sid);
   if (!user) return <div />;
   const tags = await listTags(user.id);

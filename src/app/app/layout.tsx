@@ -20,7 +20,7 @@ export default async function AppLayout({
 }: {
   children: ReactNode;
 }): Promise<JSX.Element> {
-  const sid = cookies().get(SESSION_COOKIE)?.value;
+  const sid = (await cookies()).get(SESSION_COOKIE)?.value;
   const user = await getSessionUser(sid);
   if (!user) redirect("/login");
 

@@ -10,7 +10,7 @@ import { listTags } from "@/server/services/tags";
 export const dynamic = "force-dynamic";
 
 export default async function AppHomePage(): Promise<JSX.Element> {
-  const sid = cookies().get(SESSION_COOKIE)?.value;
+  const sid = (await cookies()).get(SESSION_COOKIE)?.value;
   const user = await getSessionUser(sid);
   if (!user) return <div />;
   const [{ entries }, projects, tags] = await Promise.all([

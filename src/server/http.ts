@@ -23,7 +23,8 @@ export function jsonError(err: unknown): NextResponse {
 }
 
 export async function requireUser(): Promise<SessionUser> {
-  const cookie = cookies().get(SESSION_COOKIE)?.value;
+  const jar = await cookies();
+  const cookie = jar.get(SESSION_COOKIE)?.value;
   const user = await getSessionUser(cookie);
   if (!user) throw errors.unauthorized();
   return user;

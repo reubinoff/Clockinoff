@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(): Promise<Response> {
   try {
-    const jar = cookies();
+    const jar = await cookies();
     const sid = jar.get(SESSION_COOKIE)?.value;
     await deleteSession(sid);
     const res = new NextResponse(null, { status: 204 });

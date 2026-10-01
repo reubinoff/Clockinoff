@@ -6,13 +6,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function PATCH(req: Request, { params }: Params): Promise<Response> {
   try {
     const user = await requireUser();
-    const id = requireUuid(params.id);
+    const { id: raw } = await params;
+    const id = requireUuid(raw);
     const body = await readJson<UpdateEntryInput>(req);
     const entry = await updateEntry(user.id, id, body);
     return ok(entry);
@@ -24,7 +25,8 @@ export async function PATCH(req: Request, { params }: Params): Promise<Response>
 export async function DELETE(_req: Request, { params }: Params): Promise<Response> {
   try {
     const user = await requireUser();
-    const id = requireUuid(params.id);
+    const { id: raw } = await params;
+    const id = requireUuid(raw);
     await deleteEntry(user.id, id);
     return noContent();
   } catch (err) {
