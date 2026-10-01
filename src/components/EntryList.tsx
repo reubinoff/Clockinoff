@@ -963,10 +963,16 @@ function BulkActionBar({
             <span>Clear</span>
           </button>
         </div>
-        <div className="flex items-center gap-2 md:ml-auto">
+        {/* #64 mobile billed sticky: equal-width Mark unbilled / Mark billed.
+             `flex-1` with different label widths still read as unequal on
+             narrow screens because flex basis is `0%` but intrinsic content
+             min-sizes diverge. A 2-column grid pins each button to half of
+             the row, matching the rest of the Quiet Pulse 44px chrome. On
+             md+ we fall back to the floating inline cluster. */}
+        <div className="grid grid-cols-2 gap-2 md:ml-auto md:flex md:items-center">
           <button
             type="button"
-            className="btn btn-sm min-h-[44px] flex-1 md:flex-none"
+            className="btn btn-sm min-h-[44px] w-full md:w-auto"
             onClick={onMarkUnbilled}
             disabled={!canMarkUnbilled || pending}
             aria-busy={pending && !primaryIsBillAction ? true : undefined}
@@ -980,7 +986,7 @@ function BulkActionBar({
           </button>
           <button
             type="button"
-            className="btn btn-primary btn-sm min-h-[44px] flex-1 md:flex-none"
+            className="btn btn-primary btn-sm min-h-[44px] w-full md:w-auto"
             onClick={onMarkBilled}
             disabled={!canMarkBilled || pending}
             aria-busy={pending && primaryIsBillAction ? true : undefined}

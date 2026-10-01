@@ -210,6 +210,12 @@ entries at once.
      is billable + not yet billed.
    - **Mark as unbilled** — flips `billed=false` on every selected row
      that is billable + billed.
+
+   On phones the **Mark as unbilled** and **Mark as billed** buttons
+   render as an equal-width pair in a 2-column grid so neither label
+   crowds the other, and the sticky bar sits as a single band above the
+   bottom tab bar — it never stacks a second dock over the timer dock
+   or the nav.
 5. When the request succeeds the selection clears, select mode exits,
    and a counted toast confirms: *Marked N as billed.* or *Marked N as
    unbilled.*
