@@ -48,7 +48,6 @@ import {
   type TokenCredential,
 } from "@azure/identity";
 import type { PoolConfig } from "pg";
-import { parse as parseConnectionString } from "pg-connection-string";
 
 export const AZURE_POSTGRES_SCOPE =
   "https://ossrdbms-aad.database.windows.net/.default";
@@ -166,12 +165,59 @@ export interface BuildPoolConfigOptions {
   passwordProvider?: PasswordProvider;
 }
 
+// Minimal, dependency-free parser for the subset of PostgreSQL connection
+// strings Clockinoff emits: `postgres[ql]://user[:pw]@host[:port]/db?sslmode=...`.
+// We intentionally do NOT import `pg-connection-string` here: `scripts/migrate.mjs`
+// mirrors this helper and runs in the standalone Azure deploy bundle, where
+// `pg-connection-string` is a transitive of `pg` that `next build`'s tracer
+// does not reliably include. Keeping both call sites on `new URL()` means the
+// runtime and the migrate step build the AAD pool config the same way.
+interface DiscreteFields {
+  user?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  ssl?: boolean | { rejectUnauthorized?: boolean };
+  application_name?: string;
+}
+
+function parsePostgresUrl(url: string): DiscreteFields {
+  const parsed = new URL(url);
+  const out: DiscreteFields = {};
+  if (parsed.username) out.user = decodeURIComponent(parsed.username);
+  if (parsed.hostname) out.host = decodeURIComponent(parsed.hostname);
+  if (parsed.port !== "") {
+    const port = Number.parseInt(parsed.port, 10);
+    if (!Number.isNaN(port)) out.port = port;
+  }
+  const dbPath = parsed.pathname.startsWith("/")
+    ? parsed.pathname.slice(1)
+    : parsed.pathname;
+  if (dbPath) out.database = decodeURIComponent(dbPath);
+  const sslmode = parsed.searchParams.get("sslmode");
+  if (sslmode === "disable") {
+    out.ssl = false;
+  } else if (sslmode === "no-verify") {
+    out.ssl = { rejectUnauthorized: false };
+  } else if (
+    sslmode === "prefer" ||
+    sslmode === "require" ||
+    sslmode === "verify-ca" ||
+    sslmode === "verify-full"
+  ) {
+    out.ssl = {};
+  }
+  const appName = parsed.searchParams.get("application_name");
+  if (appName) out.application_name = appName;
+  return out;
+}
+
 // Single source of truth for turning a `DATABASE_URL` into a pg PoolConfig.
 // In password mode we keep the current `{ connectionString }` shape so
 // nothing changes for the rollback path. In AAD mode we parse the URL
-// ourselves, drop the parsed (empty) password, and return discrete fields
-// plus the provider — pg never sees `connectionString` and `password`
-// together, so its Object.assign-based merge cannot clobber the callback.
+// ourselves and return discrete fields plus the provider — pg never sees
+// `connectionString` and `password` together, so its Object.assign-based
+// merge cannot clobber the callback with an empty parsed password.
 export function buildPgPoolConfig(
   url: string,
   opts: BuildPoolConfigOptions = {},
@@ -189,19 +235,9 @@ export function buildPgPoolConfig(
       "buildPgPoolConfig: passwordProvider is required when azureAdAuth is enabled",
     );
   }
-  const parsed = parseConnectionString(url);
-  // Drop the parsed password: on a passwordless Azure Postgres URL it is
-  // `''`, and surviving into the final config would overwrite
-  // `password: provider` via pg's Object.assign-based merge.
-  const { password: _parsedPassword, port: parsedPort, ...rest } = parsed;
-  void _parsedPassword;
-  const port =
-    parsedPort != null && parsedPort !== ""
-      ? Number.parseInt(String(parsedPort), 10)
-      : undefined;
+  const discrete = parsePostgresUrl(url);
   const base: PoolConfig = {
-    ...(rest as Record<string, unknown>),
-    ...(port != null && !Number.isNaN(port) ? { port } : {}),
+    ...(discrete as Record<string, unknown>),
     password: opts.passwordProvider,
   } as PoolConfig;
   const final: PoolConfig = { ...base, ...overrides };
