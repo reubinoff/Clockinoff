@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { PasswordField } from "@/components/auth/PasswordField";
+import { AuthDivider } from "@/components/auth/AuthDivider";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 import { IconAlert } from "@/components/icons";
+import { googleAuthErrorMessage } from "@/lib/google-auth-errors";
 
 export default function LoginPage(): JSX.Element {
   return (
@@ -23,10 +26,12 @@ function LoginForm(): JSX.Element {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/app";
+  const googleErrorFromQuery = googleAuthErrorMessage(params.get("error"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(googleErrorFromQuery);
   const [pending, setPending] = useState(false);
+  const [googlePending, setGooglePending] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -61,6 +66,17 @@ function LoginForm(): JSX.Element {
     }
   }
 
+  function startGoogle(): void {
+    // Google button handles its own "connecting" state; also disable the
+    // email/password form while we navigate away so no double-tap can race
+    // the OAuth round-trip.
+    setGooglePending(true);
+    setPending(true);
+    setError(null);
+    const target = `/api/auth/google/start?next=${encodeURIComponent(next)}`;
+    window.location.href = target;
+  }
+
   return (
     <AuthShell
       title="Welcome back"
@@ -90,6 +106,7 @@ function LoginForm(): JSX.Element {
             onChange={(e) => setEmail(e.target.value)}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? "auth-error" : undefined}
+            disabled={pending}
           />
         </div>
         <PasswordField
@@ -101,6 +118,15 @@ function LoginForm(): JSX.Element {
           required
           describedById={error ? "auth-error" : undefined}
         />
+        <button
+          type="submit"
+          className="btn btn-primary w-full"
+          disabled={pending}
+        >
+          {pending && !googlePending ? "Signing in…" : "Log in"}
+        </button>
+        <AuthDivider />
+        <GoogleButton pending={googlePending} onStart={startGoogle} />
         {error ? (
           <p
             id="auth-error"
@@ -111,13 +137,6 @@ function LoginForm(): JSX.Element {
             <span>{error}</span>
           </p>
         ) : null}
-        <button
-          type="submit"
-          className="btn btn-primary w-full"
-          disabled={pending}
-        >
-          {pending ? "Signing in…" : "Sign in"}
-        </button>
       </form>
     </AuthShell>
   );

@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { TimezoneSelect } from "@/components/auth/TimezoneSelect";
+import { AuthDivider } from "@/components/auth/AuthDivider";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 import { IconAlert } from "@/components/icons";
 import { DEFAULT_TIMEZONE, detectTimezone } from "@/lib/timezones";
 import {
@@ -13,16 +15,32 @@ import {
   PASSWORD_MIN_LENGTH,
   validatePassword,
 } from "@/lib/password";
+import { googleAuthErrorMessage } from "@/lib/google-auth-errors";
 
 const GENERIC_REGISTER_ERROR = "Unable to complete sign-up. Please try again.";
 
 export default function RegisterPage(): JSX.Element {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-dvh grid place-items-center bg-canvas" />
+      }
+    >
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm(): JSX.Element {
   const router = useRouter();
+  const params = useSearchParams();
+  const googleErrorFromQuery = googleAuthErrorMessage(params.get("error"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(googleErrorFromQuery);
   const [pending, setPending] = useState(false);
+  const [googlePending, setGooglePending] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,6 +81,13 @@ export default function RegisterPage(): JSX.Element {
     }
   }
 
+  function startGoogle(): void {
+    setGooglePending(true);
+    setPending(true);
+    setError(null);
+    window.location.href = "/api/auth/google/start?next=%2Fapp";
+  }
+
   return (
     <AuthShell
       title="Start tracking"
@@ -92,6 +117,7 @@ export default function RegisterPage(): JSX.Element {
             onChange={(e) => setEmail(e.target.value)}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? "auth-error" : undefined}
+            disabled={pending}
           />
         </div>
         <PasswordField
@@ -112,6 +138,15 @@ export default function RegisterPage(): JSX.Element {
           onChange={setTimezone}
           required
         />
+        <button
+          type="submit"
+          className="btn btn-primary w-full"
+          disabled={pending}
+        >
+          {pending && !googlePending ? "Creating…" : "Create account"}
+        </button>
+        <AuthDivider />
+        <GoogleButton pending={googlePending} onStart={startGoogle} />
         {error ? (
           <p
             id="auth-error"
@@ -122,13 +157,6 @@ export default function RegisterPage(): JSX.Element {
             <span>{error}</span>
           </p>
         ) : null}
-        <button
-          type="submit"
-          className="btn btn-primary w-full"
-          disabled={pending}
-        >
-          {pending ? "Creating…" : "Create account"}
-        </button>
       </form>
     </AuthShell>
   );
