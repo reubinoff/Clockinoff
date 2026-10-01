@@ -1,5 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
+import { pgErrorCode } from "@/server/db/errors";
 import { tags, type Tag } from "@/server/db/schema";
 import { errors } from "@/lib/errors";
 
@@ -24,7 +25,7 @@ export async function createTag(userId: string, input: { name: string }): Promis
       .returning();
     return row;
   } catch (err) {
-    const code = (err as { code?: string })?.code;
+    const code = pgErrorCode(err);
     if (code === "23505") throw errors.conflict("Tag with this name already exists");
     throw err;
   }
@@ -46,7 +47,7 @@ export async function updateTag(
     if (!row) throw errors.notFound("Tag not found");
     return row;
   } catch (err) {
-    const code = (err as { code?: string })?.code;
+    const code = pgErrorCode(err);
     if (code === "23505") throw errors.conflict("Tag with this name already exists");
     throw err;
   }

@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
+import { pgErrorCode } from "@/server/db/errors";
 import { users } from "@/server/db/schema";
 import { errors } from "@/lib/errors";
 import { validatePassword } from "@/lib/password";
@@ -67,7 +68,7 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
     const session = await createSession(row.id);
     return { user: row, session };
   } catch (err) {
-    const code = (err as { code?: string })?.code;
+    const code = pgErrorCode(err);
     if (code === "23505") {
       throw errors.validation(GENERIC_REGISTER_ERROR);
     }

@@ -13,6 +13,7 @@
 
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
+import { pgErrorCode } from "@/server/db/errors";
 import { users } from "@/server/db/schema";
 import { createSession, type CreatedSession, type SessionUser } from "./session";
 import { tokenId } from "@/lib/id";
@@ -269,7 +270,7 @@ export async function signInWithGoogle(
     const session = await createSession(row.id);
     return { user: row, session, isNewUser: true };
   } catch (err) {
-    const code = (err as { code?: string })?.code;
+    const code = pgErrorCode(err);
     if (code === "23505" && !_retried) {
       // Race: another request created the row between our SELECTs and
       // INSERT. Retry the full lookup once — in the common case the
