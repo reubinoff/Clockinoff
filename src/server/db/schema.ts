@@ -16,7 +16,11 @@ export const users = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     email: text("email").notNull(),
-    passwordHash: text("password_hash").notNull(),
+    // password_hash is nullable since users created via Google OAuth
+    // (`google_sub` set, no local password) can exist. Email/password users
+    // still have a hash — attaching Google to an existing user never clears it.
+    passwordHash: text("password_hash"),
+    googleSub: text("google_sub"),
     timezone: text("timezone").notNull().default("Asia/Jerusalem"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()
@@ -24,6 +28,9 @@ export const users = pgTable(
   },
   (t) => ({
     emailIdx: uniqueIndex("users_email_unique").on(sql`lower(${t.email})`),
+    googleSubIdx: uniqueIndex("users_google_sub_unique")
+      .on(t.googleSub)
+      .where(sql`${t.googleSub} IS NOT NULL`),
   }),
 );
 

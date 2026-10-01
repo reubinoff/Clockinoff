@@ -92,7 +92,11 @@ export async function login(input: LoginInput): Promise<AuthResult> {
     .limit(1);
   const row = rows[0];
   if (!row) throw errors.unauthorized("Invalid email or password");
-  const ok = await verifyPassword(row.passwordHash, input.password);
+  // Google-only accounts have no password_hash. We still return the same
+  // generic unauthorized error so this path cannot be used to probe which
+  // accounts were created via Google vs. email/password.
+  const hash = row.passwordHash ?? "";
+  const ok = await verifyPassword(hash, input.password);
   if (!ok) throw errors.unauthorized("Invalid email or password");
   const session = await createSession(row.id);
   return {
