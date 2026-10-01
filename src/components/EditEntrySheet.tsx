@@ -19,6 +19,7 @@ import {
   stepMinutes,
 } from "@/lib/duration";
 import { formatDate, formatTime, zonedIsoToUtc } from "@/lib/tz";
+import { handleAuthFailure, isAuthFailure } from "@/lib/auth-ui";
 
 export interface EditableEntry {
   id: string;
@@ -299,6 +300,14 @@ export default function EditEntrySheet({
         body: JSON.stringify(body),
       });
       if (!res.ok) {
+        if (isAuthFailure(res.status)) {
+          // Ariel's rule (#54): never show a "Saved" chrome after an auth
+          // failure. Bail out of the sheet before setting the saved flash
+          // and send the user to re-auth; the list stays on the pre-save
+          // snapshot because onSaved was never called.
+          handleAuthFailure();
+          return;
+        }
         let message = "Something went wrong. Try again.";
         try {
           const data = (await res.json()) as {
