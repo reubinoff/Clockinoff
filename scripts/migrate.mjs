@@ -12,11 +12,31 @@
 // `https://ossrdbms-aad.database.windows.net/.default`. Falls back to
 // the static password path if the URL still carries a password or the
 // flag is `0`/`false`.
+//
+// --- Clockinoff #75 production fix (do not relax) ---
+// This file mirrors `src/server/db/azure-ad.ts` on purpose: the CD
+// workflow only copies `scripts/migrate.mjs` into the standalone deploy
+// bundle, so the migration runner must stay self-contained. The guard
+// rails below are the same ones baked into the TS helper:
+//
+//   1. In AAD mode we never pass `connectionString` and `password`
+//      together — pg's ConnectionParameters does
+//      `Object.assign({}, config, parse(connectionString))`, and a
+//      passwordless URL parses as `password: ''`, which silently
+//      overwrites the token-provider callback. The 2026-10-01 cutover
+//      crash-looped migrate with `28P01 Password returned by client is
+//      empty` because of this. Discrete fields keep the provider.
+//   2. Shaul's gate: the token provider hard-aborts before pg opens a
+//      socket when the credential returns no token, a non-string token,
+//      or an empty-string token (length === 0). We never send an empty
+//      password.
+//   3. Safe log reports token length + TTL only — never the token.
 
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { parse as parseConnectionString } from "pg-connection-string";
 
 const { Pool } = pg;
 
@@ -78,14 +98,31 @@ async function createAzurePasswordProvider() {
 
   async function fetchToken() {
     const result = await credential.getToken(AZURE_POSTGRES_SCOPE);
-    if (!result || !result.token) {
-      throw new Error("Azure AD token acquisition returned no token");
+    // Shaul's gate (Clockinoff #75): hard-abort before pg attempts to
+    // connect so we never resend the empty-password payload that caused
+    // the 503 crash loop. See src/server/db/azure-ad.ts for the
+    // server-side mirror of this guard.
+    const rawToken = result ? result.token : undefined;
+    const tokenLen = typeof rawToken === "string" ? rawToken.length : 0;
+    if (!result || typeof rawToken !== "string" || tokenLen === 0) {
+      throw new Error(
+        "Azure AD token acquisition returned an empty or missing token;" +
+          " refusing to connect to Postgres with an empty password",
+      );
     }
     cached = {
-      token: result.token,
+      token: rawToken,
       expiresOnTimestamp: result.expiresOnTimestamp,
     };
-    return result.token;
+    console.log(
+      "[migrate] azureAdToken acquired length=%d expiresInSec=%d",
+      tokenLen,
+      Math.max(
+        0,
+        Math.round((result.expiresOnTimestamp - Date.now()) / 1000),
+      ),
+    );
+    return rawToken;
   }
 
   return async function getPassword() {
@@ -102,10 +139,37 @@ async function createAzurePasswordProvider() {
 }
 
 async function buildPoolConfig(url) {
-  const base = { connectionString: url, max: 1 };
-  if (!shouldUseAzureAdAuth(url)) return base;
+  const overrides = { max: 1 };
+  if (!shouldUseAzureAdAuth(url)) {
+    return { connectionString: url, ...overrides };
+  }
   const password = await createAzurePasswordProvider();
-  return { ...base, password };
+  const parsed = parseConnectionString(url);
+  // Drop the parsed password (empty on passwordless URLs) so pg cannot
+  // Object.assign it over our token provider. See the file header
+  // comment.
+  const { password: _parsedPassword, port: parsedPort, ...rest } = parsed;
+  void _parsedPassword;
+  const port =
+    parsedPort != null && parsedPort !== ""
+      ? Number.parseInt(String(parsedPort), 10)
+      : undefined;
+  const config = {
+    ...rest,
+    ...(port != null && !Number.isNaN(port) ? { port } : {}),
+    password,
+    ...overrides,
+  };
+  if ("connectionString" in config) {
+    delete config.connectionString;
+  }
+  config.password = password;
+  console.log(
+    "[migrate] azureAdAuth=true passwordProvider=%s connectionString=%s",
+    typeof config.password,
+    "connectionString" in config ? "present" : "absent",
+  );
+  return config;
 }
 
 async function runMigrations() {

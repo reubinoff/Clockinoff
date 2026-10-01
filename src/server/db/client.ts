@@ -2,6 +2,7 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool, type PoolConfig } from "pg";
 import * as schema from "./schema";
 import {
+  buildPgPoolConfig,
   createDefaultAzurePasswordProvider,
   shouldUseAzureAdAuth,
   type PasswordProvider,
@@ -34,23 +35,36 @@ export function setPasswordProvider(provider: PasswordProvider | null): void {
 }
 
 function buildPoolConfig(url: string): PoolConfig {
-  const base: PoolConfig = {
-    connectionString: url,
+  const overrides: PoolConfig = {
     max: 10,
     idleTimeoutMillis: 30_000,
   };
-  if (!shouldUseAzureAdAuth(url)) {
+  const useAad = shouldUseAzureAdAuth(url);
+  if (!useAad) {
     cachedAzureAd = false;
-    return base;
+    return buildPgPoolConfig(url, { azureAdAuth: false, overrides });
   }
   cachedAzureAd = true;
   // `pg` accepts a function for `password` and invokes it on every new
   // connection, so token refreshes happen transparently as the pool
   // opens fresh clients. The provider caches the token until shortly
   // before expiry.
-  const provider =
+  const passwordProvider =
     injectedPasswordProvider ?? createDefaultAzurePasswordProvider();
-  return { ...base, password: provider };
+  const config = buildPgPoolConfig(url, {
+    azureAdAuth: true,
+    passwordProvider,
+    overrides,
+  });
+  // Safe log: proves we are on the discrete-fields AAD path and that pg
+  // will see a callable password instead of an empty parsed one
+  // (Clockinoff #75). No secret material is logged.
+  console.log(
+    "[db] azureAdAuth=true passwordProvider=%s connectionString=%s",
+    typeof (config as { password?: unknown }).password,
+    "connectionString" in config ? "present" : "absent",
+  );
+  return config;
 }
 
 export function getPool(): Pool {
