@@ -60,10 +60,13 @@ Every time entry has two independent booleans:
 The running timer only carries **Billable** (visible in the timer
 dock's *Details* section). **Already billed** is only reachable after
 you stop the timer, either from the row **⋯** menu (**Mark as
-billed**) on a billable entry or from the edit sheet.
+billed** / **Mark as unbilled**) on a billable entry, from the edit
+sheet, or by tapping **Select** on the Entries toolbar and flipping
+many at once from the sticky bar — see
+[Bulk-mark entries as billed]({{ '/entries' | relative_url }}#bulk-mark-entries-as-billed).
 
-For roadmap items around rates, invoices, bulk billing, and export of
-the *Unbilled* filter see [What's not in v1](#whats-not-in-v1).
+For roadmap items around rates, invoices, and export of the *Unbilled*
+filter see [What's not in v1](#whats-not-in-v1).
 
 ## Currency
 
@@ -147,10 +150,14 @@ By design, Clockinoff does not include:
 - Reporting dashboards beyond the entries list and the CSV/PDF exports.
 - Rates or invoice generation on top of **Billable / Already billed**.
   The two flags are recorded per entry; interpreting them is up to you.
-- Bulk "mark all as billed". Row-by-row from **⋯ → Mark as billed** is
-  the v1 workflow.
-- **Unbilled** filter or **Already billed** column in the CSV / PDF
-  export. The chip only exists in the entries list; exports still ship
-  the plain `billable` column.
+- **Undo** on bulk mark-as-billed. The sticky bar flips the flag and
+  the toast is the only confirmation; use **Mark as unbilled** on the
+  same selection if you need to roll back.
+- Select-all across your entire history. **Select all** in the sticky
+  bar only ticks the entries you can currently see; it never silently
+  reaches into older pages.
+- **Unbilled** filter column in the CSV / PDF export. The chip only
+  exists in the entries list; the export ships the plain `billable` and
+  `billed` columns.
 
 These are intentional trade-offs to keep the app tiny.

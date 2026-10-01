@@ -23,13 +23,18 @@ export function emitProjectsChanged(): void {
 // persistence, no queue beyond the short replay buffer described below. The
 // Toaster mounted in the app layout subscribes and renders; TimerBar /
 // EntryList emit.
+// Toast copy is locked per interaction. We keep the common ones as literals so
+// the type still catches a stale emit at a call site, but the Shaul-locked
+// batch toasts carry a count ("Marked 3 as billed.") so we also allow a free
+// string. Toaster renders whatever lands here; no copy picking downstream.
 export type ToastKind =
   | "Logged"
   | "Saved"
   | "Discarded"
   | "Marked as billed"
   | "Billable on"
-  | "Billable off";
+  | "Billable off"
+  | (string & {});
 
 export interface ToastEvent {
   id: number;
