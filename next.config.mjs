@@ -94,69 +94,66 @@ const nextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
-  experimental: {
-    // Enables `src/instrumentation.ts` (Azure Monitor / Application Insights
-    // bootstrap). Stable in Next 15; opt-in on 14.
-    instrumentationHook: true,
-    serverComponentsExternalPackages: [
-      "@react-pdf/renderer",
-      "argon2",
-      // OpenTelemetry auto-instrumentation packages patch third-party modules
-      // at `require()` time via `require-in-the-middle`. Bundling them through
-      // Webpack breaks that patching, so we mark them external and let Node
-      // resolve them from `node_modules/` at runtime.
-      "@azure/monitor-opentelemetry",
-      "@opentelemetry/api",
-      "@opentelemetry/api-logs",
-      "@opentelemetry/sdk-node",
-      "@opentelemetry/instrumentation",
+  // `src/instrumentation.ts` is picked up automatically in Next 15+ — the
+  // old `experimental.instrumentationHook` flag was removed in Next 16.
+  serverExternalPackages: [
+    "@react-pdf/renderer",
+    "argon2",
+    // OpenTelemetry auto-instrumentation packages patch third-party modules
+    // at `require()` time via `require-in-the-middle`. Bundling them through
+    // Webpack breaks that patching, so we mark them external and let Node
+    // resolve them from `node_modules/` at runtime.
+    "@azure/monitor-opentelemetry",
+    "@opentelemetry/api",
+    "@opentelemetry/api-logs",
+    "@opentelemetry/sdk-node",
+    "@opentelemetry/instrumentation",
+  ],
+  // Next's standalone tracer follows JS `require`s, so it misses files that
+  // are loaded dynamically at runtime. Known misses on this project:
+  //
+  // 1. argon2 dynamically loads a prebuilt `.node` binary via `node-gyp-build`.
+  //    Without the prebuilds/ tree the deployed bundle throws "No native
+  //    build was found ..." on App Service.
+  //
+  // 2. @react-pdf/renderer → pdfkit (0.20.x) resolves the Standard 14 fonts
+  //    through a subpath-imports template `require('#standard-fonts/<Name>')`
+  //    which the tracer cannot statically follow. It also reads
+  //    `data/sRGB_IEC61966_2_1.icc` at runtime. Without these files the PDF
+  //    export route throws `MODULE_NOT_FOUND` for
+  //    `pdfkit/js/standard-fonts/Helvetica.cjs` and returns HTTP 500.
+  //
+  // 3. @azure/monitor-opentelemetry pulls a large tree of `@opentelemetry/*`
+  //    instrumentation packages via dynamic `require`, plus native helpers
+  //    like `require-in-the-middle` / `import-in-the-middle`. Force the
+  //    complete trees into the standalone output so the SDK actually loads
+  //    inside App Service.
+  //
+  // Force the full packages (including their data / prebuilds trees) into
+  // the standalone output.
+  outputFileTracingIncludes: {
+    "*": [
+      "./node_modules/argon2/**/*",
+      "./node_modules/node-gyp-build/**/*",
+      "./node_modules/node-addon-api/**/*",
+      "./node_modules/@phc/format/**/*",
+      "./node_modules/pdfkit/**/*",
+      "./node_modules/@react-pdf/**/*",
+      "./node_modules/fontkit/**/*",
+      // Noto Sans TTFs used by the PDF export report (`renderReportPdf`).
+      // `Font.register` reads them from disk at request time, so they must
+      // land in the standalone output alongside the compiled server code.
+      "./src/server/assets/fonts/**/*",
+      "./node_modules/@azure/monitor-opentelemetry/**/*",
+      "./node_modules/@azure/monitor-opentelemetry-exporter/**/*",
+      "./node_modules/@azure/core-*/**/*",
+      "./node_modules/@azure/identity/**/*",
+      "./node_modules/@azure/logger/**/*",
+      "./node_modules/@azure/opentelemetry-instrumentation-azure-sdk/**/*",
+      "./node_modules/@opentelemetry/**/*",
+      "./node_modules/require-in-the-middle/**/*",
+      "./node_modules/import-in-the-middle/**/*",
     ],
-    // Next's standalone tracer follows JS `require`s, so it misses files that
-    // are loaded dynamically at runtime. Known misses on this project:
-    //
-    // 1. argon2 dynamically loads a prebuilt `.node` binary via `node-gyp-build`.
-    //    Without the prebuilds/ tree the deployed bundle throws "No native
-    //    build was found ..." on App Service.
-    //
-    // 2. @react-pdf/renderer → pdfkit (0.20.x) resolves the Standard 14 fonts
-    //    through a subpath-imports template `require('#standard-fonts/<Name>')`
-    //    which the tracer cannot statically follow. It also reads
-    //    `data/sRGB_IEC61966_2_1.icc` at runtime. Without these files the PDF
-    //    export route throws `MODULE_NOT_FOUND` for
-    //    `pdfkit/js/standard-fonts/Helvetica.cjs` and returns HTTP 500.
-    //
-    // 3. @azure/monitor-opentelemetry pulls a large tree of `@opentelemetry/*`
-    //    instrumentation packages via dynamic `require`, plus native helpers
-    //    like `require-in-the-middle` / `import-in-the-middle`. Force the
-    //    complete trees into the standalone output so the SDK actually loads
-    //    inside App Service.
-    //
-    // Force the full packages (including their data / prebuilds trees) into
-    // the standalone output.
-    outputFileTracingIncludes: {
-      "*": [
-        "./node_modules/argon2/**/*",
-        "./node_modules/node-gyp-build/**/*",
-        "./node_modules/node-addon-api/**/*",
-        "./node_modules/@phc/format/**/*",
-        "./node_modules/pdfkit/**/*",
-        "./node_modules/@react-pdf/**/*",
-        "./node_modules/fontkit/**/*",
-        // Noto Sans TTFs used by the PDF export report (`renderReportPdf`).
-        // `Font.register` reads them from disk at request time, so they must
-        // land in the standalone output alongside the compiled server code.
-        "./src/server/assets/fonts/**/*",
-        "./node_modules/@azure/monitor-opentelemetry/**/*",
-        "./node_modules/@azure/monitor-opentelemetry-exporter/**/*",
-        "./node_modules/@azure/core-*/**/*",
-        "./node_modules/@azure/identity/**/*",
-        "./node_modules/@azure/logger/**/*",
-        "./node_modules/@azure/opentelemetry-instrumentation-azure-sdk/**/*",
-        "./node_modules/@opentelemetry/**/*",
-        "./node_modules/require-in-the-middle/**/*",
-        "./node_modules/import-in-the-middle/**/*",
-      ],
-    },
   },
   async rewrites() {
     return [
