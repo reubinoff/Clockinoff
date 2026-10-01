@@ -9,9 +9,21 @@ import {
   formatWeekRangeLabel,
   startOfIsoWeekKey,
 } from "@/lib/tz";
-import { emitToast, onEntryAdded } from "@/lib/events";
+import {
+  emitToast,
+  emitTimerChanged,
+  onEntryAdded,
+  onTimerChanged,
+} from "@/lib/events";
 import { handleAuthFailure, isAuthFailure } from "@/lib/auth-ui";
-import { IconBillable, IconCheck, IconEdit, IconX } from "@/components/icons";
+import { projectColor } from "@/lib/project-color";
+import {
+  IconBillable,
+  IconCheck,
+  IconEdit,
+  IconPlay,
+  IconX,
+} from "@/components/icons";
 import EditEntrySheet, { type EditableEntry } from "@/components/EditEntrySheet";
 
 interface Entry {
@@ -140,6 +152,16 @@ export default function EntryList({
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkPending, setBulkPending] = useState(false);
+  // #84 play-to-resume: a row's Play button fires POST /api/timer/start with
+  // the row's project/description/billable/tags. We hold a per-row pending
+  // flag so a double-tap can't fire twice, and a single `timerRunning` hint
+  // so every Play button on the list dims the moment one timer is live. We
+  // never trust it for ordering — the server is the source of truth and a
+  // 409 TIMER_ALREADY_RUNNING is still handled — but it keeps the UI calm.
+  const [resumePendingIds, setResumePendingIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [timerRunning, setTimerRunning] = useState(false);
   // V2-6 §1: entry ids whose row should render with the spring-in class.
   // Cleared shortly after the animation duration so subsequent renders
   // (e.g. filter changes) don't re-play the animation on the same row.
@@ -153,6 +175,35 @@ export default function EntryList({
   useEffect(() => {
     setEntries(initial);
   }, [initial]);
+
+  // #84 play-to-resume: know whether a timer is already running so every
+  // row's Play button dims instead of letting the user tap one and get a
+  // bare 409 toast. We rely on the dock's existing timer bus — TimerBar
+  // calls emitTimerChanged() on Start/Stop/Discard — plus a one-shot
+  // probe on mount so the hint is correct even if EntryList mounts after
+  // the dock has settled. All failures are silent on purpose: Play still
+  // works, it just degrades to the server-arbitrated 409 path.
+  useEffect(() => {
+    let cancelled = false;
+    async function probe(): Promise<void> {
+      try {
+        const res = await fetch("/api/timer", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { running?: boolean } | null;
+        setTimerRunning(data !== null && data.running === true);
+      } catch {
+        // Silent — the Play fallback still handles the 409 case.
+      }
+    }
+    void probe();
+    const unsubscribe = onTimerChanged(() => {
+      void probe();
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     return onEntryAdded<Entry>((added) => {
@@ -257,6 +308,72 @@ export default function EntryList({
       else next.delete(id);
       return next;
     });
+  }
+
+  function markRowResumePending(id: string, pending: boolean): void {
+    setResumePendingIds((cur) => {
+      const has = cur.has(id);
+      if (pending && has) return cur;
+      if (!pending && !has) return cur;
+      const next = new Set(cur);
+      if (pending) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  // #84 play-to-resume: start a NEW timer with the stopped row's
+  // description + project + billable + tags. Resuming never resurrects
+  // the original entry: the server inserts a fresh row (new id, new
+  // start_at) so the historical card stays untouched and the dock takes
+  // ownership of the live timer. The row's own data in the list isn't
+  // mutated, so we don't need to patch EntryList state on success — the
+  // dock reloads on `onTimerChanged`, and once stopped the fresh entry
+  // springs into the top of the list via the existing emitEntryAdded
+  // path. We respect TIMER_ALREADY_RUNNING by surfacing a short toast
+  // ("A timer is already running") and marking local state so every
+  // Play on the list dims until the dock emits again.
+  async function resume(entry: Entry): Promise<void> {
+    if (entry.running) return;
+    if (resumePendingIds.has(entry.id)) return;
+    markRowResumePending(entry.id, true);
+    try {
+      const res = await fetch("/api/timer/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          description: entry.description,
+          project_id: entry.project_id,
+          billable: entry.billable,
+          tag_ids: entry.tag_ids,
+        }),
+      });
+      if (res.ok) {
+        setTimerRunning(true);
+        emitTimerChanged();
+        emitToast("Timer resumed");
+        return;
+      }
+      if (isAuthFailure(res.status)) {
+        handleAuthFailure({ rollback: () => undefined });
+        return;
+      }
+      if (res.status === 409) {
+        // Server-side guard: another timer is already running. Keep the
+        // list honest even if our local hint said otherwise, and surface
+        // the gentle version of the 409 — the user does not care about
+        // the id, they care that nothing double-started.
+        setTimerRunning(true);
+        emitTimerChanged();
+        emitToast("A timer is already running");
+        return;
+      }
+      emitToast("Couldn't start timer. Try again.");
+    } catch {
+      emitToast("Couldn't start timer. Try again.");
+    } finally {
+      markRowResumePending(entry.id, false);
+    }
   }
 
   async function remove(id: string): Promise<void> {
@@ -644,9 +761,11 @@ export default function EntryList({
                           </p>
                         </div>
                         {e.project_name ? (
-                          <span className="chip hidden lg:inline-flex max-w-[200px] truncate">
-                            {e.project_name}
-                          </span>
+                          <ProjectChip
+                            name={e.project_name}
+                            projectId={e.project_id}
+                            className="hidden lg:inline-flex max-w-[200px]"
+                          />
                         ) : null}
                         {e.billed && (
                           <span
@@ -670,6 +789,14 @@ export default function EntryList({
                         </span>
                         {!inSelect && (
                           <div className="flex shrink-0 items-center gap-1">
+                            {!e.running && (
+                              <ResumeButton
+                                compact
+                                pending={resumePendingIds.has(e.id)}
+                                timerRunning={timerRunning}
+                                onResume={() => void resume(e)}
+                              />
+                            )}
                             {!e.running && (
                               <button
                                 className="btn btn-ghost h-9 min-h-[36px] w-9 min-w-[36px] px-0"
@@ -740,6 +867,19 @@ export default function EntryList({
                               </span>
                               {!inSelect && !e.running && (
                                 <>
+                                  {/* #84 Play-to-resume. Sits inside the
+                                       same trailing cluster as Edit + ⋯ so
+                                       the mobile card keeps one baseline
+                                       (#63B) — no orphan ⋯, no second row.
+                                       Visually accent-tinted so it reads as
+                                       the resume affordance without
+                                       competing with the primary purple
+                                       Start on the dock. */}
+                                  <ResumeButton
+                                    pending={resumePendingIds.has(e.id)}
+                                    timerRunning={timerRunning}
+                                    onResume={() => void resume(e)}
+                                  />
                                   <button
                                     className="btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0"
                                     onClick={() => beginEdit(e)}
@@ -763,15 +903,21 @@ export default function EntryList({
                               )}
                             </div>
                           </div>
+                          {/* #84 project chip on mobile: competitor cards
+                               lead with a colored project label. We render a
+                               small color dot + name as a dedicated chip
+                               line so the project is scannable before the
+                               time range, instead of being tucked after it. */}
+                          {e.project_name && (
+                            <ProjectChip
+                              name={e.project_name}
+                              projectId={e.project_id}
+                              className="max-w-full"
+                            />
+                          )}
                           <p className="text-xs text-muted tabular-nums">
                             {formatTime(s, timezone)}–
                             {en ? formatTime(en, timezone) : "…"}
-                            {e.project_name ? (
-                              <>
-                                <span className="mx-1.5">·</span>
-                                {e.project_name}
-                              </>
-                            ) : null}
                           </p>
                           {(e.tag_names.length > 0 || e.billed || (!inSelect && !selectable)) && (
                             <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
@@ -838,6 +984,85 @@ export default function EntryList({
         />
       )}
     </div>
+  );
+}
+
+function ProjectChip({
+  name,
+  projectId,
+  className = "",
+}: {
+  name: string;
+  projectId: string | null;
+  className?: string;
+}): JSX.Element {
+  // #84 colored project chip. The dot comes from a stable hash of the
+  // project id (falling back to the display name when the id is missing,
+  // which happens for the lg+ row before a page refresh after a rename).
+  // The dot is decorative chrome, so we keep aria-hidden and leave the
+  // name as the accessible text.
+  const color = projectColor(projectId ?? name);
+  return (
+    <span
+      className={"chip inline-flex items-center gap-1.5 truncate " + className}
+      data-entry-project-chip="true"
+      title={name}
+    >
+      {color && (
+        <span
+          aria-hidden
+          className="inline-block h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: color }}
+          data-entry-project-dot="true"
+        />
+      )}
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
+
+function ResumeButton({
+  pending,
+  timerRunning,
+  onResume,
+  compact,
+}: {
+  pending: boolean;
+  timerRunning: boolean;
+  onResume: () => void;
+  compact?: boolean;
+}): JSX.Element {
+  // #84 play-to-resume. Visual: accent-tinted ghost so the icon pops but
+  // never fights the dock's primary purple Start — the dock remains the
+  // only solid primary. Disabled while a timer is already running (hint
+  // only; server still arbitrates on 409) or while a resume request is
+  // in flight for this specific row.
+  const disabled = pending || timerRunning;
+  const sizeClass = compact
+    ? "h-9 min-h-[36px] w-9 min-w-[36px]"
+    : "h-11 min-h-[44px] w-11 min-w-[44px]";
+  const title = timerRunning
+    ? "Stop the current timer first"
+    : pending
+      ? "Starting…"
+      : "Start a new timer with this entry's project and description";
+  return (
+    <button
+      type="button"
+      className={
+        "btn btn-ghost text-accent hover:text-accent hover:bg-accent-soft " +
+        sizeClass +
+        " px-0"
+      }
+      onClick={onResume}
+      disabled={disabled}
+      aria-label="Start timer from this entry"
+      aria-busy={pending || undefined}
+      title={title}
+      data-entry-resume-btn="true"
+    >
+      <IconPlay size={compact ? 14 : 16} aria-hidden />
+    </button>
   );
 }
 
