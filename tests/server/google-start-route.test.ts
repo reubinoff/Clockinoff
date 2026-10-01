@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { GET, OAUTH_STATE_COOKIE, sanitiseNext } from "@/app/api/auth/google/start/route";
+import { GET } from "@/app/api/auth/google/start/route";
+import { OAUTH_STATE_COOKIE, sanitiseNext } from "@/lib/oauth-next";
 
 const ENV_SNAPSHOT = {
   id: process.env.GOOGLE_CLIENT_ID,

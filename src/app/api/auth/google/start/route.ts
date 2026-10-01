@@ -2,25 +2,14 @@ import { NextResponse } from "next/server";
 import { buildAuthorizeUrl, getGoogleConfig, GoogleAuthError, newStateToken } from "@/server/auth/google";
 import { logger } from "@/lib/logger";
 import { publicOrigin } from "@/lib/base-url";
+import {
+  OAUTH_STATE_COOKIE,
+  OAUTH_STATE_MAX_AGE_SECONDS,
+  sanitiseNext,
+} from "@/lib/oauth-next";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-export const OAUTH_STATE_COOKIE = "timely_oauth_state";
-export const OAUTH_STATE_MAX_AGE_SECONDS = 10 * 60;
-
-// Only allow relative `next` paths back into the app. Blocks protocol / host
-// escape (`//evil`, `https://evil`, `http:evil`) so this flow can never be
-// used as an open-redirect vector. Ariel smoke scope.
-export function sanitiseNext(input: string | null | undefined): string {
-  if (!input) return "/app";
-  if (typeof input !== "string") return "/app";
-  if (input.length > 1024) return "/app";
-  if (!input.startsWith("/")) return "/app";
-  if (input.startsWith("//")) return "/app";
-  if (input.startsWith("/\\")) return "/app";
-  return input;
-}
 
 export async function GET(req: Request): Promise<Response> {
   const url = new URL(req.url);

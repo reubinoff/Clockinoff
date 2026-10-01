@@ -10,7 +10,7 @@ import {
 import { SESSION_COOKIE } from "@/server/auth/session";
 import { logger } from "@/lib/logger";
 import { publicOrigin } from "@/lib/base-url";
-import { OAUTH_STATE_COOKIE, sanitiseNext } from "../start/route";
+import { OAUTH_STATE_COOKIE, sanitiseNext } from "@/lib/oauth-next";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
