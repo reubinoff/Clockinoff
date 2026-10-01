@@ -5,6 +5,13 @@ type Props = SVGProps<SVGSVGElement> & { size?: number | string; title?: string 
 // V2-10 Dark #10: fills reference the tokenized accent/accent-fg via CSS
 // variables so the mark picks up dark's `#7c3aed` automatically. The white
 // glyph stays white because `--color-accent-fg` is `#ffffff` in both themes.
+//
+// #63 optical centering: the squircle, the ring and the play triangle all
+// share one center (32, 32). The triangle base sits at x=26.83 and its tip at
+// x=42.33, which puts the triangle's centroid exactly on the squircle center
+// instead of letting the right-leaning tip visually pull the mark to the
+// right. Same geometry is mirrored in app/icon.svg, app/apple-icon.svg and
+// app/opengraph-image.tsx so every rendering of the mark stays identical.
 export function Mark({ size = 40, title = "Timely", ...rest }: Props): JSX.Element {
   return (
     <svg
@@ -27,7 +34,7 @@ export function Mark({ size = 40, title = "Timely", ...rest }: Props): JSX.Eleme
         strokeWidth="3"
       />
       <path
-        d="M28.5 23.5 L44 32 L28.5 40.5 Z"
+        d="M26.83 23.5 L42.33 32 L26.83 40.5 Z"
         fill="var(--color-accent-fg)"
         stroke="var(--color-accent-fg)"
         strokeWidth="1.5"

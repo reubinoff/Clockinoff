@@ -34,7 +34,7 @@ export default function OpengraphImage(): ImageResponse {
               strokeWidth="3"
             />
             <path
-              d="M28.5 23.5 L44 32 L28.5 40.5 Z"
+              d="M26.83 23.5 L42.33 32 L26.83 40.5 Z"
               fill="#ffffff"
               stroke="#ffffff"
               strokeWidth="1.5"
