@@ -47,6 +47,37 @@ You will need:
      work outside that zone.
 3. Click **Create account**.
 
+### Or continue with Google
+
+Below the password form, both `/register` and `/login` show a
+**Continue with Google** button. Clicking it hands you to Google's
+sign-in screen; once you consent, Google sends you back to Clockinoff
+and you land on `/app` just like a password sign-in.
+
+What happens behind the scenes depends on your Google email:
+
+- **No Clockinoff account yet.** We create one for you, tag it with
+  your Google identity, and sign you in. You will see the usual
+  `/app?welcome=1` hero on first load. The account has **no password**
+  until you choose to set one; use **Continue with Google** to sign in
+  again.
+- **You already have a Clockinoff account with the same email.** We
+  attach your Google identity to that account and sign you in. Your
+  existing password keeps working — nothing is replaced, there is no
+  second account, and we never show an "account already exists" error.
+- **Your Google email is not verified.** Clockinoff refuses to sign you
+  in and shows *"Google email isn't verified."* Verify the email in
+  your Google account, then try again.
+- **You cancel at Google's screen.** You come back to `/login` with
+  *"Google sign-in was cancelled."* No account change, no session.
+- **Network / other failure.** You come back to `/login` with
+  *"Couldn't connect to Google. Try again."*
+
+The Google button is deliberately a secondary visual — email/password
+remains the primary purple action. The icon is Google's official
+multicolor **G** so you can tell it apart at a glance from Clockinoff
+chrome.
+
 On success, Clockinoff issues a session cookie and drops you on the main
 `/app?welcome=1` page with the timer bar visible at the top.
 
