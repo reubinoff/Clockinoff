@@ -1,7 +1,6 @@
-import { runMigrations } from "../../src/server/db/migrate";
-import { closeDb } from "../../src/server/db/client";
+import { spawn } from "node:child_process";
 
-// Playwright global setup: run the SAME migrations unit tests use against the
+// Playwright global setup: migrate the SAME schema unit tests use against the
 // app DB `next start` is about to serve, before the webServer listens.
 //
 // Why this exists (see GitHub issue #55):
@@ -12,10 +11,15 @@ import { closeDb } from "../../src/server/db/client";
 //   boots `next start` with `NODE_ENV=production`, which reads `DATABASE_URL`
 //   (= `timely`). Hence `relation "users" does not exist` on register.
 //
-// Fix: run `runMigrations()` from `src/server/db/migrate.ts` — the exact
-// same module `tests/setup.ts` imports for unit tests — against the DB URL
-// the Playwright-spawned `next start` will use. If it throws, Playwright
-// aborts the run and the job fails hard.
+// Why we spawn instead of import (Shaul lock):
+//   Playwright's TypeScript loader compiles globalSetup to CommonJS, which
+//   chokes on `import.meta.url` inside `src/server/db/migrate.ts`
+//   (`SyntaxError: Cannot use 'import.meta' outside a module`). We must NOT
+//   import `migrate.ts` from here. Instead we spawn the migrate CLI as a
+//   child process (same `npm run db:migrate` script a human would run) with
+//   the Nightly DB URL forced into `DATABASE_URL`. The spawned process
+//   runs under tsx with ESM semantics intact and uses the exact same
+//   `runMigrations()` SQL path.
 //
 // We honour `PLAYWRIGHT_BASE_URL`: when a developer points Playwright at an
 // already-running local server, we leave their DB alone.
@@ -47,18 +51,45 @@ export default async function globalSetup(): Promise<void> {
   }
 
   console.log(`[playwright] migrating app DB at ${redact(targetUrl)} …`);
-  try {
-    const applied = await runMigrations();
-    if (applied.length === 0) {
-      console.log("[playwright] app DB already up to date.");
-    } else {
-      console.log(
-        `[playwright] applied ${applied.length} migration(s):\n  - ${applied.join("\n  - ")}`,
+
+  // Force the migrate CLI to connect to the DB we just resolved, regardless of
+  // the parent's NODE_ENV. The CLI (`src/server/db/migrate.ts` → `client.ts`)
+  // reads `DATABASE_URL` in production and `DATABASE_URL_TEST` in test; we
+  // normalise both so either resolution path lands on the target.
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    DATABASE_URL: targetUrl,
+    DATABASE_URL_TEST: targetUrl,
+  };
+
+  await runMigrateCli(childEnv);
+  console.log("[playwright] app DB migrate completed.");
+}
+
+function runMigrateCli(env: NodeJS.ProcessEnv): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Use `npm run db:migrate` so this matches what humans and CI already
+    // use. On Windows npm is a .cmd shim, hence `shell: true`.
+    const child = spawn("npm", ["run", "db:migrate"], {
+      env,
+      stdio: "inherit",
+      shell: true,
+    });
+    child.on("error", reject);
+    child.on("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          `[playwright] db:migrate exited with ${
+            signal ? `signal ${signal}` : `code ${code}`
+          }`,
+        ),
       );
-    }
-  } finally {
-    await closeDb();
-  }
+    });
+  });
 }
 
 function redact(url: string): string {
