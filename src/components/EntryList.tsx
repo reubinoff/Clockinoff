@@ -25,6 +25,7 @@ import {
   IconX,
 } from "@/components/icons";
 import EditEntrySheet, { type EditableEntry } from "@/components/EditEntrySheet";
+import { Pulse } from "@/components/mascot/Pulse";
 
 interface Entry {
   id: string;
@@ -644,6 +645,17 @@ export default function EntryList({
 
       {filtered.length === 0 ? (
         <div className="card p-6 text-center text-muted text-sm">
+          {/* #60 Quiet Pulse — mascot shows on the true empty case only;
+              a filter-emptied list isn't an empty state, so Pulse stays
+              hidden there to keep it from feeling nagging. Decorative:
+              adjacent copy below explains the state. */}
+          {!filterUnbilled ? (
+            <Pulse
+              variant="empty"
+              alt=""
+              className="mx-auto mb-3 h-[132px] w-[132px]"
+            />
+          ) : null}
           {filterUnbilled
             ? "Nothing unbilled in this range."
             : "No entries yet. Start the timer above."}

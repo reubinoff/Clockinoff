@@ -35,6 +35,12 @@ You will need:
 
 ## Create an account
 
+On tablet and larger viewports both `/register` and `/login` show a
+small **Quiet Pulse** flourish between the title and the form — it is
+decorative, sits next to the Clockinoff wordmark, and never replaces
+the brand mark. On narrow phone screens it is omitted so the form
+never feels crowded.
+
 1. Go to `/register` on your Clockinoff instance.
 2. Fill in:
    - **Email** — used to sign in.

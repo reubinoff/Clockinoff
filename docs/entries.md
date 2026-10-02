@@ -22,6 +22,15 @@ finished timer, most recent first, grouped by day.
 The currently running timer, if any, lives in the timer bar and is *not*
 shown in this list until you stop it.
 
+When the list is genuinely empty — a fresh account, or after you delete
+every entry — Clockinoff shows **Quiet Pulse**, the little purple
+character that greets you above *No entries yet. Start the timer
+above.*. Pulse is a static illustration by default; on systems that
+allow motion the ring around it fades gently (~3 s). Under **reduce
+motion** the ring stays still. If the list is only empty because of a
+filter (e.g. the **Unbilled** chip returns zero matches), Pulse stays
+hidden — that is a transient filter state, not an empty state.
+
 When you press **Stop** on the timer bar the new entry springs into the
 top of this list (and a **Logged** toast confirms it). If you press
 **Discard** instead, no card is added and a **Discarded** toast is shown.
