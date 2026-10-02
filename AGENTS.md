@@ -350,6 +350,7 @@ page in the same commit.** Use this mapping:
 | Projects UI (default rate/billable, archive/delete) | [`docs/projects.md`](./docs/projects.md) |
 | Clients UI (archive/delete) | [`docs/clients.md`](./docs/clients.md) |
 | Tags UI | [`docs/tags.md`](./docs/tags.md) |
+| Reports page (range picker, bar chart, project list, donut, export link) | [`docs/reports.md`](./docs/reports.md) |
 | Export page or CSV/PDF format, empty-range behaviour | [`docs/export.md`](./docs/export.md) |
 | Account / timezone / sign-out flow | [`docs/account.md`](./docs/account.md) |
 | One-timer rule, overlaps, currency, "not in v1" list | [`docs/faq.md`](./docs/faq.md) |

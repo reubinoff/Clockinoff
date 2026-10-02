@@ -20,6 +20,7 @@ describe("docs-content", () => {
         "projects",
         "clients",
         "tags",
+        "reports",
         "export",
         "account",
         "faq",
@@ -29,7 +30,7 @@ describe("docs-content", () => {
 
     it("sorts navOrder monotonically starting at 1", () => {
       const orders = listDocPages().map((p) => p.navOrder);
-      expect(orders).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      expect(orders).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     });
 
     it("looks up pages by slug and returns undefined for unknown slugs", () => {
