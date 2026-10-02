@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Mark } from "@/components/brand/Mark";
+import { Pulse } from "@/components/mascot/Pulse";
 import { DOCS_URL } from "@/lib/docs";
 
 export function AuthShell({
@@ -35,6 +36,15 @@ export function AuthShell({
           <div className="space-y-1">
             <h1 className="text-title text-ink">{title}</h1>
             <p className="text-body-sm text-muted">{subtitle}</p>
+          </div>
+          {/* #60 Quiet Pulse — auth flourish. Hidden on narrow mobile
+              (`hidden sm:flex`) so the form never feels cramped, as the
+              Dana handoff explicitly asks for (“omit if cramped”). Does
+              not replace the brand mark (which stays in the header
+              row). Decorative: the title/subtitle above explain the
+              moment. */}
+          <div className="hidden sm:flex justify-center pt-1">
+            <Pulse variant="auth" alt="" className="h-[72px] w-[72px]" />
           </div>
           {children}
         </div>
