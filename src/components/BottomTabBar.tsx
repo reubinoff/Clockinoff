@@ -6,6 +6,7 @@ import type { ComponentType } from "react";
 import {
   IconTimer,
   IconLibrary,
+  IconReports,
   IconExport,
   type IconProps,
 } from "@/components/icons";
@@ -33,6 +34,16 @@ const TABS: TabItem[] = [
     label: "Library",
     Icon: IconLibrary,
     match: (p) => LIBRARY_ROUTES.some((r) => p === r || p.startsWith(r + "/")),
+  },
+  {
+    // #56 Reports is reachable from mobile too — the layout is desktop-first
+    // (brief locks mobile polish as a follow-up), but a mobile user still
+    // needs to open it. The page re-stacks total → bar → list → donut at
+    // narrow widths so nothing overflows the viewport.
+    href: "/app/reports",
+    label: "Reports",
+    Icon: IconReports,
+    match: (p) => p.startsWith("/app/reports"),
   },
   {
     href: "/app/export",

@@ -161,6 +161,20 @@ export const IconLibrary = makeIcon(
   </>,
 );
 
+// Three ascending bars with a baseline — a plain Reports / Summary glyph.
+// Deliberately not a pie chart: the donut lives inside the report, we don't
+// also want to overload the nav glyph with it (would look like a billable
+// chart in list form). Height ordering matches the Quiet Pulse bar chart
+// (left-to-right increasing) so it visually echoes the page it opens.
+export const IconReports = makeIcon(
+  <>
+    <path d="M4 20h16" />
+    <path d="M7 20V13" />
+    <path d="M12 20V9" />
+    <path d="M17 20V5" />
+  </>,
+);
+
 export const IconMore = makeIcon(
   <>
     <circle cx="5" cy="12" r="1.25" fill="currentColor" />

@@ -8,6 +8,7 @@ import {
   IconProject,
   IconClient,
   IconTag,
+  IconReports,
   IconExport,
   type IconProps,
 } from "@/components/icons";
@@ -43,6 +44,15 @@ const NAV: NavItem[] = [
     label: "Tags",
     Icon: IconTag,
     match: (p) => p.startsWith("/app/tags"),
+  },
+  {
+    // #56 Quiet Pulse Summary v1: Reports is a read-only aggregate, not a
+    // second timer home. Sits before Export in the primary nav because the
+    // typical flow is "look at the week / export it".
+    href: "/app/reports",
+    label: "Reports",
+    Icon: IconReports,
+    match: (p) => p.startsWith("/app/reports"),
   },
   {
     href: "/app/export",

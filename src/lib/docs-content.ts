@@ -36,9 +36,10 @@ export const DOC_PAGES: readonly DocPage[] = [
   { slug: "projects", title: "Projects", navOrder: 5 },
   { slug: "clients", title: "Clients", navOrder: 6 },
   { slug: "tags", title: "Tags", navOrder: 7 },
-  { slug: "export", title: "Export CSV & PDF", navOrder: 8 },
-  { slug: "account", title: "Account & timezone", navOrder: 9 },
-  { slug: "faq", title: "FAQ", navOrder: 10 },
+  { slug: "reports", title: "Reports", navOrder: 8 },
+  { slug: "export", title: "Export CSV & PDF", navOrder: 9 },
+  { slug: "account", title: "Account & timezone", navOrder: 10 },
+  { slug: "faq", title: "FAQ", navOrder: 11 },
 ] as const;
 
 export function listDocPages(): readonly DocPage[] {
