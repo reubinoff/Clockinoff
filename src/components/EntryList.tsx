@@ -669,50 +669,54 @@ export default function EntryList({
               className="space-y-3"
               data-entries-week={w.key}
             >
-              {/* #81 Week band: sticks just under the sticky app header on
-                  scroll so the user always sees which week the current
-                  rows belong to while scanning down a long range. The
-                  band is a flat canvas-tinted surface — not a card — so
-                  it reads as a header rather than a competing card. z
-                  stays below the app header (z-20) and below the mobile
-                  timer dock (z-30) so neither is covered. */}
+              {/* Today-list friendliness tip (post-#81/#84): the week band
+                  is the section spine — stronger than the day header
+                  underneath. On ~390 it sticks under the app chrome so
+                  the current week stays visible while scrolling (fold of
+                  the #81 soft residual: real stick-under-chrome instead
+                  of letting the week scroll off). On tablet / desktop it
+                  sits inline, still with the same hairline + soft wash
+                  so the eye reads the hierarchy at a glance. z stays
+                  below the app header (z-20) and the mobile timer dock
+                  (z-30) so neither is covered. */}
               <header
                 className={
                   // Mobile app header is logo-row + 44px user menu + 10px pad
                   // top/bottom + 1px border ≈ 65px tall, so pin the week band
                   // right below it. z-[5] stays under the app header (z-20)
                   // and the mobile timer dock (z-30) so neither is covered.
-                  "sticky top-[64px] z-[5] -mx-4 px-4 py-2 border-b border-border " +
-                  "bg-canvas/95 backdrop-blur supports-[backdrop-filter]:bg-canvas/80 " +
-                  "md:static md:mx-0 md:px-1 md:py-1 md:border-0 md:bg-transparent md:backdrop-blur-0"
+                  "sticky top-[64px] z-[5] -mx-4 px-4 py-2.5 border-b border-border " +
+                  "bg-canvas-2/80 backdrop-blur supports-[backdrop-filter]:bg-canvas-2/70 " +
+                  "md:static md:mx-0 md:rounded-lg md:border md:border-border md:bg-canvas-2/60 " +
+                  "md:px-3 md:py-2 md:backdrop-blur-0"
                 }
                 data-entries-week-header="true"
               >
                 <div className="flex items-baseline justify-between gap-3">
-                  <h2 className="text-body-sm font-semibold tracking-tight text-ink">
+                  <h2 className="text-title-sm font-semibold tracking-tight text-ink">
                     {w.label}
                   </h2>
                   <span
-                    className="text-xs text-muted tabular-nums shrink-0"
+                    className="text-body-sm text-muted tabular-nums shrink-0"
                     data-entries-week-total={w.key}
                   >
-                    <span className="timer-digits text-ink">
+                    <span className="timer-digits text-ink font-medium">
                       {formatDurationHours(w.totalSeconds)}
                     </span>
                     h total
                   </span>
                 </div>
               </header>
-              <div className="space-y-5">
+              <div className="space-y-6">
           {w.days.map((g) => (
             <section
               key={g.key}
               aria-label={g.label}
-              className="space-y-2"
+              className="space-y-3"
               data-entries-day={g.key}
             >
-              <header className="flex items-baseline justify-between px-1">
-                <h3 className="text-body-sm font-semibold text-ink">
+              <header className="flex items-baseline justify-between px-1 pt-1">
+                <h3 className="text-label text-muted uppercase">
                   {g.label}
                 </h3>
                 <span
@@ -837,7 +841,14 @@ export default function EntryList({
                         )}
                       </div>
 
-                      {/* mobile card body */}
+                      {/* mobile card body — Today-list friendliness tip
+                           (post-#81/#84). Scan order follows the locked
+                           brief: top row = project left + duration/Edit/⋯
+                           right, middle = description, bottom row = tag
+                           affordances left + Play right. Play is the only
+                           ≥44px control in the bottom cluster so it reads
+                           as the primary row action without fighting the
+                           smaller Edit + ⋯ pair in the top-right. */}
                       <div className="flex items-start gap-3 md:hidden">
                         {inSelect && (
                           <SelectCheckbox
@@ -851,26 +862,27 @@ export default function EntryList({
                             onToggle={() => selectable && toggleSelected(e.id)}
                           />
                         )}
-                        <div className="min-w-0 flex-1 space-y-1">
-                          {/* #63B mobile Today-row action baseline: duration +
-                               Edit + ⋯ are a single horizontal cluster at the
-                               top-right of the card, aligned with the first
-                               line of the description. The old `flex-col`
-                               wrapper let ⋯ wrap to a second row on wider
-                               descriptions; keeping the whole trailing
-                               cluster in one `flex items-center` row with
-                               `shrink-0` targets guarantees a single baseline
-                               even when the description clamps to two lines
-                               or wraps around the duration digit. */}
+                        <div className="min-w-0 flex-1 space-y-2">
+                          {/* Top: project chip (or muted placeholder) left ·
+                               duration + Edit + ⋯ right. Edit + ⋯ use the
+                               36px compact variant here so the trailing
+                               cluster never crowds the chip or wraps; Play
+                               has moved to the bottom row below. */}
                           <div className="flex items-start justify-between gap-3">
-                            <p className="text-body-sm text-ink line-clamp-2 break-words min-w-0 flex-1">
-                              {e.description || (
-                                <span className="text-muted">
-                                  (no description)
+                            <div className="min-w-0 flex-1">
+                              {e.project_name ? (
+                                <ProjectChip
+                                  name={e.project_name}
+                                  projectId={e.project_id}
+                                  className="max-w-full"
+                                />
+                              ) : (
+                                <span className="text-xs text-muted">
+                                  No project
                                 </span>
                               )}
-                            </p>
-                            <div className="flex shrink-0 items-center gap-1">
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1 pt-0.5">
                               <span className="text-body-sm text-ink tabular-nums">
                                 <span className="timer-digits">
                                   {formatDurationHours(e.duration_seconds)}
@@ -879,26 +891,13 @@ export default function EntryList({
                               </span>
                               {!inSelect && !e.running && (
                                 <>
-                                  {/* #84 Play-to-resume. Sits inside the
-                                       same trailing cluster as Edit + ⋯ so
-                                       the mobile card keeps one baseline
-                                       (#63B) — no orphan ⋯, no second row.
-                                       Visually accent-tinted so it reads as
-                                       the resume affordance without
-                                       competing with the primary purple
-                                       Start on the dock. */}
-                                  <ResumeButton
-                                    pending={resumePendingIds.has(e.id)}
-                                    timerRunning={timerRunning}
-                                    onResume={() => void resume(e)}
-                                  />
                                   <button
-                                    className="btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0"
+                                    className="btn btn-ghost h-9 min-h-[36px] w-9 min-w-[36px] px-0"
                                     onClick={() => beginEdit(e)}
                                     aria-label="Edit entry"
                                     title="Edit"
                                   >
-                                    <IconEdit size={16} aria-hidden />
+                                    <IconEdit size={14} aria-hidden />
                                   </button>
                                   <RowMoreMenu
                                     entry={e}
@@ -910,51 +909,66 @@ export default function EntryList({
                                     onMarkBilled={() => void patchSingleBilled(e.id, true)}
                                     onMarkUnbilled={() => void patchSingleBilled(e.id, false)}
                                     onDelete={() => void remove(e.id)}
+                                    compact
                                   />
                                 </>
                               )}
                             </div>
                           </div>
-                          {/* #84 project chip on mobile: competitor cards
-                               lead with a colored project label. We render a
-                               small color dot + name as a dedicated chip
-                               line so the project is scannable before the
-                               time range, instead of being tucked after it. */}
-                          {e.project_name && (
-                            <ProjectChip
-                              name={e.project_name}
-                              projectId={e.project_id}
-                              className="max-w-full"
-                            />
-                          )}
-                          <p className="text-xs text-muted tabular-nums">
-                            {formatTime(s, timezone)}–
-                            {en ? formatTime(en, timezone) : "…"}
+                          {/* Middle: description — the primary readable ink.
+                               Empty state renders a muted "No description"
+                               so the row never collapses to a bare chip. */}
+                          <p className="text-body-sm text-ink line-clamp-2 break-words">
+                            {e.description || (
+                              <span className="text-muted">
+                                No description
+                              </span>
+                            )}
                           </p>
-                          {(e.tag_names.length > 0 || e.billed || (!inSelect && !selectable)) && (
-                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                              {e.tag_names.map((t) => (
-                                <span key={t} className="tag">
-                                  {t}
-                                </span>
-                              ))}
-                              {e.billed && (
-                                <span
-                                  className="inline-flex items-center gap-1 rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs text-muted"
-                                  title="Already billed"
-                                  aria-label="Billed"
-                                >
-                                  <IconCheck size={12} aria-hidden />
-                                  Billed
-                                </span>
-                              )}
-                              {inSelect && !selectable && (
-                                <span className="text-xs text-muted">
-                                  Not billable — not selectable
-                                </span>
+                          {/* Bottom: time range + tag/billed meta left ·
+                               Play right. The whole bottom row sits as its
+                               own baseline so Play is the clear ≥44px
+                               action, not something tucked into a dense
+                               top-right cluster. */}
+                          <div className="flex items-end justify-between gap-3 pt-0.5">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs text-muted tabular-nums">
+                                {formatTime(s, timezone)}–
+                                {en ? formatTime(en, timezone) : "…"}
+                              </p>
+                              {(e.tag_names.length > 0 || e.billed || (inSelect && !selectable)) && (
+                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                  {e.tag_names.map((t) => (
+                                    <span key={t} className="tag">
+                                      {t}
+                                    </span>
+                                  ))}
+                                  {e.billed && (
+                                    <span
+                                      className="inline-flex items-center gap-1 rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs text-muted"
+                                      title="Already billed"
+                                      aria-label="Billed"
+                                    >
+                                      <IconCheck size={12} aria-hidden />
+                                      Billed
+                                    </span>
+                                  )}
+                                  {inSelect && !selectable && (
+                                    <span className="text-xs text-muted">
+                                      Not billable — not selectable
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
-                          )}
+                            {!inSelect && !e.running && (
+                              <ResumeButton
+                                pending={resumePendingIds.has(e.id)}
+                                timerRunning={timerRunning}
+                                onResume={() => void resume(e)}
+                              />
+                            )}
+                          </div>
                         </div>
                       </div>
                     </li>
