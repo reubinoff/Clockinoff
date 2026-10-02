@@ -47,11 +47,13 @@ soft wash rather than pulsing.
 ## Week and day groups
 
 Entries are bucketed Week → Day → Entry, newest first. Each week
-section starts with a thin **week band** showing the Monday-first
-range (e.g. **`Sep 14 – Sep 20`**) with a right-aligned **hours
-total** for the whole week. The current week is prefixed **This
-week ·** and the previous week **Last week ·** so you don't have to
-read the dates to orient yourself.
+section is introduced by a **week band** — the heaviest heading on
+the list — showing the Monday-first range (e.g. **`Sep 14 – Sep 20`**)
+with a right-aligned **hours total** for the whole week. The current
+week is prefixed **This week ·** and the previous week **Last week ·**
+so you don't have to read the dates to orient yourself. The band
+carries a soft tinted wash and a hairline so the eye reads it as a
+section spine, well above the quieter day headers underneath.
 
 On a phone the week band is **sticky** below the top app header, so
 as you scroll a long range you always see which week the rows
@@ -60,9 +62,11 @@ sits inline above its day sections — no sticky offset is needed at
 that width.
 
 Inside each week, entries are then bucketed into a section per day,
-using the start date in your timezone. Each day section has a header
-with the day label and a muted total showing the sum of all durations
-for that day (in hours).
+using the start date in your timezone. Each day section has a quieter
+header — a small uppercase label — with the day on the left and a
+muted total of all durations for that day (in hours) on the right.
+There is a touch of extra air between the header and the first card
+so the day group reads as a sub-section, not as another row.
 
 Day labels use this format:
 
@@ -78,25 +82,27 @@ so the week boundary never shifts when you switch regions.
 
 ## Entry rows
 
-On a phone each entry renders as a card with:
+On a phone each entry renders as a card scanned top-to-bottom:
 
-- A **two-line description** (whatever you typed in the timer bar; long
-  text is clamped to two lines).
-- A right-aligned trailing cluster on the first line with the
-  **duration** (hours, e.g. `1.25h`), the **play** control (▶, start a
-  new timer from this entry — see [Resume an entry](#resume-an-entry)
-  below), the **edit** control (pencil icon, 44 × 44 px tap target)
-  that opens the edit sheet, and the **more** control (**⋯**) with
-  Mark as billed / Mark as unbilled / Delete. All four sit on one
-  horizontal baseline so the ⋯ never wraps to a second row even when
-  the description clamps to two lines.
-- A **project chip** underneath — a small coloured dot plus the project
-  name, so you can tell projects apart at a glance before you read the
-  times. Entries with no project skip the chip entirely.
-- A meta line with the **time range** (start–end in your timezone; end is
-  `…` for a running entry, only visible if you filter it in).
-- Tag chips underneath and, if the entry has been marked as billed, a
-  muted **Billed** pill — no loud badge, no colour.
+- **Top row** — the **project chip** on the left (small coloured dot
+  plus the project name so you can tell projects apart at a glance),
+  and a right-aligned cluster with the **duration** (hours, e.g.
+  `1.25h`), an **edit** control (pencil icon) that opens the edit
+  sheet, and a **more** control (**⋯**) with Mark as billed / Mark
+  as unbilled / Delete. Entries with no project show a muted
+  *No project* placeholder in the same slot. Edit and ⋯ are
+  compact in this top cluster so they don't crowd the project name.
+- **Middle** — the **description** in primary ink (whatever you
+  typed in the timer bar; long text is clamped to two lines). Empty
+  descriptions render as a muted *No description* so the card never
+  collapses to a bare chip.
+- **Bottom row** — the **time range** (start–end in your timezone;
+  end is `…` for a running entry, only visible if you filter it in),
+  any tag chips, and the muted **Billed** pill if the entry has been
+  marked as billed — all on the left. The **play** control (▶, a
+  44 × 44 px tap target, see [Resume an entry](#resume-an-entry)
+  below) sits on the right, well clear of Edit so it reads as the
+  primary row action.
 
 On tablets and desktops (`md+`, ≥ 768 px wide) the same data lays out
 as a **flat one-line row**: description · project chip with the same
@@ -182,12 +188,14 @@ in the timer dock with `start_at = now`. A short **Timer resumed**
 toast confirms the hand-off.
 
 Because Clockinoff only allows **one running timer at a time**, the
-Play button is dimmed while a timer is already running. If you tap it
-anyway (for example right as another tab started one), the server
-rejects the second start with `TIMER_ALREADY_RUNNING` and Clockinoff
-shows the gentle *A timer is already running* toast instead of
-double-starting. Stop or Discard the current timer first, then try
-again.
+Play button is dimmed while a timer is already running. The moment
+you **Stop** or **Discard** that timer from the dock, every Play
+button on the list re-enables — the dock pings the list over an
+in-memory bus, no page reload required. If you tap Play anyway (for
+example right as another tab started one), the server rejects the
+second start with `TIMER_ALREADY_RUNNING` and Clockinoff shows the
+gentle *A timer is already running* toast instead of double-starting.
+Stop or Discard the current timer first, then try again.
 
 Resume is not offered for the currently running entry — it is already
 live in the dock.

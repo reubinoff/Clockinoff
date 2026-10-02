@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDurationHms } from "@/lib/tz";
 import {
   emitEntryAdded,
+  emitTimerChanged,
   emitToast,
   onProjectsChanged,
   onTimerChanged,
@@ -228,6 +229,13 @@ export default function TimerBar({
         setProjectId("");
         setBillable(true);
         emitEntryAdded(stopped);
+        // Quiet Pulse list-friendliness tip (post-#84): the list's per-row
+        // Play buttons dim themselves whenever a timer is live. Broadcast a
+        // generic timer-changed ping on Stop so EntryList re-probes
+        // /api/timer and re-enables Play without waiting for a page
+        // reload — this is the "Play re-enable after Stop" soft residual
+        // from the Today-list friendliness brief.
+        emitTimerChanged();
         emitToast("Logged");
         return;
       }
@@ -261,6 +269,10 @@ export default function TimerBar({
         setDescription("");
         setProjectId("");
         setBillable(true);
+        // Same list-friendliness residual as stop(): tell EntryList the
+        // timer is no longer running so every row's Play button re-enables
+        // without a reload.
+        emitTimerChanged();
         // V2-6 §3: discard produces no list row — toast only.
         emitToast("Discarded");
         return;
