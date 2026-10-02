@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="72" height="72" role="img" aria-hidden="true">
-  <title>Quiet Pulse  auth flourish</title>
+  <title>Quiet Pulse - auth flourish</title>
   <style>
     .qp-pulse-ring { animation: qp-pulse-ring 3s ease-in-out infinite; }
     @keyframes qp-pulse-ring {
