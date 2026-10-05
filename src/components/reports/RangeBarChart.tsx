@@ -1,6 +1,13 @@
 "use client";
 
-import { useId, useMemo } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   hoursFromSeconds,
   niceAxisTopHours,
@@ -51,7 +58,7 @@ function keyToUtc(key: string): Date {
 
 // Pick a tick cadence that keeps labels readable at any range length
 // without overlapping. Weekly ranges show every day; monthly ranges thin to
-// every 2 / 3 / 4 / 5 days so the ~900px chart never crowds.
+// every 2 / 3 / 4 / 5 days so a desktop-width chart never crowds.
 function tickStride(count: number): number {
   if (count <= 10) return 1;
   if (count <= 16) return 2;
@@ -60,16 +67,49 @@ function tickStride(count: number): number {
   return Math.ceil(count / 10);
 }
 
+// useLayoutEffect runs before paint, so the first-measure render lands
+// in the same frame as the empty placeholder — no visual flash. On the
+// server React has no DOM to lay out, so we fall back to useEffect to
+// silence the "useLayoutEffect does nothing on the server" warning.
+const useIsoLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
 export default function RangeBarChart({
   days,
   timezone: _timezone,
 }: RangeBarChartProps): JSX.Element {
   // Keep the timezone prop in the signature so the Reports page can pass
-  // the user's tz once; we currently only use it in labels for custom
-  // ranges that span a month boundary, and the day keys arrive pre-zoned
-  // from `summarize`, so a UTC-anchored formatter is correct here.
+  // the user's tz once; day keys arrive pre-zoned from `summarize`, so a
+  // UTC-anchored formatter is correct here.
   void _timezone;
   const chartId = useId();
+  const figureRef = useRef<HTMLElement | null>(null);
+  // null = "not measured yet". We render a reserved-height placeholder
+  // in that state so the first paint matches SSR (no hydration mismatch)
+  // and the chart drops in without a layout jump once ResizeObserver
+  // reports the real pixel width.
+  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
+
+  useIsoLayoutEffect(() => {
+    const el = figureRef.current;
+    if (!el) return;
+    const initial = el.clientWidth;
+    if (initial > 0) {
+      setMeasuredWidth(initial);
+    }
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = Math.round(entry.contentRect.width);
+        if (w > 0) {
+          setMeasuredWidth((prev) => (prev === w ? prev : w));
+        }
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const data = useMemo<BarDatum[]>(() => {
     return days.map((d) => {
       const parts = monthDay(keyToUtc(d.key));
@@ -85,18 +125,43 @@ export default function RangeBarChart({
 
   const peakSeconds = data.reduce((m, d) => (d.seconds > m ? d.seconds : m), 0);
   const axisTopHours = niceAxisTopHours(peakSeconds);
-  // Width is responsive via SVG viewBox + preserveAspectRatio="none". We
-  // pick a virtual width that scales each bar to a reasonable slot — a
-  // ~900 virtual width lands close to a 1-to-3 bar-to-gap ratio on both a
-  // 400px mobile viewport and a desktop panel.
-  const slotCount = Math.max(data.length, 1);
-  const virtualWidth = Math.max(360, slotCount * 32 + AXIS_PAD_LEFT + AXIS_PAD_RIGHT);
+  const describeTotal = data.reduce((s, d) => s + d.seconds, 0);
+  const describeHours = (describeTotal / 3600).toFixed(2);
+  const descId = `${chartId}-desc`;
+
+  // Pre-measure render: reserve the chart's height so the surrounding
+  // card has the same box both before and after we know the width.
+  // Nothing stretches because nothing is drawn yet.
+  if (measuredWidth === null) {
+    return (
+      <figure
+        ref={figureRef}
+        className="w-full"
+        aria-describedby={descId}
+        style={{ minHeight: CHART_HEIGHT }}
+      >
+        <figcaption id={descId} className="sr-only">
+          Bar chart of hours per day over the selected range. Range total:
+          {" "}
+          {describeHours} hours. Peak day: {axisTopHours.toFixed(1)} hours maximum.
+        </figcaption>
+      </figure>
+    );
+  }
+
+  // viewBox now matches the measured CSS pixel width exactly, so axis
+  // text and bar corners render at their intended proportions regardless
+  // of the parent card's size. Dropping preserveAspectRatio="none" is the
+  // whole point of the fix (issue #100): with the viewBox 1:1 to the
+  // CSS size, horizontal and vertical scales stay equal.
+  const virtualWidth = measuredWidth;
   const plotLeft = AXIS_PAD_LEFT;
   const plotTop = AXIS_PAD_TOP;
-  const plotRight = virtualWidth - AXIS_PAD_RIGHT;
+  const plotRight = Math.max(plotLeft + 1, virtualWidth - AXIS_PAD_RIGHT);
   const plotBottom = CHART_HEIGHT - AXIS_PAD_BOTTOM;
   const plotWidth = plotRight - plotLeft;
   const plotHeight = plotBottom - plotTop;
+  const slotCount = Math.max(data.length, 1);
   const slotWidth = plotWidth / slotCount;
   const barWidth = Math.max(
     MIN_BAR_WIDTH,
@@ -105,15 +170,18 @@ export default function RangeBarChart({
   // Fewer grid lines on short ranges so a 2h-top chart doesn't read as
   // a stack of ladder rungs.
   const gridLines = axisTopHours <= 2 ? 2 : 4;
-  const gridValues = Array.from({ length: gridLines + 1 }, (_, i) => (axisTopHours / gridLines) * i);
+  const gridValues = Array.from(
+    { length: gridLines + 1 },
+    (_, i) => (axisTopHours / gridLines) * i,
+  );
   const stride = tickStride(data.length);
 
-  const descId = `${chartId}-desc`;
-  const describeTotal = data.reduce((s, d) => s + d.seconds, 0);
-  const describeHours = (describeTotal / 3600).toFixed(2);
-
   return (
-    <figure className="w-full" aria-describedby={descId}>
+    <figure
+      ref={figureRef}
+      className="w-full"
+      aria-describedby={descId}
+    >
       <figcaption id={descId} className="sr-only">
         Bar chart of hours per day over the selected range. Range total:
         {" "}
@@ -124,7 +192,6 @@ export default function RangeBarChart({
         aria-label="Hours by day"
         viewBox={`0 0 ${virtualWidth} ${CHART_HEIGHT}`}
         className="block w-full h-[220px] overflow-visible"
-        preserveAspectRatio="none"
       >
         {/* Grid lines + y-axis hour labels. `stroke` + `fill` resolve to
             the Quiet Pulse border + muted tokens via the Tailwind class, so
