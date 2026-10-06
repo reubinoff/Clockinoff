@@ -4,9 +4,10 @@ import {
   REGISTER_RATE_LIMIT,
   resetAuthRateLimits,
 } from "@/server/auth/rate-limit";
+import { REGISTER_FAILURE_COPY } from "@/lib/register-copy";
 import { truncateAll } from "../setup";
 
-const GENERIC = "Unable to complete sign-up. Please try again.";
+const GENERIC = REGISTER_FAILURE_COPY;
 const PW = "correct-horse-battery";
 
 function postJson(body: unknown, ip = "9.9.9.9"): Request {

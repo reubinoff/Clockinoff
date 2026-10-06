@@ -18,10 +18,10 @@ import { sessions } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
 import { ApiError } from "@/lib/errors";
 import { PASSWORD_COPY } from "@/lib/password";
+import { REGISTER_FAILURE_COPY } from "@/lib/register-copy";
 import { truncateAll } from "../setup";
 
 const PW = "correct-horse-battery";
-const GENERIC_REGISTER_ERROR = "Unable to complete sign-up. Please try again.";
 
 describe("auth", () => {
   beforeEach(async () => {
@@ -61,7 +61,7 @@ describe("auth", () => {
     ).rejects.toMatchObject({
       status: 400,
       code: "VALIDATION",
-      message: GENERIC_REGISTER_ERROR,
+      message: REGISTER_FAILURE_COPY,
     });
   });
 

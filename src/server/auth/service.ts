@@ -4,16 +4,15 @@ import { pgErrorCode } from "@/server/db/errors";
 import { users } from "@/server/db/schema";
 import { errors } from "@/lib/errors";
 import { validatePassword } from "@/lib/password";
+import { REGISTER_FAILURE_COPY } from "@/lib/register-copy";
 import { dummyPasswordHash, hashPassword, verifyPassword } from "./passwords";
 import { createSession, type CreatedSession, type SessionUser } from "./session";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Generic, deliberately unhelpful message returned for any register failure
-// past client-side field validation. Ariel + Dana aligned: same status, same
-// shape, same string for "email already exists" as for any other unexpected
-// register failure so the endpoint cannot be used to enumerate accounts.
-const GENERIC_REGISTER_ERROR = "Unable to complete sign-up. Please try again.";
+// Same status, same shape, same string for a duplicate email (password or
+// Google-only) as for any other unexpected register failure. The copy
+// nudges Sign in without naming the account type (#159).
 
 function validEmail(email: unknown): email is string {
   return typeof email === "string" && email.length <= 254 && EMAIL_RE.test(email);
@@ -70,7 +69,7 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
   } catch (err) {
     const code = pgErrorCode(err);
     if (code === "23505") {
-      throw errors.validation(GENERIC_REGISTER_ERROR);
+      throw errors.validation(REGISTER_FAILURE_COPY);
     }
     throw err;
   }

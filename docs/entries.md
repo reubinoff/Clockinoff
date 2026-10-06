@@ -207,7 +207,14 @@ red × column in the day list.
 
 1. Open **⋯** on the entry's row.
 2. Tap **Delete**.
-3. Confirm in the browser prompt.
+3. A dialog previews the entry before anything is removed:
+   - **Project** — the project name, or **No project**.
+   - **Description** — the description, or **No description**.
+   - **Time** — the start–end range in your timezone (dates are included
+     when the range crosses midnight).
+   - **Duration** — the same hours figure as the row (for example `1.50h`).
+4. Tap **Delete** to remove it. **Cancel**, Escape, or a click outside
+   the dialog keeps the entry.
 
 The card is removed. Any tags attached to the entry are detached, but the
 tags themselves are kept. Projects and clients are never deleted by
