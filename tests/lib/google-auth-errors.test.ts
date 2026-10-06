@@ -8,7 +8,6 @@ import {
   googleAuthErrorMessage,
   googleEmailMismatchMessage,
   googlePasswordAccountLoginPath,
-  googlePasswordAccountPrefillEmail,
   isGooglePasswordAccountError,
 } from "@/lib/google-auth-errors";
 
@@ -37,21 +36,8 @@ describe("googleAuthErrorMessage", () => {
 });
 
 describe("google password-account helpers", () => {
-  it("builds the locked login path with a safe email prefill", () => {
-    expect(googlePasswordAccountLoginPath("merge@example.com")).toBe(
-      "/login?error=google_password_account&email=merge%40example.com",
-    );
+  it("builds the locked login path without an email prefill", () => {
     expect(googlePasswordAccountLoginPath()).toBe("/login?error=google_password_account");
-    expect(googlePasswordAccountLoginPath("not-an-email")).toBe(
-      "/login?error=google_password_account",
-    );
-  });
-
-  it("only prefills a well-shaped email", () => {
-    expect(googlePasswordAccountPrefillEmail("  a@example.com  ")).toBe("a@example.com");
-    expect(googlePasswordAccountPrefillEmail("nope")).toBe("");
-    expect(googlePasswordAccountPrefillEmail(null)).toBe("");
-    expect(googlePasswordAccountPrefillEmail("x".repeat(300) + "@e.com")).toBe("");
   });
 
   it("locks Dana banner / mismatch copy", () => {

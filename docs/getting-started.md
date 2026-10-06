@@ -70,8 +70,10 @@ What happens behind the scenes depends on your Google email:
 - **You already have a Clockinoff password for that email.** Clockinoff
   does **not** attach Google automatically. You land back on `/login`
   with an info banner: *"This email already has a Clockinoff password.
-  Sign in with it first, then connect Google from Settings."* Sign in
-  with your password, then open **Account** and click **Connect Google**.
+  Sign in with it first, then connect Google from Settings."* The
+  email field is not filled in; **Sign in with password** focuses it
+  so you can type. Sign in with your password, then open **Account**
+  and click **Connect Google**.
 - **You already have a Google-only Clockinoff account (no password)
   with the same email.** We attach your Google identity and sign you
   in — same as a first-time Google sign-in returning later.

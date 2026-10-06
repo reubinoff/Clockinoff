@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET } from "@/app/api/auth/google/start/route";
-import { OAUTH_STATE_COOKIE, sanitiseNext } from "@/lib/oauth-next";
+import { OAUTH_STATE_COOKIE, parseOAuthState, sanitiseNext } from "@/lib/oauth-next";
 
 const ENV_SNAPSHOT = {
   id: process.env.GOOGLE_CLIENT_ID,
@@ -54,6 +54,7 @@ describe("GET /api/auth/google/start", () => {
     expect(sanitiseNext("http://evil.example")).toBe("/app");
     expect(sanitiseNext("//evil.example/path")).toBe("/app");
     expect(sanitiseNext("/\\evil.example")).toBe("/app");
+    expect(sanitiseNext("/\t/evil")).toBe("/app");
     expect(sanitiseNext("not-a-path")).toBe("/app");
     expect(sanitiseNext("x".repeat(2000))).toBe("/app");
   });
@@ -69,9 +70,10 @@ describe("GET /api/auth/google/start", () => {
     expect(url.searchParams.get("state")).toBeTruthy();
 
     const cookie = parseStateCookie(res.headers.get("set-cookie"));
-    const parsed = JSON.parse(cookie.value) as { s: string; n: string };
-    expect(parsed.s).toBe(url.searchParams.get("state"));
-    expect(parsed.n).toBe("/app");
+    const parsed = parseOAuthState(cookie.value);
+    expect(parsed?.s).toBe(url.searchParams.get("state"));
+    expect(parsed?.n).toBe("/app");
+    expect(cookie.value.startsWith("{")).toBe(false);
     expect(cookie.attrs.toLowerCase()).toContain("httponly");
     expect(cookie.attrs.toLowerCase()).toContain("samesite=lax");
     expect(cookie.attrs.toLowerCase()).toContain("path=/");
@@ -80,8 +82,8 @@ describe("GET /api/auth/google/start", () => {
   it("preserves a safe next path in the state cookie", async () => {
     const res = await GET(new Request("http://test/api/auth/google/start?next=%2Fapp%2Fentries"));
     const cookie = parseStateCookie(res.headers.get("set-cookie"));
-    const parsed = JSON.parse(cookie.value) as { s: string; n: string };
-    expect(parsed.n).toBe("/app/entries");
+    const parsed = parseOAuthState(cookie.value);
+    expect(parsed?.n).toBe("/app/entries");
   });
 
   it("stores connect intent in the state cookie when a session is present", async () => {
@@ -101,9 +103,8 @@ describe("GET /api/auth/google/start", () => {
     );
     expect(res.status).toBe(302);
     const cookie = parseStateCookie(res.headers.get("set-cookie"));
-    const parsed = JSON.parse(cookie.value) as { s: string; n: string; i?: string };
-    expect(parsed.i).toBe("connect");
-    expect(parsed.n).toBe("/app/account");
+    const parsed = parseOAuthState(cookie.value);
+    expect(parsed).toMatchObject({ i: "connect", n: "/app/account", uid: user.id });
   });
 
   it("bounces connect-without-session to /login?next=/app/account", async () => {
@@ -141,8 +142,17 @@ describe("GET /api/auth/google/start", () => {
       new Request("http://test/api/auth/google/start?next=https%3A%2F%2Fevil.example%2F"),
     );
     const cookie = parseStateCookie(res.headers.get("set-cookie"));
-    const parsed = JSON.parse(cookie.value) as { s: string; n: string };
-    expect(parsed.n).toBe("/app");
+    const parsed = parseOAuthState(cookie.value);
+    expect(parsed?.n).toBe("/app");
+  });
+
+  it("rewrites a control-char next payload to /app before storing it", async () => {
+    const res = await GET(
+      new Request("http://test/api/auth/google/start?next=%2F%09%2Fevil.example"),
+    );
+    const cookie = parseStateCookie(res.headers.get("set-cookie"));
+    const parsed = parseOAuthState(cookie.value);
+    expect(parsed?.n).toBe("/app");
   });
 
   it("redirects to /login?error=network when Google env is not configured", async () => {

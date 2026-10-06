@@ -36,21 +36,8 @@ export function googleAuthErrorMessage(code: string | null | undefined): string 
   return GOOGLE_AUTH_ERROR_COPY.network;
 }
 
-export function googlePasswordAccountLoginPath(email?: string | null): string {
-  const params = new URLSearchParams({ error: GOOGLE_PASSWORD_ACCOUNT_ERROR });
-  const prefill = googlePasswordAccountPrefillEmail(email);
-  if (prefill) params.set("email", prefill);
-  return `/login?${params.toString()}`;
-}
-
-// Only accept a well-shaped email from the callback query so a crafted
-// `?email=` cannot dump arbitrary text into the login field.
-export function googlePasswordAccountPrefillEmail(raw: string | null | undefined): string {
-  if (!raw) return "";
-  const trimmed = raw.trim();
-  if (!trimmed || trimmed.length > 254) return "";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return "";
-  return trimmed;
+export function googlePasswordAccountLoginPath(): string {
+  return `/login?error=${GOOGLE_PASSWORD_ACCOUNT_ERROR}`;
 }
 
 export function googleEmailMismatchMessage(email: string): string {

@@ -11,7 +11,6 @@ import { GooglePasswordAccountBanner } from "@/components/auth/GooglePasswordAcc
 import { IconAlert } from "@/components/icons";
 import {
   googleAuthErrorMessage,
-  googlePasswordAccountPrefillEmail,
   isGooglePasswordAccountError,
 } from "@/lib/google-auth-errors";
 
@@ -34,8 +33,7 @@ function LoginForm(): JSX.Element {
   const errorCode = params.get("error");
   const showPasswordAccountBanner = isGooglePasswordAccountError(errorCode);
   const googleErrorFromQuery = googleAuthErrorMessage(errorCode);
-  const prefilledEmail = googlePasswordAccountPrefillEmail(params.get("email"));
-  const [email, setEmail] = useState(prefilledEmail);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(googleErrorFromQuery);
   const [pending, setPending] = useState(false);
@@ -48,9 +46,8 @@ function LoginForm(): JSX.Element {
     emailRef.current?.focus();
   }, [showPasswordAccountBanner]);
 
-  function focusPasswordAndPrefill(): void {
-    if (!email.trim() && prefilledEmail) setEmail(prefilledEmail);
-    passwordRef.current?.focus();
+  function focusEmail(): void {
+    emailRef.current?.focus();
   }
 
   async function submit(e: React.FormEvent): Promise<void> {
@@ -106,7 +103,7 @@ function LoginForm(): JSX.Element {
       }
     >
       {showPasswordAccountBanner ? (
-        <GooglePasswordAccountBanner onSignInWithPassword={focusPasswordAndPrefill} />
+        <GooglePasswordAccountBanner onSignInWithPassword={focusEmail} />
       ) : null}
       <form onSubmit={submit} className="space-y-4" noValidate>
         <div className="space-y-1">

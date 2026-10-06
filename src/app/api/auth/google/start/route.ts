@@ -17,13 +17,14 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request): Promise<Response> {
   const url = new URL(req.url);
+  const origin = publicOrigin(req);
   const intent = parseOAuthIntent(url.searchParams.get("intent"));
   const next = sanitiseNext(
     url.searchParams.get("next") ?? (intent === "connect" ? "/app/account" : "/app"),
+    origin,
   );
 
-  const origin = publicOrigin(req);
-
+  let connectUid: string | undefined;
   if (intent === "connect") {
     const sid = readRequestCookie(req, SESSION_COOKIE);
     const user = await getSessionUser(sid);
@@ -32,14 +33,21 @@ export async function GET(req: Request): Promise<Response> {
       login.searchParams.set("next", "/app/account");
       return NextResponse.redirect(login, 302);
     }
+    connectUid = user.id;
   }
 
   let authorizeUrl: string;
   let state: string;
+  let cookieValue: string;
   try {
     const config = getGoogleConfig(req);
     state = newStateToken();
     authorizeUrl = buildAuthorizeUrl({ config, state });
+    cookieValue = serialiseOAuthState(
+      connectUid
+        ? { s: state, n: next, i: "connect", uid: connectUid }
+        : { s: state, n: next },
+    );
   } catch (err) {
     // Resolve the user-visible origin from NEXTAUTH_URL so the error
     // bounce doesn't leak the internal container hostname either.
@@ -54,11 +62,6 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const res = NextResponse.redirect(authorizeUrl, 302);
-  const cookieValue = serialiseOAuthState({
-    s: state,
-    n: next,
-    ...(intent === "connect" ? { i: "connect" as const } : {}),
-  });
   res.cookies.set(OAUTH_STATE_COOKIE, cookieValue, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

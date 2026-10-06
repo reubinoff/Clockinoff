@@ -40,8 +40,8 @@ function redirectToLoginWithError(origin: string, error: LoginErrorCode): NextRe
   return res;
 }
 
-function redirectToLoginPasswordAccount(origin: string, email?: string): NextResponse {
-  const res = NextResponse.redirect(new URL(googlePasswordAccountLoginPath(email), origin), 302);
+function redirectToLoginPasswordAccount(origin: string): NextResponse {
+  const res = NextResponse.redirect(new URL(googlePasswordAccountLoginPath(), origin), 302);
   clearOAuthCookie(res);
   return res;
 }
@@ -84,7 +84,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const isConnect = state.i === "connect";
-  let next = sanitiseNext(state.n);
+  let next = sanitiseNext(state.n, origin);
 
   try {
     const config = getGoogleConfig(req);
@@ -98,6 +98,10 @@ export async function GET(req: Request): Promise<Response> {
         const login = NextResponse.redirect(new URL("/login?next=%2Fapp%2Faccount", origin), 302);
         clearOAuthCookie(login);
         return login;
+      }
+      if (!state.uid || sessionUser.id !== state.uid) {
+        logger.warn("[google] connect uid mismatch");
+        return redirectToAccount(origin, "error=network");
       }
       await connectGoogleToUser(sessionUser.id, { sub: payload.sub, email: payload.email });
       return redirectToAccount(origin, "google=connected");
@@ -132,7 +136,7 @@ export async function GET(req: Request): Promise<Response> {
         return redirectToAccount(origin, "error=network");
       }
       if (err.reason === "password_account") {
-        return redirectToLoginPasswordAccount(origin, err.details?.email);
+        return redirectToLoginPasswordAccount(origin);
       }
       if (err.reason === "cancelled" || err.reason === "unverified") {
         return redirectToLoginWithError(origin, err.reason);
