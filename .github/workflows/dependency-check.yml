@@ -1,0 +1,74 @@
+name: Dependency check
+
+# Companion to `.github/dependabot.yml` (issue #105). Dependabot covers
+# the weekly version-update scan. This workflow covers the
+# "manifest changed" path:
+#   * PRs that touch npm manifests, lockfile, or workflow YAML run
+#     GitHub's dependency-review-action, which diffs the PR against its
+#     base and fails if the change introduces High+ vulnerabilities.
+#   * Pushes to main on those same paths run production-only `npm audit`
+#     and fail closed on High+. Dev-only findings (vitest / tailwind
+#     toolchain) are omitted so the job matches Grype's deployed surface
+#     and stays green on the current tree.
+#
+# dependency-review-action only understands pull_request events, so the
+# two jobs are split on purpose. This workflow does not gate CD.
+
+on:
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/**
+      - .github/dependabot.yml
+  push:
+    branches: [main]
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/**
+      - .github/dependabot.yml
+
+concurrency:
+  group: dependency-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency review (PR)
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+
+  audit:
+    name: npm audit (prod, High+)
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Audit production dependencies
+        # `--package-lock-only` reviews the lockfile without installing.
+        # `--omit=dev` keeps the gate on the surface that ships to Azure
+        # (same as grype.yml). `--audit-level=high` fails closed on High
+        # or Critical; Moderate and below stay visible in the log.
+        run: npm audit --package-lock-only --omit=dev --audit-level=high

@@ -57,7 +57,9 @@ drizzle/              Generated SQL migrations (do not hand-edit; regenerate)
 tests/
   lib/    server/     Vitest unit + API tests
   e2e/                Playwright smoke test
-.github/workflows/    ci.yml (test+build) + cd.yml (Azure Web App deploy)
+.github/              dependabot.yml (weekly npm + Actions updates)
+  workflows/          ci.yml (test+build) + cd.yml (Azure Web App deploy)
+                      + dependency-check.yml (manifest-change audit)
 ```
 
 ### Invariants an agent must not silently break

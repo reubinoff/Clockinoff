@@ -299,6 +299,17 @@ npm run typecheck && npm run lint && npm run test:coverage
   against the production dependency tree (`npm install --omit=dev`). Fails
   CI only on **Critical** or **High**; known accepted findings are
   baselined in [`.grype.yaml`](./.grype.yaml) with a short rationale.
+- **[`dependabot.yml`](./.github/dependabot.yml)** — weekly Dependabot
+  version updates for **npm** and **GitHub Actions** (Monday 06:00
+  Asia/Jerusalem). Minor/patch npm updates are grouped into one PR;
+  GitHub Actions updates are grouped the same way. Major npm bumps stay
+  as individual PRs. Conventional-commit prefix is `chore(deps)`.
+- **[`dependency-check.yml`](./.github/workflows/dependency-check.yml)** —
+  when `package.json`, `package-lock.json`, or workflow YAML change:
+  pull requests run GitHub's `dependency-review-action` (fail on High+),
+  and pushes to `main` run production-only
+  `npm audit --audit-level=high`. This is the "manifest changed on main"
+  check; Dependabot covers the weekly scan.
 - **[`cd.yml`](./.github/workflows/cd.yml)** — pushes to `main` build the
   Next.js standalone bundle, run two pre-deploy smoke tests (argon2 native
   load + a tiny PDF render), and deploy to the **`clockinoff-prod`** Azure
@@ -511,7 +522,9 @@ drizzle/              Generated SQL migrations (do not hand-edit; regenerate)
 tests/
   lib/  server/       Vitest unit + API tests
   e2e/                Playwright smoke test
-.github/workflows/    ci.yml · nightly.yml · grype.yml · cd.yml
+.github/
+  dependabot.yml      weekly npm + GitHub Actions version updates
+  workflows/          ci.yml · nightly.yml · grype.yml · cd.yml · dependency-check.yml
 ```
 
 ## Contributing

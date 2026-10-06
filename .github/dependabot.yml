@@ -1,0 +1,53 @@
+# Dependabot version updates for the two ecosystems this repo actually uses:
+# npm (package.json + package-lock.json) and GitHub Actions
+# (.github/workflows/*). There is no pip / go / cargo / docker manifest.
+#
+# Weekly schedule (Monday 06:00 Asia/Jerusalem) plus grouped minor/patch
+# PRs so the inbox stays small. Major npm bumps stay ungrouped so they
+# get their own review. Security updates are not subject to the open-PR
+# limit. See issue #105.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Jerusalem
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      npm-minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+      npm-security-minor-and-patch:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Jerusalem
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      github-actions:
+        patterns:
+          - "*"
