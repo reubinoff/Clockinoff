@@ -60,7 +60,7 @@ tests/
   lib/    server/     Vitest unit + API tests
   e2e/                Playwright smoke test
 .github/              dependabot.yml (weekly npm + Actions updates)
-  workflows/          ci.yml · nightly.yml · grype.yml · cd.yml
+  workflows/          ci.yml · nightly.yml · grype.yml (SARIF) · cd.yml
                       · dependency-check.yml
 ```
 
@@ -504,9 +504,11 @@ and UI render in the user's TZ. All day-boundary math goes through
   cron (02:15 UTC) and `workflow_dispatch`. It is additive to CI — nothing
   here deploys.
 - **[`grype.yml`](./.github/workflows/grype.yml)** — Anchore Grype scan
-  against the production dependency tree (`npm install --omit=dev`). Fails
+  against the production dependency tree (`npm ci --omit=dev`). Fails
   CI only on **Critical** or **High**; known accepted findings are
   baselined in [`.grype.yaml`](./.grype.yaml) with a short rationale.
+  SARIF is uploaded to GitHub **Security → Code scanning**. Decoupled
+  from `cd.yml` so Azure deploy is not gated on it.
 - **[`dependabot.yml`](./.github/dependabot.yml)** — weekly Dependabot
   version updates for **npm** and **GitHub Actions** (Monday 06:00
   Asia/Jerusalem). Minor/patch npm updates are grouped into one PR;

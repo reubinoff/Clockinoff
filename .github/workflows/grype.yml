@@ -4,7 +4,9 @@ name: Grype vulnerability scan
 # Web App: the Next.js standalone bundle only carries the production
 # dependency tree, so we install deps with `--omit=dev` and point
 # Grype at the resulting node_modules. There is no root Dockerfile to
-# scan — see AGENTS.md and cd.yml for how the app is packaged.
+# scan — see AGENTS.md and cd.yml for how the app is packaged. Do not
+# add a second competing scanner (e.g. vuln-scan.yml) or invent an
+# image target.
 #
 # Policy:
 #   * Fail only on Critical or High (`severity-cutoff: high`). Medium
@@ -17,6 +19,10 @@ name: Grype vulnerability scan
 #     caught before merge; a weekly cron re-runs the scan against the
 #     same tree so newly disclosed vulns surface without needing a
 #     code change.
+#   * SARIF is uploaded to GitHub Code Scanning (Security → Code
+#     scanning) so findings also appear as alerts. The upload step
+#     uses `if: always()` so a failing High+ scan still publishes
+#     the report.
 #
 # This workflow is intentionally decoupled from cd.yml — Azure deploy
 # is not gated on it. Treat a red Grype run as a bug to triage, not a
@@ -36,6 +42,9 @@ concurrency:
 
 permissions:
   contents: read
+  # Required for github/codeql-action/upload-sarif to publish findings
+  # to Security → Code scanning.
+  security-events: write
 
 jobs:
   grype:
@@ -45,10 +54,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
@@ -63,18 +72,28 @@ jobs:
         run: npm ci --omit=dev --ignore-scripts
 
       - name: Scan with Grype
-        # Pinned to v7: older majors (v3/v4) ship a Grype binary that
-        # still fetches the deprecated v5 vulnerability DB, which
-        # Anchore stopped refreshing in early 2026. Any job using them
-        # now aborts with "the vulnerability database was built N
-        # weeks ago (max allowed age is 5 days)" because the v5 feed
-        # is frozen. v7 bundles a Grype that uses the maintained v6
-        # DB and downloads a fresh copy on every run.
-        uses: anchore/scan-action@v7
+        id: scan
+        # Pinned to v7.4.2 by full commit SHA (not a floating tag).
+        # Older majors (v3/v4) ship a Grype binary that still fetches
+        # the deprecated v5 vulnerability DB, which Anchore stopped
+        # refreshing in early 2026. The floating `v7` major tag has
+        # also lagged the latest v7.x release. v7.4.2 bundles a Grype
+        # that uses the maintained v6 DB and downloads a fresh copy
+        # on every run.
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           path: "."
           severity-cutoff: high
           fail-build: true
           only-fixed: false
-          output-format: table
+          output-format: sarif
           add-cpes-if-none: true
+
+      - name: Upload Grype SARIF
+        # Publish even when the scan fails the High+ gate, so the
+        # Security tab still shows what tripped the job.
+        if: always() && steps.scan.outputs.sarif != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+          category: grype
