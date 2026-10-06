@@ -16,6 +16,12 @@ import {
   type EntryWeekGroup,
 } from "@/lib/entry-groups";
 import {
+  entryEmptyCopy,
+  resolveEntryEmptyKind,
+  showDesktopWeekTable,
+  showEmptyPulse,
+} from "@/lib/entry-list-empty";
+import {
   IconBillable,
   IconCheck,
   IconEdit,
@@ -306,16 +312,26 @@ export default function EntryList({
     () => groupEntriesByWeek(filtered, timezone, now),
     [filtered, timezone, now],
   );
-  // Inject the Today group (synthesised when empty) only when a timer is
-  // actually running — otherwise an empty Today section would spuriously
-  // appear on an otherwise all-closed Monday. Totals are untouched; the
-  // synthetic Today group starts at 0h so #81/#56 math stays closed-only.
+  const emptyKind = resolveEntryEmptyKind({
+    closedCount: filtered.length,
+    hasActiveFilter,
+  });
+  // Desktop week chrome (band + day header + pinned running row) is
+  // hidden on filtered-empty even if a timer is live — Dana #99a FAIL.
+  const showWeekTable = showDesktopWeekTable({
+    closedCount: filtered.length,
+    hasActiveFilter,
+    hasRunning: runningEntry !== null,
+  });
+  // Inject the Today group (synthesised when empty) only when the desktop
+  // table is actually showing a running row. Filtered-empty must not
+  // synthesise a 0.00h week just to house the pin.
   const weeks = useMemo(
     () =>
-      runningEntry
+      runningEntry && showWeekTable
         ? ensureTodayGroup(closedWeeks, timezone, now)
         : closedWeeks,
-    [closedWeeks, runningEntry, timezone, now],
+    [closedWeeks, runningEntry, showWeekTable, timezone, now],
   );
 
   const projectNameById = useMemo(() => {
@@ -649,14 +665,15 @@ export default function EntryList({
     : 0;
 
   // #99a desktop running row: when there are no closed entries but a timer
-  // is running, the DESKTOP table still needs to paint (synthetic Today
-  // group with the pinned row). The MOBILE surface is the dock — showing
-  // a lonely "0h this week" band on 390 would be noise, so the mobile
-  // empty-state card still wins there. We separate the two visibility
-  // conditions instead of forcing one tree to serve both.
-  const noClosedEntries = filtered.length === 0;
-  const showDesktopEmpty = noClosedEntries && !runningEntry;
-  const showMobileEmpty = noClosedEntries;
+  // is running *and no filter is live*, the DESKTOP table still needs to
+  // paint (synthetic Today group with the pinned row). Filtered-empty
+  // hides that chrome on every viewport. The MOBILE surface is the dock
+  // — showing a lonely "0h this week" band on 390 would be noise, so the
+  // mobile empty-state card still wins there on true-empty + running.
+  const showDesktopEmpty =
+    emptyKind === "filtered-empty" ||
+    (emptyKind === "true-empty" && !runningEntry);
+  const showMobileEmpty = emptyKind !== null;
 
   return (
     <div className="space-y-4">
@@ -719,46 +736,44 @@ export default function EntryList({
         </span>
       </div>
 
-      {noClosedEntries && (
+      {emptyKind && (
         <div
           className={
             "card p-6 text-center text-muted text-sm " +
-            // Desktop + running timer: hide the empty state so the pinned
-            // running row in the synthetic Today group reads as the live
-            // surface. Mobile still shows the empty card since the dock
-            // owns the running state on <md.
+            // Desktop + running timer on true-empty: hide the empty state
+            // so the pinned running row in the synthetic Today group
+            // reads as the live surface. Filtered-empty always shows the
+            // miss copy — week/day/running chrome stays down. Mobile
+            // still shows the empty card since the dock owns the running
+            // state on <md.
             (!showDesktopEmpty ? "md:hidden " : "") +
             (!showMobileEmpty ? "hidden md:block" : "")
           }
+          data-entries-empty={emptyKind}
         >
-          {/* #99a empty-state split (dude lock):
-              - true-empty (no filters) → #60 Pulse + dude copy
-              - filtered-empty, Unbilled chip   → existing "Nothing unbilled…"
-              - filtered-empty, anything else   → no Pulse + the new line */}
-          {!hasActiveFilter ? (
+          {showEmptyPulse(emptyKind) ? (
             <>
               <Pulse
                 variant="empty"
                 alt=""
                 className="mx-auto mb-3 h-[132px] w-[132px]"
               />
-              Nothing tracked yet — start a timer when you&rsquo;re ready.
+              {entryEmptyCopy(emptyKind, filterUnbilled)}
             </>
-          ) : filterUnbilled ? (
-            "Nothing unbilled in this range."
           ) : (
-            "No entries match these filters."
+            entryEmptyCopy(emptyKind, filterUnbilled)
           )}
         </div>
       )}
-      {(filtered.length > 0 || runningEntry) && (
+      {showWeekTable && (
         <div
           className={
             "space-y-6 " +
             // When there are no closed entries we only paint on desktop
             // (the synthetic Today week carrying the pinned running row).
-            // Mobile sees the empty card above instead.
-            (noClosedEntries ? "hidden md:block" : "")
+            // Mobile sees the empty card above instead. Filtered-empty
+            // never reaches here.
+            (filtered.length === 0 ? "hidden md:block" : "")
           }
           data-entries-weeks="true"
         >
@@ -828,7 +843,7 @@ export default function EntryList({
                           {g.label}
                         </h3>
                         <span
-                          className="text-xs text-muted tabular-nums"
+                          className="text-xs tabular-nums entry-day-total"
                           data-entries-day-total={g.key}
                         >
                           <span className="timer-digits">
@@ -1112,7 +1127,11 @@ function WeekTable({
           {inSelect && <col className="w-9" />}
           <col className="w-[128px] lg:w-[168px]" />
           <col />
-          <col className="hidden lg:table-column w-[176px]" />
+          {/* Keep the Meta col in the table at md (width 0) instead of
+              `display:none` — browsers ignore `hidden` on `<col>` and
+              still reserve ~176px, which cuts the running-row wash
+              short of the table edge at 768. */}
+          <col className="w-0 lg:w-[176px]" />
           <col className="w-[104px] lg:w-[112px]" />
           <col className="w-[80px] lg:w-[88px]" />
           <col className="w-[108px]" />
@@ -1172,7 +1191,7 @@ function WeekTable({
                     {g.label}
                   </span>
                   <span
-                    className="text-xs text-muted tabular-nums"
+                    className="text-xs tabular-nums entry-day-total"
                     data-entries-day-total={g.key}
                   >
                     <span className="timer-digits">
@@ -1301,7 +1320,7 @@ function EntryTableRow({
         )}
       </td>
       <td className="px-2 align-middle">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-nowrap overflow-hidden">
           <p
             className="truncate text-body-sm text-ink min-w-0"
             title={e.description || undefined}
@@ -1311,29 +1330,30 @@ function EntryTableRow({
             )}
           </p>
           {/* md 768–1023: Billed inline here. Hidden on lg+ because the
-              Meta column takes it over. */}
+              Meta column takes it over. Compact pill so the 44px row
+              never wraps. */}
           {e.billed && (
             <span
-              className="lg:hidden inline-flex items-center gap-1 rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs text-muted shrink-0"
+              className="entry-billed-pill lg:hidden"
               title="Already billed"
               aria-label="Billed"
             >
-              <IconCheck size={12} aria-hidden />
+              <IconCheck size={10} aria-hidden />
               Billed
             </span>
           )}
         </div>
       </td>
       <td className="hidden lg:table-cell px-2 align-middle">
-        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+        <div className="flex items-center gap-1.5 flex-nowrap min-w-0 overflow-hidden">
           {visibleTags.map((t) => (
-            <span key={t} className="tag truncate max-w-[80px]" title={t}>
+            <span key={t} className="tag entry-meta-chip truncate max-w-[80px]" title={t}>
               {t}
             </span>
           ))}
           {extraTags > 0 && (
             <span
-              className="text-xs text-muted"
+              className="text-xs text-muted shrink-0"
               title={e.tag_names.slice(2).join(", ")}
             >
               +{extraTags}
@@ -1341,7 +1361,7 @@ function EntryTableRow({
           )}
           {e.billable && (
             <span
-              className="text-xs text-muted"
+              className="text-xs text-muted shrink-0"
               aria-label="Billable"
               title="Billable"
             >
@@ -1350,22 +1370,22 @@ function EntryTableRow({
           )}
           {e.billed && (
             <span
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs text-muted"
+              className="entry-billed-pill"
               title="Already billed"
               aria-label="Billed"
             >
-              <IconCheck size={12} aria-hidden />
+              <IconCheck size={10} aria-hidden />
               Billed
             </span>
           )}
         </div>
       </td>
-      <td className="px-2 align-middle">
+      <td className="px-2 align-middle whitespace-nowrap">
         <span className="text-xs text-muted tabular-nums">
           {formatTime(s, timezone)}–{en ? formatTime(en, timezone) : "…"}
         </span>
       </td>
-      <td className="px-2 align-middle text-right">
+      <td className="px-2 align-middle text-right whitespace-nowrap">
         <span
           className="text-body-sm text-ink tabular-nums"
           aria-label={hoursLabel}
@@ -1456,7 +1476,7 @@ function RunningTableRow({
         )}
       </td>
       <td className="px-2 align-middle">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-nowrap overflow-hidden">
           {/* Dark #10 ban: `accent` as small text fails on dark surface
               (3.04:1). Label stays on `ink`; the running semantic cue is
               carried by the dot + "Running" label pair, never by colour

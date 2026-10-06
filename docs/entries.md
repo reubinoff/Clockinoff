@@ -36,7 +36,10 @@ systems that allow motion the ring around it fades gently (~3 s). Under
 because of a filter, Pulse stays hidden — that is a transient filter
 state, not an empty state. The **Unbilled** chip keeps its own copy
 (*Nothing unbilled in this range.*); any other active filter (search or
-project) shows *No entries match these filters.*.
+project) shows *No entries match these filters.*. Filtered-empty also
+hides the week band (including a **0.00h** total), the day header, and
+the pinned running row, even if a timer is currently live — those
+belong to the list, not to a filter miss.
 
 When you press **Stop** on the timer bar the new entry springs into the
 top of this list (and a **Logged** toast confirms it). If you press
@@ -130,8 +133,10 @@ the row has been invoiced), **Time** (start–end in your timezone),
 Between 768 px and 1023 px (`md`) the meta column is dropped to make
 room for description, and the muted **Billed** pill moves inline right
 after the description so the state stays legible without horizontal
-scroll. The actions column keeps its reserved width at every size so
-the row never jumps when you move the mouse.
+scroll. Tags and the **Billed** pill stay on one line so every entry
+row stays **44 px** tall — they never wrap the row. The actions column
+keeps its reserved width at every size so the row never jumps when you
+move the mouse.
 
 The actions are hidden by default and appear when you hover a row or
 move keyboard focus into it (Tab goes Play → Edit → **⋯**). On a

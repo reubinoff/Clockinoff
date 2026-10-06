@@ -401,6 +401,14 @@
   .entry-table-row > th {
     background-color: transparent;
     transition: background-color var(--duration-fast) var(--ease-standard);
+    height: 44px;
+    max-height: 44px;
+    overflow: hidden;
+    vertical-align: middle;
+  }
+  /* Actions cell must paint the ⋯ menu outside the 44px clip. */
+  .entry-table-row > td:last-child {
+    overflow: visible;
   }
   .entry-table-row:hover > td,
   .entry-table-row:hover > th {
@@ -420,11 +428,53 @@
   .entry-table-row[data-entry-selected="true"]:hover > th {
     background-color: var(--color-accent-soft);
   }
+  /* 44px lock for md+ entry rows. Table-row `height` is a minimum; a
+     wrapping Billed pill / tag stack was growing the row to ~53px.
+     Clip cell overflow and keep chips on one line. */
+  .entry-table-row {
+    height: 44px;
+  }
+  .entry-billed-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    height: 20px;
+    padding: 0 0.375rem;
+    border-radius: 9999px;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-canvas-2);
+    color: var(--color-muted);
+    font-size: 0.6875rem;
+    line-height: 1;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .entry-meta-chip {
+    height: 20px;
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 1;
+    max-height: 20px;
+  }
+  /* Paint wash + 2px accent bar on the <tr> so they span the full table
+     width at 768. Per-cell fills left a gap when the Meta <col> reserved
+     space without a visible <td>. Transparent cells let the row show. */
+  .entry-running-row {
+    background-color: var(--color-accent-soft);
+    background-image: linear-gradient(
+      to right,
+      var(--color-accent) 0,
+      var(--color-accent) 2px,
+      var(--color-accent-soft) 2px,
+      var(--color-accent-soft) 100%
+    );
+  }
   .entry-running-row > td,
   .entry-running-row > th,
   .entry-running-row:hover > td,
   .entry-running-row:hover > th {
-    background-color: var(--color-accent-soft);
+    background-color: transparent;
+    box-shadow: none;
   }
   .entry-running-row > td:first-child,
   .entry-running-row > th:first-child {
@@ -443,14 +493,17 @@
       opacity: 1;
     }
   }
-  /* #99a day-header contrast. Light `muted` on canvas fails AA (4.10:1);
-     `ink-2` hits it. Dark `ink-2` is fine but the locked map uses `muted`
-     (7.65:1 on canvas). We can't use Tailwind `dark:` here — the theme
-     flips via `html[data-theme]`, not `prefers-color-scheme`. */
-  .entry-day-header {
+  /* #99a day-header / day-total contrast. Light `muted` on canvas fails
+     AA (4.10:1); `ink-2` (#334155 on #f7f6f3) is ~8.8:1. Dark `ink-2`
+     is fine but the locked map uses `muted` (7.65:1 on canvas). We
+     can't use Tailwind `dark:` here — the theme flips via
+     `html[data-theme]`, not `prefers-color-scheme`. */
+  .entry-day-header,
+  .entry-day-total {
     color: var(--color-ink-2);
   }
-  html[data-theme="dark"] .entry-day-header {
+  html[data-theme="dark"] .entry-day-header,
+  html[data-theme="dark"] .entry-day-total {
     color: var(--color-muted);
   }
   /* #99a running label. Light `accent` is 5.98:1 on accent-soft. Dark
