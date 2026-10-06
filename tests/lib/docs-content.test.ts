@@ -82,6 +82,14 @@ describe("docs-content", () => {
       expect(html).toContain("<h2>Section</h2>");
     });
 
+    it("escapes decoded numeric character references in text", () => {
+      const html = renderDocMarkdown(
+        "&#60;script&#62;alert(1)&#60;/script&#62;\n",
+      );
+      expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+      expect(html).not.toContain("<script>");
+    });
+
     it("marks external links as new-tab with noopener", () => {
       const html = renderDocMarkdown(
         "[GitHub](https://github.com/reubinoff/Clockinoff) and [local](/app)",

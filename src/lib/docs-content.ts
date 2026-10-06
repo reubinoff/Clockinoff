@@ -128,6 +128,13 @@ function preprocessMarkdown(src: string): string {
 
 marked.setOptions({ gfm: true, breaks: false });
 
+// marked 18 (same as 14) does not sanitize. Raw HTML in the source is
+// copied into the output, and markdown links may keep non-http schemes
+// such as `javascript:`. Numeric character references in text are decoded
+// and then escaped, so `&#60;script&#62;` does not become a live tag.
+// The only caller is repo-owned `/docs` markdown rendered at build time.
+// Do not pass user input through `renderDocMarkdown` without a sanitizer.
+
 // Post-process the rendered HTML so that off-site links open in a new tab,
 // matching the behaviour of the Docs link in the app shell. We do this
 // as a string pass instead of a custom marked renderer because the
