@@ -16,20 +16,27 @@ nav_order: 4
 
 ---
 
-The main page at `/app` shows your closed time entries — one card per
-finished timer, most recent first, grouped by day.
+The main page at `/app` shows your closed time entries, most recent
+first, grouped Week → Day. On a phone each entry is a card; on tablet
+and desktop (`md+`, ≥ 768 px) the same data is a real table — one
+continuous table per week.
 
-The currently running timer, if any, lives in the timer bar and is *not*
-shown in this list until you stop it.
+The currently running timer lives in the timer bar. On tablet /
+desktop it *also* appears as a pinned purple-wash row at the top of
+the **Today** day group (no Play / Edit / ⋯ — **Stop** stays in the
+dock). On a phone the dock is the only running surface; there is no
+pinned card.
 
 When the list is genuinely empty — a fresh account, or after you delete
 every entry — Clockinoff shows **Quiet Pulse**, the little purple
-character that greets you above *No entries yet. Start the timer
-above.*. Pulse is a static illustration by default; on systems that
-allow motion the ring around it fades gently (~3 s). Under **reduce
-motion** the ring stays still. If the list is only empty because of a
-filter (e.g. the **Unbilled** chip returns zero matches), Pulse stays
-hidden — that is a transient filter state, not an empty state.
+character that greets you above *Nothing tracked yet — start a timer
+when you're ready.*. Pulse is a static illustration by default; on
+systems that allow motion the ring around it fades gently (~3 s). Under
+**reduce motion** the ring stays still. If the list is only empty
+because of a filter, Pulse stays hidden — that is a transient filter
+state, not an empty state. The **Unbilled** chip keeps its own copy
+(*Nothing unbilled in this range.*); any other active filter (search or
+project) shows *No entries match these filters.*.
 
 When you press **Stop** on the timer bar the new entry springs into the
 top of this list (and a **Logged** toast confirms it). If you press
@@ -49,7 +56,9 @@ soft wash rather than pulsing.
 Entries are bucketed Week → Day → Entry, newest first. Each week
 section is introduced by a **week band** — the heaviest heading on
 the list — showing the Monday-first range (e.g. **`Sep 14 – Sep 20`**)
-with a right-aligned **hours total** for the whole week. The current
+with a right-aligned **hours total** for the whole week (closed
+entries only — a live timer does not add to the day or week total).
+The current
 week is prefixed **This week ·** and the previous week **Last week ·**
 so you don't have to read the dates to orient yourself. The band
 carries a soft tinted wash and a hairline so the eye reads it as a
@@ -58,8 +67,11 @@ section spine, well above the quieter day headers underneath.
 On a phone the week band is **sticky** below the top app header, so
 as you scroll a long range you always see which week the rows
 underneath belong to. On tablet / desktop (`md+`, ≥ 768 px) the band
-sits inline above its day sections — no sticky offset is needed at
-that width.
+is also sticky — it pins just below the app header (whose height
+tracks the timer dock as you expand or collapse it) so the current
+week stays visible while you scroll a long range. Column labels and
+day headers below are *not* sticky, so only one layer of chrome ever
+floats over the scrolling rows.
 
 Inside each week, entries are then bucketed into a section per day,
 using the start date in your timezone. Each day section has a quieter
@@ -104,13 +116,38 @@ On a phone each entry renders as a card scanned top-to-bottom:
   below) sits on the right, well clear of Edit so it reads as the
   primary row action.
 
-On tablets and desktops (`md+`, ≥ 768 px wide) the same data lays out
-as a **flat one-line row**: description · project chip with the same
-coloured dot (on `lg+`) · muted **Billed** pill (if billed) · time
-range · right-aligned duration · Play · Edit · **⋯**. The old
-permanent red × delete column is gone — Delete now lives inside the
-**⋯** menu for a quieter default view. Day groups still render as
-rounded cards with hairline dividers between rows.
+On tablets and desktops (`md+`, ≥ 768 px wide) the same data renders
+as a **real table** — one continuous table per week, with a header row
+showing column labels, a row per day-group heading, and one row per
+entry underneath. The columns, left to right, are **Project** (chip
+with the coloured dot), **Description** (truncates to one line; hover
+to see the full text), **Tags / Billed / $** (meta column — tag pills
+plus a muted `$` for billable entries and a muted **Billed** pill when
+the row has been invoiced), **Time** (start–end in your timezone),
+**Duration** (right-aligned tabular hours — `1.50h`), and the row
+**actions** (Play, Edit, **⋯**) on the far right.
+
+Between 768 px and 1023 px (`md`) the meta column is dropped to make
+room for description, and the muted **Billed** pill moves inline right
+after the description so the state stays legible without horizontal
+scroll. The actions column keeps its reserved width at every size so
+the row never jumps when you move the mouse.
+
+The actions are hidden by default and appear when you hover a row or
+move keyboard focus into it (Tab goes Play → Edit → **⋯**). On a
+touch-only screen the actions stay visible permanently so you never
+have to hover to reach them. The old permanent red × delete column is
+gone — Delete lives inside the **⋯** menu for a quieter default view.
+
+If a timer is currently running, a **pinned purple-wash row** appears
+at the top of the **Today** day group with a small purple dot, the
+word **Running**, the project, the description, the start time
+followed by *now*, and a live `0:00:00` elapsed counter that advances
+once per second in step with the dock. The row carries **no actions**
+on purpose — **Stop** stays in the timer dock, which is the single
+primary control for the live timer. Screen readers hear "Controlled
+from the timer" when they land on the row. The row is desktop-only;
+on a phone the collapsed dock is the running surface.
 
 The billable amount uses the *effective rate* stored on the entry —
 either the entry's own rate or, if that is null, the project's

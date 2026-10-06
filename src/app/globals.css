@@ -44,6 +44,12 @@
     /* Purple-tinted breath glow — resolves to accent in whichever theme. */
     --glow-accent: rgba(109, 40, 217, 0.08);
     --border-accent-tint: rgba(109, 40, 217, 0.25);
+
+    /* #99a desktop table — height of the app's sticky header (brand strip +
+       nav + dock). Updated by a ResizeObserver in EntryList so the week
+       band's `top` offset tracks the dock expanding/collapsing. 64px is a
+       sensible pre-hydration default matching the mobile brand strip. */
+    --app-header-h: 64px;
   }
 
   html[data-theme="dark"] {
@@ -385,6 +391,77 @@
     opacity: 0.72;
     animation: skeleton-pulse 1.2s ease-in-out infinite;
   }
+  /* #99a desktop table — row hover/focus-within reveals the actions
+     cluster without ever shifting the row width (the actions `<td>` keeps
+     its reserved 108px slot either way). Hover tint is derived from the
+     neutral tokens: `canvas-2 @60%` on light, `ink @4%` on dark. On
+     touch-only surfaces (hover: none) actions stay visible so a tap can
+     reach them without the hover cue. */
+  .entry-table-row > td,
+  .entry-table-row > th {
+    background-color: transparent;
+    transition: background-color var(--duration-fast) var(--ease-standard);
+  }
+  .entry-table-row:hover > td,
+  .entry-table-row:hover > th {
+    background-color: color-mix(
+      in srgb,
+      var(--color-canvas-2) 60%,
+      transparent
+    );
+  }
+  html[data-theme="dark"] .entry-table-row:hover > td,
+  html[data-theme="dark"] .entry-table-row:hover > th {
+    background-color: color-mix(in srgb, var(--color-ink) 4%, transparent);
+  }
+  .entry-table-row[data-entry-selected="true"] > td,
+  .entry-table-row[data-entry-selected="true"] > th,
+  .entry-table-row[data-entry-selected="true"]:hover > td,
+  .entry-table-row[data-entry-selected="true"]:hover > th {
+    background-color: var(--color-accent-soft);
+  }
+  .entry-running-row > td,
+  .entry-running-row > th,
+  .entry-running-row:hover > td,
+  .entry-running-row:hover > th {
+    background-color: var(--color-accent-soft);
+  }
+  .entry-running-row > td:first-child,
+  .entry-running-row > th:first-child {
+    box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+  .entry-row-actions {
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-standard);
+  }
+  .entry-table-row:hover .entry-row-actions,
+  .entry-table-row:focus-within .entry-row-actions {
+    opacity: 1;
+  }
+  @media (hover: none) {
+    .entry-row-actions {
+      opacity: 1;
+    }
+  }
+  /* #99a day-header contrast. Light `muted` on canvas fails AA (4.10:1);
+     `ink-2` hits it. Dark `ink-2` is fine but the locked map uses `muted`
+     (7.65:1 on canvas). We can't use Tailwind `dark:` here — the theme
+     flips via `html[data-theme]`, not `prefers-color-scheme`. */
+  .entry-day-header {
+    color: var(--color-ink-2);
+  }
+  html[data-theme="dark"] .entry-day-header {
+    color: var(--color-muted);
+  }
+  /* #99a running label. Light `accent` is 5.98:1 on accent-soft. Dark
+     `accent` as small text is 3.04:1 — banned — so the label + meta
+     stay on `ink` / `ink-2`. The dot is decorative fill, not text. */
+  .entry-running-label {
+    color: var(--color-accent);
+  }
+  html[data-theme="dark"] .entry-running-label {
+    color: var(--color-ink);
+  }
   /* Tiny inline spinner for action buttons that stay mounted while pending —
      e.g. the sticky bulk bar primary. Uses the accent token so it reads as
      Quiet Pulse accent, not the browser-default teal. */
@@ -439,6 +516,15 @@
     .entry-spring-in,
     .toast {
       animation: none;
+    }
+    /* #99a: reveal cue is a quiet opacity bump; under reduced-motion skip
+       the transition so hover/focus never fades mid-frame. */
+    .entry-row-actions {
+      transition: none;
+    }
+    .entry-table-row > td,
+    .entry-table-row > th {
+      transition: none;
     }
     /* V2-9 rule: edit sheet still opens/closes, but travel is skipped so
        the panel never slides or scales. Backdrop just appears. */

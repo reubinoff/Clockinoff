@@ -26,7 +26,10 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen flex flex-col bg-canvas">
-      <header className="border-b border-border bg-surface sticky top-0 z-20">
+      <header
+        className="border-b border-border bg-surface sticky top-0 z-20"
+        data-app-header="true"
+      >
         <div className="mx-auto max-w-6xl px-4 py-2.5 flex items-center gap-6">
           <Link
             href="/app"

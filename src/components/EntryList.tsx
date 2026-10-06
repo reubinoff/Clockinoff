@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   formatDate,
   formatDayLabel,
+  formatDurationHms,
   formatDurationHours,
   formatTime,
   formatWeekRangeLabel,
@@ -46,6 +47,18 @@ interface Entry {
   running: boolean;
 }
 
+// GET /api/timer returns the running EntryView directly, or null. We only
+// read the fields the pinned desktop running row needs; project name is
+// resolved against the `projects` prop when the payload lacks it.
+interface RunningEntry {
+  id: string;
+  description: string;
+  project_id: string | null;
+  project_name: string | null;
+  start_at: string;
+  billable: boolean;
+}
+
 interface Option {
   id: string;
   name: string;
@@ -56,6 +69,11 @@ interface DayGroup {
   label: string;
   totalSeconds: number;
   entries: Entry[];
+  // #99a desktop running row: Today's day group is the only slot that may
+  // hold the pinned purple-wash row. We mark the Today bucket (and create
+  // it synthetically when there are no closed entries yet today) so the
+  // table knows exactly where to inject it.
+  isToday: boolean;
 }
 
 // #81 Mobile Week → Day → Entry: each week carries its Monday-first date-
@@ -67,6 +85,7 @@ interface WeekGroup {
   label: string;
   totalSeconds: number;
   days: DayGroup[];
+  isCurrent: boolean;
 }
 
 // V2-7 §Day groups → #81 Week → Day groups: bucket the filtered list by
@@ -79,6 +98,8 @@ function groupByWeek(entries: Entry[], timezone: string, now: Date): WeekGroup[]
   const weeks: WeekGroup[] = [];
   const byWeekKey = new Map<string, WeekGroup>();
   const byDayKey = new Map<string, DayGroup>();
+  const todayKey = formatDate(now, timezone);
+  const thisWeekKey = startOfIsoWeekKey(now, timezone);
   for (const e of entries) {
     const start = new Date(e.start_at);
     const dayKey = formatDate(start, timezone);
@@ -90,6 +111,7 @@ function groupByWeek(entries: Entry[], timezone: string, now: Date): WeekGroup[]
         label: formatWeekRangeLabel(weekKey, now, timezone),
         totalSeconds: 0,
         days: [],
+        isCurrent: weekKey === thisWeekKey,
       };
       byWeekKey.set(weekKey, w);
       weeks.push(w);
@@ -101,6 +123,7 @@ function groupByWeek(entries: Entry[], timezone: string, now: Date): WeekGroup[]
         label: formatDayLabel(start, timezone, now),
         totalSeconds: 0,
         entries: [],
+        isToday: dayKey === todayKey,
       };
       byDayKey.set(dayKey, d);
       w.days.push(d);
@@ -110,6 +133,42 @@ function groupByWeek(entries: Entry[], timezone: string, now: Date): WeekGroup[]
     w.totalSeconds += e.duration_seconds;
   }
   return weeks;
+}
+
+// #99a desktop running row: a pinned purple-wash row sits at the top of
+// the Today day group. If Today currently has no closed entries, we
+// synthesise an empty Today group (zero total — #81 math stays closed-
+// only) in the current week so the running row has a home. A synthesised
+// week is also created when the user hasn't logged anything this week yet.
+function ensureTodayGroup(
+  weeks: WeekGroup[],
+  timezone: string,
+  now: Date,
+): WeekGroup[] {
+  const todayKey = formatDate(now, timezone);
+  const thisWeekKey = startOfIsoWeekKey(now, timezone);
+  if (weeks.some((w) => w.days.some((d) => d.key === todayKey))) return weeks;
+  const todayGroup: DayGroup = {
+    key: todayKey,
+    label: formatDayLabel(now, timezone, now),
+    totalSeconds: 0,
+    entries: [],
+    isToday: true,
+  };
+  const currentWeek = weeks.find((w) => w.key === thisWeekKey);
+  if (currentWeek) {
+    return weeks.map((w) =>
+      w === currentWeek ? { ...w, days: [todayGroup, ...w.days] } : w,
+    );
+  }
+  const synthetic: WeekGroup = {
+    key: thisWeekKey,
+    label: formatWeekRangeLabel(thisWeekKey, now, timezone),
+    totalSeconds: 0,
+    days: [todayGroup],
+    isCurrent: true,
+  };
+  return [synthetic, ...weeks];
 }
 
 // Shaul-locked (2026-10-01) billed redesign: a closed billable entry is the
@@ -162,11 +221,21 @@ export default function EntryList({
   const [resumePendingIds, setResumePendingIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const [timerRunning, setTimerRunning] = useState(false);
+  // #99a desktop running row: beyond the plain running boolean we track the
+  // live running entry payload so the pinned row can render description +
+  // project + start-time + live elapsed. The 1s tick (below) advances
+  // `now` only while the tab is visible, so the row and dock share the
+  // same elapsed value without a double timer or a background heartbeat.
+  const [runningEntry, setRunningEntry] = useState<RunningEntry | null>(null);
+  const timerRunning = runningEntry !== null;
   // V2-6 §1: entry ids whose row should render with the spring-in class.
   // Cleared shortly after the animation duration so subsequent renders
   // (e.g. filter changes) don't re-play the animation on the same row.
   const [springIds, setSpringIds] = useState<Set<string>>(() => new Set());
+  // Live tick for the pinned desktop running row. Only mounts while a
+  // timer is live and the tab is visible — matches the dock's cadence so
+  // the two surfaces can't disagree about elapsed by more than ~1s.
+  const [tickNow, setTickNow] = useState(() => Date.now());
 
   // #54 Shaul lock: before dropping router.refresh() the server component
   // used to re-run on every mutation and push a fresh `initial` prop into
@@ -177,21 +246,20 @@ export default function EntryList({
     setEntries(initial);
   }, [initial]);
 
-  // #84 play-to-resume: know whether a timer is already running so every
-  // row's Play button dims instead of letting the user tap one and get a
-  // bare 409 toast. We rely on the dock's existing timer bus — TimerBar
-  // calls emitTimerChanged() on Start/Stop/Discard — plus a one-shot
-  // probe on mount so the hint is correct even if EntryList mounts after
-  // the dock has settled. All failures are silent on purpose: Play still
-  // works, it just degrades to the server-arbitrated 409 path.
+  // #84 play-to-resume + #99a pinned running row: both need to know
+  // whether a timer is already running. The probe (and the onTimerChanged
+  // bus wiring) now also hands us the running entry payload so the
+  // pinned desktop row can render description / project / start without
+  // waiting on a page reload. All failures are silent on purpose: the
+  // dim-every-Play hint + 409 fallback still protects the start path.
   useEffect(() => {
     let cancelled = false;
     async function probe(): Promise<void> {
       try {
         const res = await fetch("/api/timer", { cache: "no-store" });
         if (!res.ok || cancelled) return;
-        const data = (await res.json()) as { running?: boolean } | null;
-        setTimerRunning(data !== null && data.running === true);
+        const data = (await res.json()) as RunningEntry | null;
+        setRunningEntry(data);
       } catch {
         // Silent — the Play fallback still handles the 409 case.
       }
@@ -203,6 +271,72 @@ export default function EntryList({
     return () => {
       cancelled = true;
       unsubscribe();
+    };
+  }, []);
+
+  // #99a desktop running row: tick once per second while the tab is
+  // visible and a timer is running. Pausing on `document.hidden` means
+  // the background tab doesn't burn CPU, and when it comes back the
+  // first tick re-snaps the elapsed from `start_at` (not from a stale
+  // counter) so the row rejoins the dock in sync.
+  useEffect(() => {
+    if (!timerRunning) return;
+    let id: ReturnType<typeof setInterval> | null = null;
+    function start(): void {
+      if (id !== null) return;
+      setTickNow(Date.now());
+      id = setInterval(() => {
+        setTickNow(Date.now());
+      }, 1000);
+    }
+    function stop(): void {
+      if (id !== null) clearInterval(id);
+      id = null;
+    }
+    function onVis(): void {
+      if (document.hidden) stop();
+      else start();
+    }
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [timerRunning]);
+
+  // #99a desktop sticky week band: the band pins to `top: var(--app-header-h)`
+  // on md+ because the app header's height is not stable (the TimerBar
+  // dock can expand its Details panel inside it). A ResizeObserver on the
+  // layout header writes the current height to the CSS variable, so the
+  // week band always sits flush under whichever chrome is currently
+  // showing. The variable has a pre-hydration default of 64px set in
+  // globals.css so there's no first-paint jump before the observer runs.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const header = document.querySelector(
+      '[data-app-header="true"]',
+    ) as HTMLElement | null;
+    if (!header) return;
+    const root = document.documentElement;
+    function sync(): void {
+      if (!header) return;
+      const h = header.getBoundingClientRect().height;
+      root.style.setProperty("--app-header-h", `${Math.round(h)}px`);
+    }
+    sync();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", sync);
+      return () => {
+        window.removeEventListener("resize", sync);
+        root.style.removeProperty("--app-header-h");
+      };
+    }
+    const ro = new ResizeObserver(() => sync());
+    ro.observe(header);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--app-header-h");
     };
   }, []);
 
@@ -239,6 +373,13 @@ export default function EntryList({
     });
   }, [entries, filterProject, filterUnbilled, filterQ]);
 
+  // #99a filtered-vs-true empty: the Pulse mascot is reserved for the true
+  // empty case. Any live filter (search box, project pick, Unbilled chip)
+  // means the empty-list state is transient, so we drop Pulse and swap in
+  // the dedicated copy per the dude-locked wording.
+  const hasActiveFilter =
+    filterQ.length > 0 || filterProject !== "" || filterUnbilled;
+
   // Dana lock: changing filters clears selection + exits select mode so the
   // sticky bar count can never reference a hidden row.
   const prevFilterKeyRef = useRef<string>(`${filterProject}|${filterUnbilled}|${filterQ}`);
@@ -269,10 +410,27 @@ export default function EntryList({
   // whose clock advances past midnight since SSR still sees the correct
   // labels after hydration.
   const now = useMemo(() => new Date(), []);
-  const weeks = useMemo(
+  const closedWeeks = useMemo(
     () => groupByWeek(filtered, timezone, now),
     [filtered, timezone, now],
   );
+  // Inject the Today group (synthesised when empty) only when a timer is
+  // actually running — otherwise an empty Today section would spuriously
+  // appear on an otherwise all-closed Monday. Totals are untouched; the
+  // synthetic Today group starts at 0h so #81/#56 math stays closed-only.
+  const weeks = useMemo(
+    () =>
+      runningEntry
+        ? ensureTodayGroup(closedWeeks, timezone, now)
+        : closedWeeks,
+    [closedWeeks, runningEntry, timezone, now],
+  );
+
+  const projectNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of projects) m.set(p.id, p.name);
+    return m;
+  }, [projects]);
 
   const editing = useMemo(
     () => entries.find((e) => e.id === editingId) ?? null,
@@ -350,7 +508,6 @@ export default function EntryList({
         }),
       });
       if (res.ok) {
-        setTimerRunning(true);
         emitTimerChanged();
         emitToast("Timer resumed");
         return;
@@ -364,7 +521,6 @@ export default function EntryList({
         // list honest even if our local hint said otherwise, and surface
         // the gentle version of the 409 — the user does not care about
         // the id, they care that nothing double-started.
-        setTimerRunning(true);
         emitTimerChanged();
         emitToast("A timer is already running");
         return;
@@ -582,6 +738,34 @@ export default function EntryList({
     setFilterUnbilled((v) => !v);
   }, []);
 
+  // #99a desktop running row — resolve project display name from the
+  // payload or fall back to the local projects list; strings from the
+  // server are rendered as plain React text so there's no HTML injection
+  // surface (Ariel lock on #99 §LOCK).
+  const runningProjectName =
+    runningEntry?.project_name ??
+    (runningEntry?.project_id
+      ? projectNameById.get(runningEntry.project_id) ?? null
+      : null);
+  const runningElapsedSeconds = runningEntry
+    ? Math.max(
+        0,
+        Math.floor(
+          (tickNow - new Date(runningEntry.start_at).getTime()) / 1000,
+        ),
+      )
+    : 0;
+
+  // #99a desktop running row: when there are no closed entries but a timer
+  // is running, the DESKTOP table still needs to paint (synthetic Today
+  // group with the pinned row). The MOBILE surface is the dock — showing
+  // a lonely "0h this week" band on 390 would be noise, so the mobile
+  // empty-state card still wins there. We separate the two visibility
+  // conditions instead of forcing one tree to serve both.
+  const noClosedEntries = filtered.length === 0;
+  const showDesktopEmpty = noClosedEntries && !runningEntry;
+  const showMobileEmpty = noClosedEntries;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -643,347 +827,308 @@ export default function EntryList({
         </span>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="card p-6 text-center text-muted text-sm">
-          {/* #60 Quiet Pulse — mascot shows on the true empty case only;
-              a filter-emptied list isn't an empty state, so Pulse stays
-              hidden there to keep it from feeling nagging. Decorative:
-              adjacent copy below explains the state. */}
-          {!filterUnbilled ? (
-            <Pulse
-              variant="empty"
-              alt=""
-              className="mx-auto mb-3 h-[132px] w-[132px]"
-            />
-          ) : null}
-          {filterUnbilled
-            ? "Nothing unbilled in this range."
-            : "No entries yet. Start the timer above."}
+      {noClosedEntries && (
+        <div
+          className={
+            "card p-6 text-center text-muted text-sm " +
+            // Desktop + running timer: hide the empty state so the pinned
+            // running row in the synthetic Today group reads as the live
+            // surface. Mobile still shows the empty card since the dock
+            // owns the running state on <md.
+            (!showDesktopEmpty ? "md:hidden " : "") +
+            (!showMobileEmpty ? "hidden md:block" : "")
+          }
+        >
+          {/* #99a empty-state split (dude lock):
+              - true-empty (no filters) → #60 Pulse + dude copy
+              - filtered-empty, Unbilled chip   → existing "Nothing unbilled…"
+              - filtered-empty, anything else   → no Pulse + the new line */}
+          {!hasActiveFilter ? (
+            <>
+              <Pulse
+                variant="empty"
+                alt=""
+                className="mx-auto mb-3 h-[132px] w-[132px]"
+              />
+              Nothing tracked yet — start a timer when you&rsquo;re ready.
+            </>
+          ) : filterUnbilled ? (
+            "Nothing unbilled in this range."
+          ) : (
+            "No entries match these filters."
+          )}
         </div>
-      ) : (
-        <div className="space-y-6" data-entries-weeks="true">
-          {weeks.map((w) => (
-            <section
-              key={w.key}
-              aria-label={w.label}
-              className="space-y-3"
-              data-entries-week={w.key}
-            >
-              {/* Today-list friendliness tip (post-#81/#84): the week band
-                  is the section spine — stronger than the day header
-                  underneath. On ~390 it sticks under the app chrome so
-                  the current week stays visible while scrolling (fold of
-                  the #81 soft residual: real stick-under-chrome instead
-                  of letting the week scroll off). On tablet / desktop it
-                  sits inline, still with the same hairline + soft wash
-                  so the eye reads the hierarchy at a glance. z stays
-                  below the app header (z-20) and the mobile timer dock
-                  (z-30) so neither is covered. */}
-              <header
-                className={
-                  // Mobile app header is logo-row + 44px user menu + 10px pad
-                  // top/bottom + 1px border ≈ 65px tall, so pin the week band
-                  // right below it. z-[5] stays under the app header (z-20)
-                  // and the mobile timer dock (z-30) so neither is covered.
-                  "sticky top-[64px] z-[5] -mx-4 px-4 py-2.5 border-b border-border " +
-                  "bg-canvas-2/80 backdrop-blur supports-[backdrop-filter]:bg-canvas-2/70 " +
-                  "md:static md:mx-0 md:rounded-lg md:border md:border-border md:bg-canvas-2/60 " +
-                  "md:px-3 md:py-2 md:backdrop-blur-0"
-                }
-                data-entries-week-header="true"
+      )}
+      {(filtered.length > 0 || runningEntry) && (
+        <div
+          className={
+            "space-y-6 " +
+            // When there are no closed entries we only paint on desktop
+            // (the synthetic Today week carrying the pinned running row).
+            // Mobile sees the empty card above instead.
+            (noClosedEntries ? "hidden md:block" : "")
+          }
+          data-entries-weeks="true"
+        >
+          {weeks.map((w, wi) => {
+            const weekHeadingId = `entries-week-heading-${w.key}`;
+            return (
+              <section
+                key={w.key}
+                aria-label={w.label}
+                // Mobile keeps the ~12px gap under the sticky band so day
+                // cards don't butt up against the week spine. On md+ the
+                // band + table form one rounded surface (`rounded-t-2xl`
+                // on the band, `rounded-b-2xl` on the table), so the
+                // extra vertical rhythm is dropped.
+                className="space-y-3 md:space-y-0"
+                data-entries-week={w.key}
               >
-                <div className="flex items-baseline justify-between gap-3">
-                  <h2 className="text-title-sm font-semibold tracking-tight text-ink">
-                    {w.label}
-                  </h2>
-                  <span
-                    className="text-body-sm text-muted tabular-nums shrink-0"
-                    data-entries-week-total={w.key}
-                  >
-                    <span className="timer-digits text-ink font-medium">
-                      {formatDurationHours(w.totalSeconds)}
-                    </span>
-                    h total
-                  </span>
-                </div>
-              </header>
-              <div className="space-y-6">
-          {w.days.map((g) => (
-            <section
-              key={g.key}
-              aria-label={g.label}
-              className="space-y-3"
-              data-entries-day={g.key}
-            >
-              <header className="flex items-baseline justify-between px-1 pt-1">
-                <h3 className="text-label text-muted uppercase">
-                  {g.label}
-                </h3>
-                <span
-                  className="text-xs text-muted tabular-nums"
-                  data-entries-day-total={g.key}
+                {/* #99a desktop sticky week band — on md+ this is the ONLY
+                    sticky layer in the list. It pins at
+                    `top: var(--app-header-h)`; the ResizeObserver effect
+                    above keeps that variable in sync with the real header
+                    height (dock expand/collapse changes it). On ~390 the
+                    mobile band keeps its original `top-[64px]` so the
+                    thin brand strip stays visible as the user scrolls a
+                    long week — z stays below the app header (z-20) and
+                    the mobile timer dock (z-30) so neither is covered. */}
+                <header
+                  className={
+                    "sticky top-[64px] z-[5] -mx-4 px-4 py-2.5 border-b border-border " +
+                    "bg-canvas-2/80 backdrop-blur supports-[backdrop-filter]:bg-canvas-2/70 " +
+                    "md:mx-0 md:top-[var(--app-header-h)] md:rounded-t-2xl md:border md:border-b-0 md:border-border " +
+                    "md:bg-canvas-2 md:px-3 md:py-2 md:backdrop-blur-0"
+                  }
+                  data-entries-week-header="true"
                 >
-                  <span className="timer-digits">
-                    {formatDurationHours(g.totalSeconds)}
-                  </span>
-                  h total
-                </span>
-              </header>
-              {/* Mobile: card stack with 44px targets. md+: flat one-line
-                  rows with a hairline divider — the Clockify-adjacent density
-                  pattern. Both share the same row body / data. */}
-              <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-                {g.entries.map((e) => {
-                  const s = new Date(e.start_at);
-                  const en = e.end_at ? new Date(e.end_at) : null;
-                  const selectable = isSelectable(e);
-                  const selected = selectedIds.has(e.id);
-                  const inSelect = selectMode;
-                  const rowPending = pendingRowIds.has(e.id);
-                  return (
-                    <li
-                      key={e.id}
-                      className={
-                        "entry-row relative px-3 py-2.5 md:px-4 md:py-2 " +
-                        (selected ? "bg-accent-soft " : "") +
-                        (springIds.has(e.id) ? "entry-spring-in " : "") +
-                        (rowPending ? "entry-row-pending " : "") +
-                        "transition-colors"
-                      }
-                      data-entry-id={e.id}
-                      data-entry-selected={selected ? "true" : "false"}
-                      data-entry-pending={rowPending ? "true" : "false"}
-                      aria-busy={rowPending || undefined}
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h2
+                      id={weekHeadingId}
+                      className="text-title-sm font-semibold tracking-tight text-ink"
                     >
-                      {/* md+ flat row */}
-                      <div className="hidden md:flex md:items-center md:gap-3">
-                        {inSelect && (
-                          <SelectCheckbox
-                            selectable={selectable}
-                            selected={selected}
-                            label={
-                              selectable
-                                ? "Select entry"
-                                : "Not billable — not selectable"
-                            }
-                            onToggle={() => selectable && toggleSelected(e.id)}
-                          />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-body-sm text-ink">
-                            {e.description || (
-                              <span className="text-muted">(no description)</span>
-                            )}
-                          </p>
-                        </div>
-                        {e.project_name ? (
-                          <ProjectChip
-                            name={e.project_name}
-                            projectId={e.project_id}
-                            className="hidden lg:inline-flex max-w-[200px]"
-                          />
-                        ) : null}
-                        {e.billed && (
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs text-muted"
-                            title="Already billed"
-                            aria-label="Billed"
-                          >
-                            <IconCheck size={12} aria-hidden />
-                            Billed
-                          </span>
-                        )}
-                        <span className="text-xs text-muted tabular-nums shrink-0">
-                          {formatTime(s, timezone)}–
-                          {en ? formatTime(en, timezone) : "…"}
-                        </span>
-                        <span className="w-16 text-right text-body-sm text-ink tabular-nums shrink-0">
-                          <span className="timer-digits">
-                            {formatDurationHours(e.duration_seconds)}
-                          </span>
-                          h
-                        </span>
-                        {!inSelect && (
-                          <div className="flex shrink-0 items-center gap-1">
-                            {!e.running && (
-                              <ResumeButton
-                                compact
-                                pending={resumePendingIds.has(e.id)}
-                                timerRunning={timerRunning}
-                                onResume={() => void resume(e)}
-                              />
-                            )}
-                            {!e.running && (
-                              <button
-                                className="btn btn-ghost h-9 min-h-[36px] w-9 min-w-[36px] px-0"
-                                onClick={() => beginEdit(e)}
-                                aria-label="Edit entry"
-                                title="Edit"
-                              >
-                                <IconEdit size={14} aria-hidden />
-                              </button>
-                            )}
-                            {!e.running && (
-                              <RowMoreMenu
-                                entry={e}
-                                open={menuOpenId === e.id}
-                                marking={rowPending}
-                                onOpenChange={(open) =>
-                                  setMenuOpenId(open ? e.id : null)
-                                }
-                                onMarkBilled={() => void patchSingleBilled(e.id, true)}
-                                onMarkUnbilled={() => void patchSingleBilled(e.id, false)}
-                                onDelete={() => void remove(e.id)}
-                                compact
-                              />
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      {w.label}
+                    </h2>
+                    <span
+                      className="text-body-sm text-muted tabular-nums shrink-0"
+                      data-entries-week-total={w.key}
+                    >
+                      <span className="timer-digits text-ink font-medium">
+                        {formatDurationHours(w.totalSeconds)}
+                      </span>
+                      h total
+                    </span>
+                  </div>
+                </header>
 
-                      {/* mobile card body — Today-list friendliness tip
-                           (post-#81/#84). Scan order follows the locked
-                           brief: top row = project left + duration/Edit/⋯
-                           right, middle = description, bottom row = tag
-                           affordances left + Play right. Play is the only
-                           ≥44px control in the bottom cluster so it reads
-                           as the primary row action without fighting the
-                           smaller Edit + ⋯ pair in the top-right. */}
-                      <div className="flex items-start gap-3 md:hidden">
-                        {inSelect && (
-                          <SelectCheckbox
-                            selectable={selectable}
-                            selected={selected}
-                            label={
-                              selectable
-                                ? "Select entry"
-                                : "Not billable — not selectable"
-                            }
-                            onToggle={() => selectable && toggleSelected(e.id)}
-                          />
-                        )}
-                        <div className="min-w-0 flex-1 space-y-2">
-                          {/* Top: project chip (or muted placeholder) left ·
-                               duration + Edit + ⋯ right. Edit + ⋯ use the
-                               36px compact variant here so the trailing
-                               cluster never crowds the chip or wraps; Play
-                               has moved to the bottom row below. */}
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              {e.project_name ? (
-                                <ProjectChip
-                                  name={e.project_name}
-                                  projectId={e.project_id}
-                                  className="max-w-full"
-                                />
-                              ) : (
-                                <span className="text-xs text-muted">
-                                  No project
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex shrink-0 items-center gap-1 pt-0.5">
-                              <span className="text-body-sm text-ink tabular-nums">
-                                <span className="timer-digits">
-                                  {formatDurationHours(e.duration_seconds)}
-                                </span>
-                                h
-                              </span>
-                              {!inSelect && !e.running && (
-                                <>
-                                  <button
-                                    className="btn btn-ghost h-9 min-h-[36px] w-9 min-w-[36px] px-0"
-                                    onClick={() => beginEdit(e)}
-                                    aria-label="Edit entry"
-                                    title="Edit"
-                                  >
-                                    <IconEdit size={14} aria-hidden />
-                                  </button>
-                                  <RowMoreMenu
-                                    entry={e}
-                                    open={menuOpenId === e.id}
-                                    marking={rowPending}
-                                    onOpenChange={(open) =>
-                                      setMenuOpenId(open ? e.id : null)
-                                    }
-                                    onMarkBilled={() => void patchSingleBilled(e.id, true)}
-                                    onMarkUnbilled={() => void patchSingleBilled(e.id, false)}
-                                    onDelete={() => void remove(e.id)}
-                                    compact
-                                  />
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          {/* Middle: description — the primary readable ink.
-                               Empty state renders a muted "No description"
-                               so the row never collapses to a bare chip. */}
-                          <p className="text-body-sm text-ink line-clamp-2 break-words">
-                            {e.description || (
-                              <span className="text-muted">
-                                No description
-                              </span>
-                            )}
-                          </p>
-                          {/* Bottom: time range + tag/billed meta left ·
-                               Play right. The whole bottom row sits as its
-                               own baseline so Play is the clear ≥44px
-                               action, not something tucked into a dense
-                               top-right cluster. */}
-                          <div className="flex items-end justify-between gap-3 pt-0.5">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs text-muted tabular-nums">
-                                {formatTime(s, timezone)}–
-                                {en ? formatTime(en, timezone) : "…"}
-                              </p>
-                              {(e.tag_names.length > 0 || e.billed || (inSelect && !selectable)) && (
-                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                                  {e.tag_names.map((t) => (
-                                    <span key={t} className="tag">
-                                      {t}
-                                    </span>
-                                  ))}
-                                  {e.billed && (
-                                    <span
-                                      className="inline-flex items-center gap-1 rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs text-muted"
-                                      title="Already billed"
-                                      aria-label="Billed"
-                                    >
-                                      <IconCheck size={12} aria-hidden />
-                                      Billed
-                                    </span>
+                {/* Mobile <md: keep the locked per-day card stack. 99a is a
+                    desktop-only slice — mobile 48px polish lives in 99b. */}
+                <div className="space-y-6 md:hidden">
+                  {w.days.map((g) => (
+                    <section
+                      key={g.key}
+                      aria-label={g.label}
+                      className="space-y-3"
+                      data-entries-day={g.key}
+                    >
+                      <header className="flex items-baseline justify-between px-1 pt-1">
+                        <h3 className="text-label uppercase entry-day-header">
+                          {g.label}
+                        </h3>
+                        <span
+                          className="text-xs text-muted tabular-nums"
+                          data-entries-day-total={g.key}
+                        >
+                          <span className="timer-digits">
+                            {formatDurationHours(g.totalSeconds)}
+                          </span>
+                          h total
+                        </span>
+                      </header>
+                      {g.entries.length > 0 && (
+                        <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+                          {g.entries.map((e) => {
+                            const s = new Date(e.start_at);
+                            const en = e.end_at ? new Date(e.end_at) : null;
+                            const selectable = isSelectable(e);
+                            const selected = selectedIds.has(e.id);
+                            const inSelect = selectMode;
+                            const rowPending = pendingRowIds.has(e.id);
+                            return (
+                              <li
+                                key={e.id}
+                                className={
+                                  "entry-row relative px-3 py-2.5 " +
+                                  (selected ? "bg-accent-soft " : "") +
+                                  (springIds.has(e.id) ? "entry-spring-in " : "") +
+                                  (rowPending ? "entry-row-pending " : "") +
+                                  "transition-colors"
+                                }
+                                data-entry-id={e.id}
+                                data-entry-selected={selected ? "true" : "false"}
+                                data-entry-pending={rowPending ? "true" : "false"}
+                                aria-busy={rowPending || undefined}
+                              >
+                                <div className="flex items-start gap-3">
+                                  {inSelect && (
+                                    <SelectCheckbox
+                                      selectable={selectable}
+                                      selected={selected}
+                                      label={
+                                        selectable
+                                          ? "Select entry"
+                                          : "Not billable — not selectable"
+                                      }
+                                      onToggle={() =>
+                                        selectable && toggleSelected(e.id)
+                                      }
+                                    />
                                   )}
-                                  {inSelect && !selectable && (
-                                    <span className="text-xs text-muted">
-                                      Not billable — not selectable
-                                    </span>
-                                  )}
+                                  <div className="min-w-0 flex-1 space-y-2">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0 flex-1">
+                                        {e.project_name ? (
+                                          <ProjectChip
+                                            name={e.project_name}
+                                            projectId={e.project_id}
+                                            className="max-w-full"
+                                          />
+                                        ) : (
+                                          <span className="text-xs text-muted">
+                                            No project
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                                        <span className="text-body-sm text-ink tabular-nums">
+                                          <span className="timer-digits">
+                                            {formatDurationHours(e.duration_seconds)}
+                                          </span>
+                                          h
+                                        </span>
+                                        {!inSelect && !e.running && (
+                                          <>
+                                            <button
+                                              className="btn btn-ghost h-9 min-h-[36px] w-9 min-w-[36px] px-0"
+                                              onClick={() => beginEdit(e)}
+                                              aria-label="Edit entry"
+                                              title="Edit"
+                                            >
+                                              <IconEdit size={14} aria-hidden />
+                                            </button>
+                                            <RowMoreMenu
+                                              entry={e}
+                                              open={menuOpenId === e.id}
+                                              marking={rowPending}
+                                              onOpenChange={(open) =>
+                                                setMenuOpenId(open ? e.id : null)
+                                              }
+                                              onMarkBilled={() =>
+                                                void patchSingleBilled(e.id, true)
+                                              }
+                                              onMarkUnbilled={() =>
+                                                void patchSingleBilled(e.id, false)
+                                              }
+                                              onDelete={() => void remove(e.id)}
+                                              compact
+                                            />
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <p className="text-body-sm text-ink line-clamp-2 break-words">
+                                      {e.description || (
+                                        <span className="text-muted">
+                                          No description
+                                        </span>
+                                      )}
+                                    </p>
+                                    <div className="flex items-end justify-between gap-3 pt-0.5">
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-xs text-muted tabular-nums">
+                                          {formatTime(s, timezone)}–
+                                          {en ? formatTime(en, timezone) : "…"}
+                                        </p>
+                                        {(e.tag_names.length > 0 ||
+                                          e.billed ||
+                                          (inSelect && !selectable)) && (
+                                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                            {e.tag_names.map((t) => (
+                                              <span key={t} className="tag">
+                                                {t}
+                                              </span>
+                                            ))}
+                                            {e.billed && (
+                                              <span
+                                                className="inline-flex items-center gap-1 rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs text-muted"
+                                                title="Already billed"
+                                                aria-label="Billed"
+                                              >
+                                                <IconCheck size={12} aria-hidden />
+                                                Billed
+                                              </span>
+                                            )}
+                                            {inSelect && !selectable && (
+                                              <span className="text-xs text-muted">
+                                                Not billable — not selectable
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      {!inSelect && !e.running && (
+                                        <ResumeButton
+                                          pending={resumePendingIds.has(e.id)}
+                                          timerRunning={timerRunning}
+                                          onResume={() => void resume(e)}
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                            {!inSelect && !e.running && (
-                              <ResumeButton
-                                pending={resumePendingIds.has(e.id)}
-                                timerRunning={timerRunning}
-                                onResume={() => void resume(e)}
-                              />
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ))}
-              </div>
-            </section>
-          ))}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </section>
+                  ))}
+                </div>
+
+                {/* md+ ≥ 768: real continuous <table> per week. One table
+                    body per day, newest first; the day header is a
+                    `<th scope="rowgroup">` and the entry rows are plain
+                    `<tr>`s. The pinned desktop running row (if any)
+                    renders at the top of Today only. */}
+                <WeekTable
+                  week={w}
+                  inSelect={selectMode}
+                  showColumnHeaders={wi === 0}
+                  weekHeadingId={weekHeadingId}
+                  timezone={timezone}
+                  selectedIds={selectedIds}
+                  pendingRowIds={pendingRowIds}
+                  resumePendingIds={resumePendingIds}
+                  springIds={springIds}
+                  menuOpenId={menuOpenId}
+                  timerRunning={timerRunning}
+                  runningEntry={runningEntry}
+                  runningElapsedSeconds={runningElapsedSeconds}
+                  runningProjectName={runningProjectName}
+                  onToggleSelected={toggleSelected}
+                  onBeginEdit={beginEdit}
+                  onResume={(e) => void resume(e)}
+                  onOpenMenu={(id) => setMenuOpenId(id)}
+                  onMarkBilled={(id) => void patchSingleBilled(id, true)}
+                  onMarkUnbilled={(id) => void patchSingleBilled(id, false)}
+                  onDelete={(id) => void remove(id)}
+                />
+              </section>
+            );
+          })}
         </div>
       )}
 
-      <p className="text-xs text-muted">Tags available: {tags.length}</p>
       {editing && (
         <EditEntrySheet
           entry={editing}
@@ -1010,6 +1155,467 @@ export default function EntryList({
         />
       )}
     </div>
+  );
+}
+
+// #99a desktop week table. One `<table>` per week, labelled by the week
+// band `<h2>` via aria-labelledby. Column widths are reserved via a
+// `<colgroup>` so cell content can grow/shrink without pushing neighbours.
+function WeekTable({
+  week,
+  inSelect,
+  showColumnHeaders,
+  weekHeadingId,
+  timezone,
+  selectedIds,
+  pendingRowIds,
+  resumePendingIds,
+  springIds,
+  menuOpenId,
+  timerRunning,
+  runningEntry,
+  runningElapsedSeconds,
+  runningProjectName,
+  onToggleSelected,
+  onBeginEdit,
+  onResume,
+  onOpenMenu,
+  onMarkBilled,
+  onMarkUnbilled,
+  onDelete,
+}: {
+  week: WeekGroup;
+  inSelect: boolean;
+  showColumnHeaders: boolean;
+  weekHeadingId: string;
+  timezone: string;
+  selectedIds: Set<string>;
+  pendingRowIds: Set<string>;
+  resumePendingIds: Set<string>;
+  springIds: Set<string>;
+  menuOpenId: string | null;
+  timerRunning: boolean;
+  runningEntry: RunningEntry | null;
+  runningElapsedSeconds: number;
+  runningProjectName: string | null;
+  onToggleSelected: (id: string) => void;
+  onBeginEdit: (e: Entry) => void;
+  onResume: (e: Entry) => void;
+  onOpenMenu: (id: string | null) => void;
+  onMarkBilled: (id: string) => void;
+  onMarkUnbilled: (id: string) => void;
+  onDelete: (id: string) => void;
+}): JSX.Element {
+  // The column count varies with Select mode (prepended checkbox col) so
+  // the day-header `colspan` can span the whole row cleanly.
+  const totalCols = (inSelect ? 1 : 0) + 6;
+  return (
+    <div className="hidden md:block overflow-hidden rounded-b-2xl border border-t-0 border-border bg-surface">
+      <table
+        className="w-full border-collapse table-fixed text-left"
+        aria-labelledby={weekHeadingId}
+        data-entries-week-table={week.key}
+      >
+        <colgroup>
+          {inSelect && <col className="w-9" />}
+          <col className="w-[128px] lg:w-[168px]" />
+          <col />
+          <col className="hidden lg:table-column w-[176px]" />
+          <col className="w-[104px] lg:w-[112px]" />
+          <col className="w-[80px] lg:w-[88px]" />
+          <col className="w-[108px]" />
+        </colgroup>
+        <thead className={showColumnHeaders ? "" : "sr-only"}>
+          <tr className="h-8 border-b border-border">
+            {inSelect && (
+              <th scope="col" className="pl-4">
+                <span className="sr-only">Select</span>
+              </th>
+            )}
+            <th
+              scope="col"
+              className="text-label uppercase text-muted font-medium pl-4 pr-2"
+            >
+              Project
+            </th>
+            <th
+              scope="col"
+              className="text-label uppercase text-muted font-medium px-2"
+            >
+              Description
+            </th>
+            <th
+              scope="col"
+              className="hidden lg:table-cell text-label uppercase text-muted font-medium px-2"
+            >
+              Tags
+            </th>
+            <th
+              scope="col"
+              className="text-label uppercase text-muted font-medium px-2"
+            >
+              Time
+            </th>
+            <th
+              scope="col"
+              className="text-label uppercase text-muted font-medium text-right px-2"
+            >
+              Duration
+            </th>
+            <th scope="col" className="pr-4 pl-2">
+              <span className="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        {week.days.map((g) => (
+          <tbody key={g.key} data-entries-day={g.key}>
+            <tr className="h-9">
+              <th
+                scope="rowgroup"
+                colSpan={totalCols}
+                className="pt-3 pb-1 border-b border-border font-normal"
+              >
+                <div className="flex items-baseline justify-between px-4">
+                  <span className="text-label uppercase entry-day-header font-semibold tracking-wide">
+                    {g.label}
+                  </span>
+                  <span
+                    className="text-xs text-muted tabular-nums"
+                    data-entries-day-total={g.key}
+                  >
+                    <span className="timer-digits">
+                      {formatDurationHours(g.totalSeconds)}
+                    </span>
+                    h total
+                  </span>
+                </div>
+              </th>
+            </tr>
+            {g.isToday && runningEntry && (
+              <RunningTableRow
+                inSelect={inSelect}
+                runningEntry={runningEntry}
+                elapsedSeconds={runningElapsedSeconds}
+                projectName={runningProjectName}
+                timezone={timezone}
+              />
+            )}
+            {g.entries.map((e) => (
+              <EntryTableRow
+                key={e.id}
+                entry={e}
+                inSelect={inSelect}
+                selected={selectedIds.has(e.id)}
+                pending={pendingRowIds.has(e.id)}
+                resumePending={resumePendingIds.has(e.id)}
+                sprung={springIds.has(e.id)}
+                menuOpen={menuOpenId === e.id}
+                timerRunning={timerRunning}
+                timezone={timezone}
+                onToggleSelected={() => onToggleSelected(e.id)}
+                onBeginEdit={() => onBeginEdit(e)}
+                onResume={() => onResume(e)}
+                onOpenMenu={(open) => onOpenMenu(open ? e.id : null)}
+                onMarkBilled={() => onMarkBilled(e.id)}
+                onMarkUnbilled={() => onMarkUnbilled(e.id)}
+                onDelete={() => onDelete(e.id)}
+              />
+            ))}
+          </tbody>
+        ))}
+      </table>
+    </div>
+  );
+}
+
+function EntryTableRow({
+  entry: e,
+  inSelect,
+  selected,
+  pending,
+  resumePending,
+  sprung,
+  menuOpen,
+  timerRunning,
+  timezone,
+  onToggleSelected,
+  onBeginEdit,
+  onResume,
+  onOpenMenu,
+  onMarkBilled,
+  onMarkUnbilled,
+  onDelete,
+}: {
+  entry: Entry;
+  inSelect: boolean;
+  selected: boolean;
+  pending: boolean;
+  resumePending: boolean;
+  sprung: boolean;
+  menuOpen: boolean;
+  timerRunning: boolean;
+  timezone: string;
+  onToggleSelected: () => void;
+  onBeginEdit: () => void;
+  onResume: () => void;
+  onOpenMenu: (open: boolean) => void;
+  onMarkBilled: () => void;
+  onMarkUnbilled: () => void;
+  onDelete: () => void;
+}): JSX.Element {
+  const s = new Date(e.start_at);
+  const en = e.end_at ? new Date(e.end_at) : null;
+  const selectable = isSelectable(e);
+  const hoursLabel = `${formatDurationHours(e.duration_seconds)} hours`;
+  // At md 768–1023 the Meta column is dropped and the muted "Billed" pill
+  // moves inline right after the description so the state stays legible
+  // without needing the extra column (brief §1 md 768–1023).
+  const visibleTags = e.tag_names.slice(0, 2);
+  const extraTags = Math.max(0, e.tag_names.length - visibleTags.length);
+  return (
+    <tr
+      className={
+        "entry-table-row h-11 border-b border-border " +
+        (sprung ? "entry-spring-in " : "") +
+        (pending ? "entry-row-pending " : "")
+      }
+      data-entry-id={e.id}
+      data-entry-selected={selected ? "true" : "false"}
+      data-entry-pending={pending ? "true" : "false"}
+      aria-busy={pending || undefined}
+    >
+      {inSelect && (
+        <td className="pl-4 align-middle">
+          <SelectCheckbox
+            selectable={selectable}
+            selected={selected}
+            label={
+              selectable ? "Select entry" : "Not billable — not selectable"
+            }
+            onToggle={() => selectable && onToggleSelected()}
+            desktop
+          />
+        </td>
+      )}
+      <td className="pl-4 pr-2 align-middle">
+        {e.project_name ? (
+          <ProjectChip
+            name={e.project_name}
+            projectId={e.project_id}
+            className="max-w-full"
+          />
+        ) : (
+          <span className="text-xs text-muted">No project</span>
+        )}
+      </td>
+      <td className="px-2 align-middle">
+        <div className="flex items-center gap-2 min-w-0">
+          <p
+            className="truncate text-body-sm text-ink min-w-0"
+            title={e.description || undefined}
+          >
+            {e.description || (
+              <span className="text-muted">No description</span>
+            )}
+          </p>
+          {/* md 768–1023: Billed inline here. Hidden on lg+ because the
+              Meta column takes it over. */}
+          {e.billed && (
+            <span
+              className="lg:hidden inline-flex items-center gap-1 rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs text-muted shrink-0"
+              title="Already billed"
+              aria-label="Billed"
+            >
+              <IconCheck size={12} aria-hidden />
+              Billed
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="hidden lg:table-cell px-2 align-middle">
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+          {visibleTags.map((t) => (
+            <span key={t} className="tag truncate max-w-[80px]" title={t}>
+              {t}
+            </span>
+          ))}
+          {extraTags > 0 && (
+            <span
+              className="text-xs text-muted"
+              title={e.tag_names.slice(2).join(", ")}
+            >
+              +{extraTags}
+            </span>
+          )}
+          {e.billable && (
+            <span
+              className="text-xs text-muted"
+              aria-label="Billable"
+              title="Billable"
+            >
+              $
+            </span>
+          )}
+          {e.billed && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs text-muted"
+              title="Already billed"
+              aria-label="Billed"
+            >
+              <IconCheck size={12} aria-hidden />
+              Billed
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-2 align-middle">
+        <span className="text-xs text-muted tabular-nums">
+          {formatTime(s, timezone)}–{en ? formatTime(en, timezone) : "…"}
+        </span>
+      </td>
+      <td className="px-2 align-middle text-right">
+        <span
+          className="text-body-sm text-ink tabular-nums"
+          aria-label={hoursLabel}
+        >
+          <span className="timer-digits">
+            {formatDurationHours(e.duration_seconds)}
+          </span>
+          h
+        </span>
+      </td>
+      <td className="pr-4 pl-2 align-middle">
+        {!inSelect && (
+          <div
+            className="entry-row-actions flex items-center justify-end gap-1"
+            data-entry-actions="true"
+          >
+            <ResumeButton
+              size="sm"
+              pending={resumePending}
+              timerRunning={timerRunning}
+              onResume={onResume}
+            />
+            <button
+              className="btn btn-ghost h-8 min-h-[32px] w-8 min-w-[32px] px-0"
+              onClick={onBeginEdit}
+              aria-label="Edit entry"
+              title="Edit"
+            >
+              <IconEdit size={14} aria-hidden />
+            </button>
+            <RowMoreMenu
+              entry={e}
+              open={menuOpen}
+              marking={pending}
+              onOpenChange={onOpenMenu}
+              onMarkBilled={onMarkBilled}
+              onMarkUnbilled={onMarkUnbilled}
+              onDelete={onDelete}
+              size="sm"
+            />
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+// #99a desktop pinned running row. accent-soft wash + 2px accent left
+// bar (both via `.entry-running-row` in globals.css). No row actions —
+// Stop lives in the dock, so the row is `aria-describedby` the hidden
+// hint below so AT users hear "Controlled from the timer".
+function RunningTableRow({
+  inSelect,
+  runningEntry,
+  elapsedSeconds,
+  projectName,
+  timezone,
+}: {
+  inSelect: boolean;
+  runningEntry: RunningEntry;
+  elapsedSeconds: number;
+  projectName: string | null;
+  timezone: string;
+}): JSX.Element {
+  const describedById = "entry-running-row-controlled-by-timer";
+  const s = new Date(runningEntry.start_at);
+  return (
+    <tr
+      className="entry-table-row entry-running-row h-11 border-b border-border"
+      data-entry-running="true"
+      aria-describedby={describedById}
+    >
+      {inSelect && (
+        <td className="pl-4 align-middle">
+          {/* Running is never selectable per the Shaul lock on #64. */}
+          <span className="sr-only">Not selectable while running</span>
+        </td>
+      )}
+      <td className="pl-4 pr-2 align-middle">
+        {projectName ? (
+          <ProjectChip
+            name={projectName}
+            projectId={runningEntry.project_id}
+            className="max-w-full"
+          />
+        ) : (
+          <span className="text-xs text-muted">No project</span>
+        )}
+      </td>
+      <td className="px-2 align-middle">
+        <div className="flex items-center gap-2 min-w-0">
+          {/* Dark #10 ban: `accent` as small text fails on dark surface
+              (3.04:1). Label stays on `ink`; the running semantic cue is
+              carried by the dot + "Running" label pair, never by colour
+              alone. */}
+          <span
+            className="entry-running-label inline-flex items-center gap-1.5 text-body-sm font-medium shrink-0"
+            data-entry-running-label="true"
+          >
+            <span
+              aria-hidden
+              className="inline-block h-2 w-2 rounded-full bg-accent"
+            />
+            Running
+          </span>
+          <p
+            className="truncate text-body-sm text-ink-2 min-w-0"
+            title={runningEntry.description || undefined}
+          >
+            {runningEntry.description || (
+              <span className="text-muted">No description</span>
+            )}
+          </p>
+        </div>
+      </td>
+      <td className="hidden lg:table-cell px-2 align-middle">
+        <span className="text-xs text-muted">Controlled from the timer</span>
+      </td>
+      <td className="px-2 align-middle">
+        <span className="text-xs text-muted tabular-nums">
+          {formatTime(s, timezone)}–now
+        </span>
+      </td>
+      <td className="px-2 align-middle text-right">
+        <span
+          className="text-body-sm text-ink tabular-nums timer-digits"
+          aria-live="polite"
+          aria-label="Elapsed time"
+        >
+          {formatDurationHms(elapsedSeconds)}
+        </span>
+      </td>
+      <td className="pr-4 pl-2 align-middle">
+        {/* Reserved slot — kept empty so the actions column keeps the
+            same reserved 108px width on every row. One unique hint
+            target for aria-describedby (duplicate ids would break
+            the AT association when the Tags column is visible). */}
+        <span className="sr-only" id={describedById}>
+          Controlled from the timer
+        </span>
+      </td>
+    </tr>
   );
 }
 
@@ -1052,11 +1658,13 @@ function ResumeButton({
   timerRunning,
   onResume,
   compact,
+  size,
 }: {
   pending: boolean;
   timerRunning: boolean;
   onResume: () => void;
   compact?: boolean;
+  size?: "sm";
 }): JSX.Element {
   // #84 play-to-resume. Visual: accent-tinted ghost so the icon pops but
   // never fights the dock's primary purple Start — the dock remains the
@@ -1064,9 +1672,12 @@ function ResumeButton({
   // only; server still arbitrates on 409) or while a resume request is
   // in flight for this specific row.
   const disabled = pending || timerRunning;
-  const sizeClass = compact
-    ? "h-9 min-h-[36px] w-9 min-w-[36px]"
-    : "h-11 min-h-[44px] w-11 min-w-[44px]";
+  const sizeClass =
+    size === "sm"
+      ? "h-8 min-h-[32px] w-8 min-w-[32px]"
+      : compact
+        ? "h-9 min-h-[36px] w-9 min-w-[36px]"
+        : "h-11 min-h-[44px] w-11 min-w-[44px]";
   const title = timerRunning
     ? "Stop the current timer first"
     : pending
@@ -1087,7 +1698,7 @@ function ResumeButton({
       title={title}
       data-entry-resume-btn="true"
     >
-      <IconPlay size={compact ? 14 : 16} aria-hidden />
+      <IconPlay size={size === "sm" ? 14 : compact ? 14 : 16} aria-hidden />
     </button>
   );
 }
@@ -1097,11 +1708,13 @@ function SelectCheckbox({
   selected,
   label,
   onToggle,
+  desktop,
 }: {
   selectable: boolean;
   selected: boolean;
   label: string;
   onToggle: () => void;
+  desktop?: boolean;
 }): JSX.Element {
   return (
     <button
@@ -1113,8 +1726,10 @@ function SelectCheckbox({
       disabled={!selectable}
       onClick={onToggle}
       className={
-        "flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center " +
-        "md:h-9 md:w-9 md:min-h-[36px] md:min-w-[36px] rounded-md"
+        desktop
+          ? "flex h-8 w-8 min-h-[32px] min-w-[32px] shrink-0 items-center justify-center rounded-md"
+          : "flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center " +
+            "md:h-9 md:w-9 md:min-h-[36px] md:min-w-[36px] rounded-md"
       }
       data-entry-checkbox="true"
     >
@@ -1143,6 +1758,7 @@ function RowMoreMenu({
   onMarkUnbilled,
   onDelete,
   compact,
+  size,
 }: {
   entry: Entry;
   open: boolean;
@@ -1152,12 +1768,16 @@ function RowMoreMenu({
   onMarkUnbilled: () => void;
   onDelete: () => void;
   compact?: boolean;
+  size?: "sm";
 }): JSX.Element {
   const canBill = entry.billable && !entry.billed;
   const canUnbill = entry.billable && entry.billed;
-  const btnClass = compact
-    ? "btn btn-ghost h-9 min-h-[36px] w-9 min-w-[36px] px-0"
-    : "btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0";
+  const btnClass =
+    size === "sm"
+      ? "btn btn-ghost h-8 min-h-[32px] w-8 min-w-[32px] px-0"
+      : compact
+        ? "btn btn-ghost h-9 min-h-[36px] w-9 min-w-[36px] px-0"
+        : "btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0";
   return (
     <div className="relative">
       <button
