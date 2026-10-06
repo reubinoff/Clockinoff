@@ -60,6 +60,9 @@
   "engines": {
     "node": ">=24"
   },
+  "overrides": {
+    "source-map-js": "1.2.2"
+  },
   "allowScripts": {
     "argon2@0.41.1": true,
     "esbuild@0.18.20": true,
