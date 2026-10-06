@@ -47,6 +47,18 @@ timezone.
 
 If either date is missing or invalid, the server returns a validation
 error. If `From` is after `To`, you also get a validation error.
+The range cannot be longer than **366 days**, and a single export
+cannot include more than **10,000** closed entries — over either cap
+the server returns `400` with a message asking you to narrow the
+dates. The form shows that message under the buttons.
+
+Clockinoff also allows **one export at a time** per account and about
+**10 exports per 10 minutes**. Going over that budget returns
+`429` with a `Retry-After` header; wait and try again.
+
+The downloaded filename is built from the resolved range
+(`timely-YYYY-MM-DD-YYYY-MM-DD.csv` / `.pdf`), not from the raw query
+string.
 
 If the range contains no closed entries, the download does not fire.
 Instead the page shows:
@@ -78,6 +90,11 @@ The CSV has a header row followed by one row per entry. Columns:
 
 If there are no entries in the range, the CSV still contains a **header
 row** and nothing else — the response is `200 OK`, not an error.
+
+Cells that start with `=`, `+`, `-`, `@`, a tab, or a carriage return
+are prefixed with a single quote so spreadsheet apps treat them as
+text instead of formulas. That quote is an export-safety marker, not
+part of the description you typed.
 
 ---
 

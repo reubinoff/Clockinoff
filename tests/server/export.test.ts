@@ -7,7 +7,9 @@ import {
 } from "@/server/services/entries";
 import {
   EXPORT_HEADERS,
+  exportDownloadFilename,
   getExportRows,
+  parseExportBound,
   rowsToCsv,
   toExportRow,
   validateExportRange,
@@ -33,6 +35,14 @@ describe("export", () => {
       to: new Date("2026-01-02T00:00:00Z"),
     });
     expect(ok.from.getTime()).toBeLessThan(ok.to.getTime());
+  });
+
+  it("validateExportRange allows a 366-day span and rejects longer", () => {
+    const from = new Date("2024-01-01T00:00:00Z");
+    const exactly366 = new Date("2025-01-01T00:00:00Z");
+    expect(() => validateExportRange({ from, to: exactly366 })).not.toThrow();
+    const over = new Date("2025-01-02T00:00:00Z");
+    expect(() => validateExportRange({ from, to: over })).toThrow(/366 days/);
   });
 
   it("empty range returns CSV with header only", async () => {
@@ -203,6 +213,29 @@ describe("export", () => {
     );
     expect(row.billable).toBe("yes");
     expect(row.billed).toBe("yes");
+  });
+
+  it("parseExportBound accepts YYYY-MM-DD and ISO, rejects junk", () => {
+    const from = parseExportBound("2026-01-01", "UTC");
+    expect(from?.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+    const to = parseExportBound("2026-01-01", "UTC", true);
+    expect(to?.toISOString()).toBe("2026-01-02T00:00:00.000Z");
+    expect(parseExportBound("2026-01-01T12:00:00.000Z", "UTC")?.toISOString()).toBe(
+      "2026-01-01T12:00:00.000Z",
+    );
+    expect(parseExportBound("2026-01-01\r\n", "UTC")).toBeUndefined();
+    expect(parseExportBound("not-a-date", "UTC")).toBeUndefined();
+    expect(parseExportBound(null, "UTC")).toBeUndefined();
+    expect(parseExportBound("2026-01-01", "Not/AZone", true)).toBeUndefined();
+  });
+
+  it("exportDownloadFilename uses validated ISO dates only", () => {
+    expect(
+      exportDownloadFilename(new Date("2026-01-01T00:00:00Z"), new Date("2026-01-08T00:00:00Z"), "csv"),
+    ).toBe("timely-2026-01-01-2026-01-08.csv");
+    expect(
+      exportDownloadFilename(new Date("2026-04-01T12:00:00Z"), new Date("2026-04-30T12:00:00Z"), "pdf"),
+    ).toBe("timely-2026-04-01-2026-04-30.pdf");
   });
 
   it("CSV appends `billed` as the last column without renaming existing ones", () => {

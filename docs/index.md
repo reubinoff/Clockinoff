@@ -21,7 +21,8 @@ You get:
   pick a date (desktop + mobile, see [Using the timer]({{ '/timer' | relative_url }}#add-a-manual-entry)).
 - **Projects, clients, and tags** to organise entries.
 - **Billable flag** with an optional rate on each project.
-- **CSV and PDF export** over any date range.
+- **CSV and PDF export** over a date range of up to 366 days (and up
+  to 10,000 closed entries per download).
 - **Light and dark theme** — an Appearance picker (System · Light · Dark)
   in the account cluster; System tracks your device.
 

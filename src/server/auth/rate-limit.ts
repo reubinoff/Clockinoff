@@ -7,8 +7,11 @@
 //   - `POST /api/auth/register` — per-IP bucket counting *all* register
 //     attempts. Register has no stable identifier before the account exists,
 //     so an attacker trying new emails from one host must still be throttled.
+//   - `GET /api/auth/google/start` + `/callback` — per-IP bucket counting
+//     every hit (~20 / 10 min) so a reused state cookie cannot amplify
+//     outbound token exchanges (#148).
 //
-// Both limiters:
+// All limiters:
 //
 //   - Live in-process. On a multi-instance deployment each replica keeps its
 //     own counters — intentional: no shared secret, no extra dependency, and
@@ -37,6 +40,9 @@ const LOGIN_IP_WINDOW_MS = LOGIN_WINDOW_MS;
 const REGISTER_MAX_ATTEMPTS = 10;
 const REGISTER_WINDOW_MS = 15 * 60 * 1000;
 
+const GOOGLE_OAUTH_MAX_ATTEMPTS = 20;
+const GOOGLE_OAUTH_WINDOW_MS = 10 * 60 * 1000;
+
 // Hard cap on every in-process map. 50k live buckets is well above any
 // legitimate single-replica load and cheap enough that FIFO eviction of
 // the oldest key is the right overflow valve (#145).
@@ -55,6 +61,7 @@ interface Bucket {
 const loginBuckets = new Map<string, Bucket>();
 const loginIpBuckets = new Map<string, Bucket>();
 const registerBuckets = new Map<string, Bucket>();
+const googleOAuthBuckets = new Map<string, Bucket>();
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -173,6 +180,23 @@ export function registerRetryAfterSeconds(ip: string, now: number = Date.now()):
   return retryAfter(registerBuckets.get(ip), now);
 }
 
+// ---------- Google OAuth start + callback ----------------------------------
+//
+// IP-only, counts every hit on `/api/auth/google/start` and `/callback`.
+// Caps unauthenticated outbound token-exchange amplification (#148).
+
+export function isGoogleOAuthRateLimited(ip: string, now: number = Date.now()): boolean {
+  return isLimited(googleOAuthBuckets, ip, now, GOOGLE_OAUTH_MAX_ATTEMPTS);
+}
+
+export function recordGoogleOAuthAttempt(ip: string, now: number = Date.now()): void {
+  remember(googleOAuthBuckets, ip, now, GOOGLE_OAUTH_WINDOW_MS);
+}
+
+export function googleOAuthRetryAfterSeconds(ip: string, now: number = Date.now()): number {
+  return retryAfter(googleOAuthBuckets.get(ip), now);
+}
+
 // ---------- test helpers ---------------------------------------------------
 
 export function resetLoginRateLimit(): void {
@@ -184,9 +208,14 @@ export function resetRegisterRateLimit(): void {
   registerBuckets.clear();
 }
 
+export function resetGoogleOAuthRateLimit(): void {
+  googleOAuthBuckets.clear();
+}
+
 export function resetAuthRateLimits(): void {
   resetLoginRateLimit();
   resetRegisterRateLimit();
+  resetGoogleOAuthRateLimit();
 }
 
 export function loginMapSize(): number {
@@ -199,6 +228,10 @@ export function loginIpMapSize(): number {
 
 export function registerMapSize(): number {
   return registerBuckets.size;
+}
+
+export function googleOAuthMapSize(): number {
+  return googleOAuthBuckets.size;
 }
 
 export const LOGIN_RATE_LIMIT = {
@@ -218,6 +251,13 @@ export const LOGIN_IP_RATE_LIMIT = {
 export const REGISTER_RATE_LIMIT = {
   maxAttempts: REGISTER_MAX_ATTEMPTS,
   windowMs: REGISTER_WINDOW_MS,
+  maxBuckets: MAX_BUCKETS,
+  pruneScan: PRUNE_SCAN,
+} as const;
+
+export const GOOGLE_OAUTH_RATE_LIMIT = {
+  maxAttempts: GOOGLE_OAUTH_MAX_ATTEMPTS,
+  windowMs: GOOGLE_OAUTH_WINDOW_MS,
   maxBuckets: MAX_BUCKETS,
   pruneScan: PRUNE_SCAN,
 } as const;

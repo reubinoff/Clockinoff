@@ -51,6 +51,18 @@ const QUICK_RANGES: readonly { key: QuickRange; label: string }[] = [
   { key: "custom", label: "Custom" },
 ];
 
+async function readExportError(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: { message?: string } };
+    if (typeof body.error?.message === "string" && body.error.message.length > 0) {
+      return body.error.message;
+    }
+  } catch {
+    // Non-JSON error body — keep the generic fallback.
+  }
+  return "Couldn't prepare the export. Try again.";
+}
+
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -69,22 +81,26 @@ export default function ExportPage(): JSX.Element {
   const [selected, setSelected] = useState<QuickRange>("month");
   const [pending, setPending] = useState<"csv" | "pdf" | null>(null);
   const [isEmpty, setIsEmpty] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function editFrom(v: string): void {
     setFrom(v);
     setSelected("custom");
     setIsEmpty(false);
+    setError(null);
   }
 
   function editTo(v: string): void {
     setTo(v);
     setSelected("custom");
     setIsEmpty(false);
+    setError(null);
   }
 
   function onQuick(key: QuickRange): void {
     setSelected(key);
     setIsEmpty(false);
+    setError(null);
     if (key === "custom") return;
     const r = presetRange(key);
     setFrom(r.from);
@@ -95,10 +111,14 @@ export default function ExportPage(): JSX.Element {
     if (pending) return;
     setPending(format);
     setIsEmpty(false);
+    setError(null);
     try {
       const csvUrl = `/api/export/csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
       const csvRes = await fetch(csvUrl, { cache: "no-store" });
-      if (!csvRes.ok) return;
+      if (!csvRes.ok) {
+        setError(await readExportError(csvRes));
+        return;
+      }
       const csvBlob = await csvRes.blob();
       const csvText = await csvBlob.text();
       const dataLines = csvText.split(/\r?\n/).slice(1).filter((l) => l.length > 0);
@@ -112,7 +132,10 @@ export default function ExportPage(): JSX.Element {
       }
       const pdfUrl = `/api/export/pdf?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
       const pdfRes = await fetch(pdfUrl, { cache: "no-store" });
-      if (!pdfRes.ok) return;
+      if (!pdfRes.ok) {
+        setError(await readExportError(pdfRes));
+        return;
+      }
       const pdfBlob = await pdfRes.blob();
       triggerDownload(pdfBlob, `timely-${from}-${to}.pdf`);
     } finally {
@@ -190,6 +213,11 @@ export default function ExportPage(): JSX.Element {
             aria-live="polite"
           >
             No entries in this range — try different dates.
+          </p>
+        )}
+        {error && (
+          <p className="text-sm text-danger" role="alert">
+            {error}
           </p>
         )}
         <div className="flex flex-col sm:flex-row gap-2">

@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET } from "@/app/api/auth/google/start/route";
 import { OAUTH_STATE_COOKIE, sanitiseNext } from "@/lib/oauth-next-path";
 import { parseOAuthState } from "@/lib/oauth-state";
+import { resetOAuthStateStore } from "@/server/auth/oauth-state-store";
+import {
+  GOOGLE_OAUTH_RATE_LIMIT,
+  resetGoogleOAuthRateLimit,
+} from "@/server/auth/rate-limit";
 
 const ENV_SNAPSHOT = {
   id: process.env.GOOGLE_CLIENT_ID,
@@ -45,6 +50,8 @@ function parseStateCookie(setCookie: string | null): { name: string; value: stri
 describe("GET /api/auth/google/start", () => {
   beforeEach(() => {
     configure();
+    resetGoogleOAuthRateLimit();
+    resetOAuthStateStore();
   });
   afterEach(() => {
     restoreEnv();
@@ -173,6 +180,26 @@ describe("GET /api/auth/google/start", () => {
     const loc = new URL(res.headers.get("location") ?? "");
     expect(loc.pathname).toBe("/login");
     expect(loc.searchParams.get("error")).toBe("unavailable");
+  });
+
+  it("returns 429 after too many start hits from the same IP", async () => {
+    const ip = "203.0.113.80";
+    for (let i = 0; i < GOOGLE_OAUTH_RATE_LIMIT.maxAttempts; i += 1) {
+      const res = await GET(
+        new Request("http://test/api/auth/google/start", {
+          headers: { "x-forwarded-for": ip },
+        }),
+      );
+      expect(res.status).toBe(302);
+    }
+    const blocked = await GET(
+      new Request("http://test/api/auth/google/start", {
+        headers: { "x-forwarded-for": ip },
+      }),
+    );
+    expect(blocked.status).toBe(429);
+    expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await blocked.json()).error.code).toBe("RATE_LIMITED");
   });
 
   it("redirects to /login?error=network when Google env is not configured", async () => {

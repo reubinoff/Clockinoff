@@ -4,7 +4,7 @@ import { pgErrorCode } from "@/server/db/errors";
 import { users } from "@/server/db/schema";
 import { errors } from "@/lib/errors";
 import { validatePassword } from "@/lib/password";
-import { hashPassword, verifyPassword } from "./passwords";
+import { dummyPasswordHash, hashPassword, verifyPassword } from "./passwords";
 import { createSession, type CreatedSession, type SessionUser } from "./session";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -92,13 +92,14 @@ export async function login(input: LoginInput): Promise<AuthResult> {
     .where(sql`lower(${users.email}) = lower(${input.email})`)
     .limit(1);
   const row = rows[0];
-  if (!row) throw errors.unauthorized("Invalid email or password");
-  // Google-only accounts have no password_hash. We still return the same
-  // generic unauthorized error so this path cannot be used to probe which
-  // accounts were created via Google vs. email/password.
-  const hash = row.passwordHash ?? "";
+  // Missing row *and* Google-only (`password_hash` NULL) still run a
+  // full argon2id verify against the module-load dummy hash so timing
+  // cannot distinguish "no account" / "Google-only" / "wrong password"
+  // (#149). The unauthorized body is identical on every failure.
+  const storedHash = row?.passwordHash;
+  const hash = storedHash ?? (await dummyPasswordHash());
   const ok = await verifyPassword(hash, input.password);
-  if (!ok) throw errors.unauthorized("Invalid email or password");
+  if (!row || !storedHash || !ok) throw errors.unauthorized("Invalid email or password");
   const session = await createSession(row.id);
   return {
     user: { id: row.id, email: row.email, timezone: row.timezone },

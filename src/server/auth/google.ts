@@ -98,6 +98,33 @@ export function newStateToken(): string {
   return tokenId(32);
 }
 
+// Google auth codes are opaque, but we refuse anything that cannot be a
+// real code before spending an outbound POST + client_secret (#148).
+const GOOGLE_AUTH_CODE_RE = /^[A-Za-z0-9/_.-]{1,512}$/;
+
+export function isGoogleAuthCode(code: string): boolean {
+  return GOOGLE_AUTH_CODE_RE.test(code);
+}
+
+export function summarizeGoogleTokenError(body: string): {
+  error?: string;
+  error_description?: string;
+} {
+  const out: { error?: string; error_description?: string } = {};
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (!parsed || typeof parsed !== "object") return out;
+    const rec = parsed as Record<string, unknown>;
+    if (typeof rec.error === "string") out.error = rec.error.slice(0, 200);
+    if (typeof rec.error_description === "string") {
+      out.error_description = rec.error_description.slice(0, 200);
+    }
+  } catch {
+    // Never log the raw non-JSON body.
+  }
+  return out;
+}
+
 export function buildAuthorizeUrl(opts: {
   config: GoogleConfig;
   state: string;
@@ -116,6 +143,9 @@ export function buildAuthorizeUrl(opts: {
 }
 
 export async function exchangeCode(code: string, config: GoogleConfig): Promise<GoogleTokenResponse> {
+  if (!isGoogleAuthCode(code)) {
+    throw new GoogleAuthError("network", "Invalid authorization code");
+  }
   const body = new URLSearchParams({
     code,
     client_id: config.clientId,
@@ -136,7 +166,10 @@ export async function exchangeCode(code: string, config: GoogleConfig): Promise<
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    logger.warn("[google] token exchange non-2xx", { status: res.status, body: text });
+    logger.warn("[google] token exchange non-2xx", {
+      status: res.status,
+      ...summarizeGoogleTokenError(text),
+    });
     throw new GoogleAuthError("network", `Google token exchange returned ${res.status}`);
   }
   const json = (await res.json().catch(() => null)) as GoogleTokenResponse | null;

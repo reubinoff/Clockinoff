@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { truncateAll } from "../setup";
 import { makeUser } from "../helpers";
+import { resetExportLimit } from "@/server/services/export-limit";
 
 // Route handlers read the session cookie via next/headers. We swap it out
 // with a lightweight mock so we can drive the routes directly (same pattern
@@ -144,6 +145,7 @@ function getReq(url: string): Request {
 describe("route UUID query filter validation", () => {
   beforeEach(async () => {
     await truncateAll();
+    resetExportLimit();
     const { session } = await makeUser(`uuidq-${Date.now()}@ex.com`);
     cookieValue = session.id;
   });

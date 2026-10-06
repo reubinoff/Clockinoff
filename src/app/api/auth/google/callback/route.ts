@@ -5,12 +5,22 @@ import {
   exchangeCode,
   getGoogleConfig,
   GoogleAuthError,
+  isGoogleAuthCode,
   signInWithGoogle,
   validateIdTokenClaims,
 } from "@/server/auth/google";
+import { consumeOAuthState } from "@/server/auth/oauth-state-store";
+import {
+  googleOAuthRetryAfterSeconds,
+  isGoogleOAuthRateLimited,
+  recordGoogleOAuthAttempt,
+} from "@/server/auth/rate-limit";
 import { getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
+import { jsonError } from "@/server/http";
+import { errors } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { publicOrigin } from "@/lib/base-url";
+import { clientIpFromHeaders } from "@/lib/client-ip";
 import { googlePasswordAccountLoginPath } from "@/lib/google-auth-errors";
 import { OAUTH_STATE_COOKIE, readRequestCookie, sanitiseNext } from "@/lib/oauth-next-path";
 import { parseOAuthState } from "@/lib/oauth-state";
@@ -49,6 +59,17 @@ function redirectToAccount(origin: string, query: string): NextResponse {
 }
 
 export async function GET(req: Request): Promise<Response> {
+  const ip = clientIpFromHeaders(req.headers);
+  if (isGoogleOAuthRateLimited(ip)) {
+    return jsonError(
+      errors.rateLimited(
+        "Too many Google sign-in attempts. Please try again later.",
+        googleOAuthRetryAfterSeconds(ip),
+      ),
+    );
+  }
+  recordGoogleOAuthAttempt(ip);
+
   const url = new URL(req.url);
   // Never trust req.url for building the Location — behind Azure App
   // Service that resolves to the internal container hostname and the
@@ -75,7 +96,12 @@ export async function GET(req: Request): Promise<Response> {
     return redirectToLoginWithError(origin, "network");
   }
 
-  if (!code) {
+  if (!consumeOAuthState(state.s)) {
+    logger.warn("[google] oauth state already used or unknown");
+    return redirectToLoginWithError(origin, "network");
+  }
+
+  if (!code || !isGoogleAuthCode(code)) {
     return redirectToLoginWithError(origin, "network");
   }
 

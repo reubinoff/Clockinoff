@@ -32,4 +32,24 @@ describe("csv", () => {
     const csv = toCsv([["x", "y"]]);
     expect(csv).toBe("x,y\r\n");
   });
+
+  it("neutralizes leading spreadsheet formula characters with a quote", () => {
+    expect(csvEscape("=1+1")).toBe("'=1+1");
+    expect(csvEscape("+cmd")).toBe("'+cmd");
+    expect(csvEscape("-SUM(A1)")).toBe("'-SUM(A1)");
+    expect(csvEscape("@IMPORT")).toBe("'@IMPORT");
+    expect(csvEscape("\tTAB")).toBe("'\tTAB");
+    expect(csvEscape("\rCR")).toBe("\"'\rCR\"");
+  });
+
+  it("neutralizes formula leaders before CSV quoting", () => {
+    expect(csvEscape("=1,2")).toBe("\"'=1,2\"");
+    expect(csvEscape('=says "hi"')).toBe("\"'=says \"\"hi\"\"\"");
+  });
+
+  it("leaves ordinary text and numbers untouched", () => {
+    expect(csvEscape("hello")).toBe("hello");
+    expect(csvEscape("  =not-leading-ws")).toBe("  =not-leading-ws");
+    expect(csvEscape(0)).toBe("0");
+  });
 });

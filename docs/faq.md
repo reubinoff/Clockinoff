@@ -109,6 +109,18 @@ for the full flow.
 The underlying `POST /api/entries` endpoint is the same one the UI
 calls, so scripted imports still work.
 
+## Export limits
+
+**How far back can I export?**
+
+A single CSV or PDF covers at most **366 days** and **10,000** closed
+entries. Monthly and yearly ranges fit. A longer span, or a range with
+more than 10,000 closed entries, returns a validation error asking you
+to narrow the dates. You can run one export at a time, and about ten
+exports per ten minutes; after that the server asks you to wait.
+
+See [Export CSV & PDF]({{ '/export' | relative_url }}).
+
 ## Empty exports
 
 **What if my date range has no entries?**

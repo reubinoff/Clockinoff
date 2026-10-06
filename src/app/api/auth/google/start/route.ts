@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
 import { buildAuthorizeUrl, getGoogleConfig, GoogleAuthError, newStateToken } from "@/server/auth/google";
 import { getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
+import { issueOAuthState } from "@/server/auth/oauth-state-store";
+import {
+  googleOAuthRetryAfterSeconds,
+  isGoogleOAuthRateLimited,
+  recordGoogleOAuthAttempt,
+} from "@/server/auth/rate-limit";
+import { jsonError } from "@/server/http";
+import { errors } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { publicOrigin } from "@/lib/base-url";
+import { clientIpFromHeaders } from "@/lib/client-ip";
 import {
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_MAX_AGE_SECONDS,
@@ -16,6 +25,17 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request): Promise<Response> {
+  const ip = clientIpFromHeaders(req.headers);
+  if (isGoogleOAuthRateLimited(ip)) {
+    return jsonError(
+      errors.rateLimited(
+        "Too many Google sign-in attempts. Please try again later.",
+        googleOAuthRetryAfterSeconds(ip),
+      ),
+    );
+  }
+  recordGoogleOAuthAttempt(ip);
+
   const url = new URL(req.url);
   const origin = publicOrigin(req);
   const intent = parseOAuthIntent(url.searchParams.get("intent"));
@@ -49,6 +69,7 @@ export async function GET(req: Request): Promise<Response> {
   try {
     const config = getGoogleConfig(req);
     state = newStateToken();
+    issueOAuthState(state);
     authorizeUrl = buildAuthorizeUrl({ config, state });
     cookieValue = serialiseOAuthState(
       connectUid

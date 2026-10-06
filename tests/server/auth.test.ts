@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { login, register, updateTimezone } from "@/server/auth/service";
 import { hashPassword, verifyPassword } from "@/server/auth/passwords";
+import * as passwords from "@/server/auth/passwords";
+import { signInWithGoogle } from "@/server/auth/google";
 import {
   createSession,
   deleteSession,
@@ -100,6 +102,54 @@ describe("auth", () => {
   it("rejects login for unknown user", async () => {
     await expect(login({ email: "ghost@example.com", password: PW })).rejects.toMatchObject({
       status: 401,
+    });
+  });
+
+  describe("login timing oracle (#149)", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    async function captureUnauthorized(input: { email: string; password: string }) {
+      const spy = vi.spyOn(passwords, "verifyPassword");
+      const err = await login(input).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiError);
+      const api = err as ApiError;
+      return {
+        calls: spy.mock.calls.length,
+        status: api.status,
+        code: api.code,
+        message: api.message,
+      };
+    }
+
+    it("runs exactly one verify on unknown-email, Google-only, and wrong-password", async () => {
+      await register({ email: "pw@example.com", password: PW });
+      await signInWithGoogle({ sub: "google|timing", email: "google-only@example.com" });
+
+      const unknown = await captureUnauthorized({
+        email: "ghost@example.com",
+        password: PW,
+      });
+      const googleOnly = await captureUnauthorized({
+        email: "google-only@example.com",
+        password: PW,
+      });
+      const wrong = await captureUnauthorized({
+        email: "pw@example.com",
+        password: "definitely-not-the-password",
+      });
+
+      expect(unknown.calls).toBe(1);
+      expect(googleOnly.calls).toBe(1);
+      expect(wrong.calls).toBe(1);
+      expect(unknown).toMatchObject({
+        status: 401,
+        code: "UNAUTHORIZED",
+        message: "Invalid email or password",
+      });
+      expect(googleOnly).toEqual(unknown);
+      expect(wrong).toEqual(unknown);
     });
   });
 

@@ -1,14 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildAuthorizeUrl,
   decodeIdToken,
+  exchangeCode,
   getGoogleConfig,
   GoogleAuthError,
   type GoogleConfig,
   type GoogleIdTokenPayload,
+  isGoogleAuthCode,
   newStateToken,
+  summarizeGoogleTokenError,
   validateIdTokenClaims,
 } from "@/server/auth/google";
+import { logger } from "@/lib/logger";
 
 function b64url(obj: unknown): string {
   return Buffer.from(JSON.stringify(obj), "utf8")
@@ -167,6 +171,71 @@ describe("google token helpers", () => {
         if (prev.redirect) process.env.GOOGLE_REDIRECT_URI = prev.redirect;
         else delete process.env.GOOGLE_REDIRECT_URI;
       }
+    });
+  });
+
+  it("isGoogleAuthCode rejects empty, overlong, and illegal characters", () => {
+    expect(isGoogleAuthCode("4/0AeanS-abc_def")).toBe(true);
+    expect(isGoogleAuthCode("")).toBe(false);
+    expect(isGoogleAuthCode("a".repeat(513))).toBe(false);
+    expect(isGoogleAuthCode("has space")).toBe(false);
+    expect(isGoogleAuthCode("plus+sign")).toBe(false);
+  });
+
+  it("summarizeGoogleTokenError keeps only truncated error fields", () => {
+    const long = "x".repeat(250);
+    const summary = summarizeGoogleTokenError(
+      JSON.stringify({
+        error: "invalid_grant",
+        error_description: long,
+        extra: "should-not-appear",
+      }),
+    );
+    expect(summary).toEqual({
+      error: "invalid_grant",
+      error_description: "x".repeat(200),
+    });
+    expect(summarizeGoogleTokenError("not-json")).toEqual({});
+    expect(summarizeGoogleTokenError("null")).toEqual({});
+    expect(summarizeGoogleTokenError("[]")).toEqual({});
+    expect(summarizeGoogleTokenError(JSON.stringify({ error: 1 }))).toEqual({});
+  });
+
+  describe("exchangeCode", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("does not fetch when the code is illegal", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      await expect(exchangeCode("bad code!!", CFG)).rejects.toBeInstanceOf(GoogleAuthError);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("logs only error / error_description on a non-2xx token response", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: "invalid_grant",
+            error_description: "y".repeat(250),
+            raw_dump: "do-not-log",
+          }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        ),
+      );
+      const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+      await expect(exchangeCode("ok-code", CFG)).rejects.toBeInstanceOf(GoogleAuthError);
+      expect(warn).toHaveBeenCalledWith(
+        "[google] token exchange non-2xx",
+        expect.objectContaining({
+          status: 400,
+          error: "invalid_grant",
+          error_description: "y".repeat(200),
+        }),
+      );
+      const logged = JSON.stringify(warn.mock.calls);
+      expect(logged).not.toContain("do-not-log");
+      expect(logged).not.toContain("y".repeat(201));
     });
   });
 });

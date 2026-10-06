@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  GOOGLE_OAUTH_RATE_LIMIT,
   LOGIN_IP_RATE_LIMIT,
   LOGIN_RATE_LIMIT,
   REGISTER_RATE_LIMIT,
+  googleOAuthMapSize,
+  googleOAuthRetryAfterSeconds,
+  isGoogleOAuthRateLimited,
   isLoginIpRateLimited,
   isLoginRateLimited,
   isRegisterRateLimited,
@@ -10,6 +14,7 @@ import {
   loginIpRetryAfterSeconds,
   loginMapSize,
   loginRetryAfterSeconds,
+  recordGoogleOAuthAttempt,
   recordLoginFailure,
   recordLoginSuccess,
   recordRegisterAttempt,
@@ -196,5 +201,51 @@ describe("auth/rate-limit", () => {
     expect(loginMapSize()).toBe(LOGIN_RATE_LIMIT.maxBuckets);
     expect(loginIpMapSize()).toBeLessThanOrEqual(LOGIN_IP_RATE_LIMIT.maxBuckets);
     expect(elapsed).toBeLessThan(250);
+  });
+
+  // -------- Google OAuth limiter ----------------------------------------
+
+  it("limits Google OAuth after the per-IP threshold", () => {
+    for (let i = 0; i < GOOGLE_OAUTH_RATE_LIMIT.maxAttempts; i += 1) {
+      recordGoogleOAuthAttempt("8.8.8.8");
+    }
+    expect(isGoogleOAuthRateLimited("8.8.8.8")).toBe(true);
+    expect(isGoogleOAuthRateLimited("9.9.9.9")).toBe(false);
+  });
+
+  it("expires the Google OAuth bucket once the window passes", () => {
+    const start = 6_000_000;
+    for (let i = 0; i < GOOGLE_OAUTH_RATE_LIMIT.maxAttempts; i += 1) {
+      recordGoogleOAuthAttempt("8.8.8.8", start);
+    }
+    expect(isGoogleOAuthRateLimited("8.8.8.8", start)).toBe(true);
+    const after = start + GOOGLE_OAUTH_RATE_LIMIT.windowMs + 1;
+    expect(isGoogleOAuthRateLimited("8.8.8.8", after)).toBe(false);
+    recordGoogleOAuthAttempt("8.8.8.8", after);
+    expect(isGoogleOAuthRateLimited("8.8.8.8", after)).toBe(false);
+  });
+
+  it("sweeps a bounded prefix of expired Google OAuth keys", () => {
+    const start = 7_000_000;
+    for (let i = 0; i < 80; i += 1) {
+      recordGoogleOAuthAttempt(`ip-${i}`, start);
+    }
+    expect(googleOAuthMapSize()).toBe(80);
+    const after = start + GOOGLE_OAUTH_RATE_LIMIT.windowMs + 1;
+    recordGoogleOAuthAttempt("fresh-after-prune", after);
+    expect(googleOAuthMapSize()).toBeLessThan(80);
+    expect(googleOAuthMapSize()).toBeGreaterThanOrEqual(80 - GOOGLE_OAUTH_RATE_LIMIT.pruneScan);
+    expect(isGoogleOAuthRateLimited("fresh-after-prune", after)).toBe(false);
+  });
+
+  it("reports retry-after for the Google OAuth bucket", () => {
+    expect(googleOAuthRetryAfterSeconds("fresh-google-ip")).toBe(0);
+    const start = 8_000_000;
+    for (let i = 0; i < GOOGLE_OAUTH_RATE_LIMIT.maxAttempts; i += 1) {
+      recordGoogleOAuthAttempt("8.8.4.4", start);
+    }
+    const retry = googleOAuthRetryAfterSeconds("8.8.4.4", start);
+    expect(retry).toBeGreaterThan(0);
+    expect(retry).toBeLessThanOrEqual(Math.ceil(GOOGLE_OAUTH_RATE_LIMIT.windowMs / 1000));
   });
 });

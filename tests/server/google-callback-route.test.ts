@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/auth/google/callback/route";
 import { publicOrigin } from "@/lib/base-url";
 import { serialiseOAuthState } from "@/lib/oauth-state";
+import { issueOAuthState, resetOAuthStateStore } from "@/server/auth/oauth-state-store";
+import { resetGoogleOAuthRateLimit } from "@/server/auth/rate-limit";
 import { register } from "@/server/auth/service";
 import { getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
@@ -42,6 +44,7 @@ function stateCookie(
     extras?.intent === "connect"
       ? { s: state, n: next, i: "connect" as const, uid: extras.uid ?? "missing-uid" }
       : { s: state, n: next };
+  issueOAuthState(state);
   return `timely_oauth_state=${encodeURIComponent(serialiseOAuthState(payload))}`;
 }
 
@@ -131,6 +134,8 @@ describe("GET /api/auth/google/callback", () => {
   beforeEach(async () => {
     await truncateAll();
     configure();
+    resetGoogleOAuthRateLimit();
+    resetOAuthStateStore();
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -532,6 +537,79 @@ describe("GET /api/auth/google/callback", () => {
       .from(users)
       .where(eq(users.id, user.id));
     expect(rows[0].googleSub).toBeNull();
+  });
+
+  it("rejects a replay of the same state with no second token exchange", async () => {
+    mockGoogleFetch({
+      idToken: makeIdToken({ sub: "google|replay-1", email: "replay@example.com" }),
+    });
+    const cookie = stateCookie("s-replay");
+    const first = await GET(
+      callbackRequest({ code: "code-1", state: "s-replay", cookie }),
+    );
+    expect(first.status).toBe(302);
+    expect(new URL(first.headers.get("location") ?? "").pathname).toBe("/app");
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1);
+
+    const second = await GET(
+      callbackRequest({ code: "code-2", state: "s-replay", cookie }),
+    );
+    expect(second.status).toBe(302);
+    expect(new URL(second.headers.get("location") ?? "").searchParams.get("error")).toBe(
+      "network",
+    );
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an overlong or illegal code before calling Google", async () => {
+    mockGoogleFetch({
+      idToken: makeIdToken({ sub: "google|badcode", email: "badcode@example.com" }),
+    });
+    const long = await GET(
+      callbackRequest({
+        code: "a".repeat(513),
+        state: "s1",
+        cookie: stateCookie("s1"),
+      }),
+    );
+    expect(new URL(long.headers.get("location") ?? "").searchParams.get("error")).toBe(
+      "network",
+    );
+    expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled();
+
+    vi.mocked(globalThis.fetch).mockClear();
+    const illegal = await GET(
+      callbackRequest({
+        code: "not a valid code!!",
+        state: "s2",
+        cookie: stateCookie("s2"),
+      }),
+    );
+    expect(new URL(illegal.headers.get("location") ?? "").searchParams.get("error")).toBe(
+      "network",
+    );
+    expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 after too many callback hits from the same IP", async () => {
+    const { GOOGLE_OAUTH_RATE_LIMIT } = await import("@/server/auth/rate-limit");
+    const ip = "198.51.100.77";
+    for (let i = 0; i < GOOGLE_OAUTH_RATE_LIMIT.maxAttempts; i += 1) {
+      const res = await GET(
+        new Request("http://test/api/auth/google/callback?error=access_denied", {
+          headers: { "x-forwarded-for": ip },
+        }),
+      );
+      expect(res.status).toBe(302);
+    }
+    const blocked = await GET(
+      new Request("http://test/api/auth/google/callback?error=access_denied", {
+        headers: { "x-forwarded-for": ip },
+      }),
+    );
+    expect(blocked.status).toBe(429);
+    expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await blocked.json()).error.code).toBe("RATE_LIMITED");
   });
 
   it("Settings connect: tampered state signature is rejected and does not attach", async () => {

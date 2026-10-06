@@ -2,11 +2,18 @@ import { listEntries, type EntryView, type ListEntriesFilters } from "./entries"
 import { toCsv } from "@/lib/csv";
 import {
   DEFAULT_TZ,
+  endOfDayExclusiveInZone,
   formatDate,
   formatDurationHours,
   formatTime,
+  zonedIsoToUtc,
 } from "@/lib/tz";
 import { errors } from "@/lib/errors";
+
+export const EXPORT_MAX_SPAN_DAYS = 366;
+export const EXPORT_MAX_ROWS = 10_000;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const EXPORT_PAGE_SIZE = 200;
 
 // `billed` is appended at the end so existing CSV consumers keep their column
 // indices; the older columns (`billable`, `rate`, `amount`) keep their names
@@ -51,10 +58,28 @@ export interface ExportRow {
   billed: string;
 }
 
+export function parseExportBound(v: string | null, tz: string, endOfDay = false): Date | undefined {
+  if (!v) return undefined;
+  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      return endOfDay ? endOfDayExclusiveInZone(v, tz) : zonedIsoToUtc(v, tz);
+    }
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? undefined : d;
+  } catch {
+    return undefined;
+  }
+}
+
+export function exportDownloadFilename(from: Date, to: Date, ext: "csv" | "pdf"): string {
+  return `timely-${from.toISOString().slice(0, 10)}-${to.toISOString().slice(0, 10)}.${ext}`;
+}
+
 async function fetchAllClosed(userId: string, filters: ExportInput): Promise<EntryView[]> {
   const collected: EntryView[] = [];
   let cursor: string | null = null;
-  for (let i = 0; i < 200; i++) {
+  const maxPages = Math.ceil(EXPORT_MAX_ROWS / EXPORT_PAGE_SIZE) + 1;
+  for (let i = 0; i < maxPages; i++) {
     const listFilters: ListEntriesFilters = {
       from: filters.from,
       to: filters.to,
@@ -63,11 +88,16 @@ async function fetchAllClosed(userId: string, filters: ExportInput): Promise<Ent
       tag_id: filters.tag_id ?? undefined,
       billable: filters.billable,
       include_running: false,
-      limit: 200,
+      limit: EXPORT_PAGE_SIZE,
       cursor,
     };
     const page = await listEntries(userId, listFilters);
     collected.push(...page.entries);
+    if (collected.length > EXPORT_MAX_ROWS) {
+      throw errors.validation(
+        `Export is limited to ${EXPORT_MAX_ROWS} entries. Narrow the date range and try again.`,
+      );
+    }
     if (!page.next_cursor) break;
     cursor = page.next_cursor;
   }
@@ -108,6 +138,11 @@ export function validateExportRange(input: {
   }
   if (input.from.getTime() > input.to.getTime()) {
     throw errors.validation("from must be <= to");
+  }
+  if (input.to.getTime() - input.from.getTime() > EXPORT_MAX_SPAN_DAYS * MS_PER_DAY) {
+    throw errors.validation(
+      `Export range cannot exceed ${EXPORT_MAX_SPAN_DAYS} days. Narrow the dates and try again.`,
+    );
   }
   return { from: input.from, to: input.to };
 }

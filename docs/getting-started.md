@@ -88,7 +88,11 @@ What happens behind the scenes depends on your Google email:
   cancelled."* No account change, no session.
 - **Network / other failure.** You come back to `/login` with a red
   message under **Continue with Google**: *"Couldn't connect to
-  Google. Try again."*
+  Google. Try again."* A Google start or callback that is retried
+  too many times from the same network (about 20 in 10 minutes) is
+  also rejected with `429` and a `Retry-After` header — wait and
+  click **Continue with Google** again. Repeating a finished Google
+  callback does not retry the sign-in; start the flow again.
 - **Google isn't configured on this instance.** A neutral info banner
   at the top of the sign-in card (above Email) says *"Google sign-in
   isn't available right now. Sign in with your email and password, or
