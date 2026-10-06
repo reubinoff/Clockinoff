@@ -260,8 +260,10 @@
   .label {
     @apply block text-label text-muted mb-1;
   }
+  /* Display label — solid canvas-2, ink text. Not a control. */
   .tag {
-    @apply inline-flex items-center rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs;
+    @apply inline-flex items-center rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs text-ink whitespace-nowrap;
+    cursor: default;
   }
   .nav-link {
     @apply inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-body-sm text-muted
@@ -297,6 +299,15 @@
     @apply bg-accent-soft text-ink;
     /* Same reason as .nav-link-active: mix in place instead of `/40`. */
     border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  }
+  /* #175 display chips (project name in a row). Same quiet pill as
+     `.chip`, but not a control: solid surface, ink label, default
+     cursor, no hover wash that reads as `.chip-on`. Filter chips
+     (Unbilled, range presets, Billable) stay on `.chip`. */
+  .chip-display {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-border bg-surface
+           px-3 py-1 text-xs text-ink min-w-0 max-w-full whitespace-nowrap;
+    cursor: default;
   }
   .tab-link {
     @apply flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 py-1.5
@@ -555,11 +566,17 @@
     border-radius: 9999px;
     border: 1px solid var(--color-border);
     background-color: var(--color-canvas-2);
-    color: var(--color-muted);
+    /* Light muted on canvas-2 is ~4.1:1. ink-2 clears AA. Dark muted
+       on canvas-2 is ~7.2:1, so the locked dark map can stay. */
+    color: var(--color-ink-2);
     font-size: 0.6875rem;
     line-height: 1;
     white-space: nowrap;
     flex-shrink: 0;
+    cursor: default;
+  }
+  html[data-theme="dark"] .entry-billed-pill {
+    color: var(--color-muted);
   }
   .entry-meta-chip {
     height: 20px;
@@ -728,6 +745,22 @@
       animation: none;
     }
   }
+}
+
+/* #175 disabled row ▶. Unlayered so this beats `.btn` / `.btn-ghost`
+   hover utilities: a disabled play control keeps cursor-not-allowed
+   and reduced opacity, and does not pick up a hover wash or lift. */
+.entry-resume-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.entry-resume-btn:disabled:hover,
+.entry-resume-btn:disabled:active {
+  background-color: transparent;
+  color: var(--color-accent);
+  border-color: transparent;
+  transform: none;
+  box-shadow: none;
 }
 
 /* In-app user docs (`/docs/*`). Minimal prose styling so the markdown

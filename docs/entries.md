@@ -103,7 +103,9 @@ On a phone each entry renders as a card scanned top-to-bottom:
 
 - **Top row** — the **project chip** on the left (small coloured dot
   plus the project name so you can tell projects apart at a glance;
-  a long name truncates inside the chip), and a right-aligned
+  a long name truncates inside the chip). The chip is a label, not a
+  button: hovering it does not highlight it, and it does not filter
+  the list. Beside it, a right-aligned
   cluster with the **duration** (hours, e.g. `1.25h`), an **edit**
   control (pencil icon) that opens the edit sheet, and a **more**
   control (**⋯**) with Mark as billed / Mark as unbilled / Delete.
@@ -118,8 +120,10 @@ On a phone each entry renders as a card scanned top-to-bottom:
 - **Bottom row** — the **time range** (start–end in your timezone;
   end is `…` for a running entry, only visible if you filter it in),
   any tag chips, a muted `$` if the entry is billable (the billable
-  flag — not an amount), and the muted **Billed** pill if the entry
-  has been invoiced — `$` sits immediately before **Billed**. The
+  flag — not an amount), and the **Billed** pill if the entry
+  has been invoiced — `$` sits immediately before **Billed**. Tag
+  chips and the Billed pill are labels too (solid fill, readable
+  ink, no hover highlight). The
   **play** control (▶, a 48 × 48 px tap target, see
   [Resume an entry](#resume-an-entry) below) sits on the right, well
   clear of Edit so it reads as the primary row action.
@@ -130,13 +134,13 @@ showing column labels, a row per day-group heading, and one row per
 entry underneath. The columns, left to right, are **Project** (chip
 with the coloured dot), **Description** (truncates to one line; hover
 to see the full text), **Tags / Billed / $** (meta column — tag pills
-plus a muted `$` for billable entries and a muted **Billed** pill when
+plus a muted `$` for billable entries and a **Billed** pill when
 the row has been invoiced), **Time** (start–end in your timezone),
 **Duration** (right-aligned tabular hours — `1.50h`), and the row
 **actions** (Play, Edit, **⋯**) on the far right.
 
 Between 768 px and 1023 px (`md`) the meta column is dropped to make
-room for description, and the muted **Billed** pill moves inline right
+room for description, and the **Billed** pill moves inline right
 after the description so the state stays legible without horizontal
 scroll. Tags and the **Billed** pill stay on one line so every entry
 row stays **44 px** tall — they never wrap the row. The actions column
@@ -238,8 +242,11 @@ in the timer dock with `start_at = now`. A short **Timer resumed**
 toast confirms the hand-off.
 
 Because Clockinoff only allows **one running timer at a time**, the
-Play button is dimmed while a timer is already running. The moment
-you **Stop** or **Discard** that timer from the dock, every Play
+Play button is dimmed (half opacity) while a timer is already
+running. The pointer becomes a not-allowed cursor, and hovering the
+dimmed ▶ does not light it up or lift it. Its tooltip stays
+**Stop the current timer first**. The moment you **Stop** or
+**Discard** that timer from the dock, every Play
 button on the list re-enables — the dock pings the list over an
 in-memory bus, no page reload required. If you tap Play anyway (for
 example right as another tab started one), the server rejects the

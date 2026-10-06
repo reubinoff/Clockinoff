@@ -1574,7 +1574,7 @@ function ProjectChip({
   const color = projectColor(projectId ?? name);
   return (
     <span
-      className={"chip inline-flex min-w-0 items-center gap-1.5 truncate " + className}
+      className={"chip-display truncate " + className}
       data-entry-project-chip="true"
       title={name}
     >
@@ -1627,12 +1627,13 @@ function ResumeButton({
     <button
       type="button"
       className={
-        "btn btn-ghost text-accent hover:text-accent hover:bg-accent-soft " +
-        sizeClass +
-        " px-0"
+        "entry-resume-btn btn btn-ghost text-accent px-0 " +
+        "enabled:hover:text-accent enabled:hover:bg-accent-soft " +
+        sizeClass
       }
       onClick={onResume}
       disabled={disabled}
+      aria-disabled={disabled || undefined}
       aria-label="Start timer from this entry"
       aria-busy={pending || undefined}
       title={title}
