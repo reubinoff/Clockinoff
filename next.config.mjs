@@ -112,6 +112,9 @@ const nextConfig = {
   // cap and returns 413 — the proxy setting only limits the clone.
   experimental: {
     proxyClientMaxBodySize: "64kb",
+    // TypeScript 7 ships a native `tsc` and no compiler API. Next's default
+    // typecheck loads `typescript` programmatically and fails closed on 7.x.
+    useTypeScriptCli: true,
   },
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
