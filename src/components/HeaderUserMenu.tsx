@@ -129,10 +129,9 @@ export default function HeaderUserMenu({
               </a>
             </div>
           ) : null}
-          {/* V2-10 Dark #10: Appearance lives in the account overflow,
-              above Log out, alongside the desktop pref. Same locked
-              `timely.appearance` key backs both. #140 owns the
-              desktop-vs-mobile select mismatch — do not restyle here. */}
+          {/* Same AppearanceSelect as the desktop cluster. Both commit
+              `timely.appearance` and subscribe so the closed menu does
+              not keep a stale Dark/Light value (#140). */}
           <div role="none" className="border-t border-border mt-1 pt-1">
             <AppearanceSelect variant="menu" />
           </div>

@@ -122,9 +122,12 @@ The options are:
 - **Dark** — always the dark Quiet Pulse palette (deep violet accent).
 
 The pref is stored in your browser (`localStorage`) and applied on both
-the app and the sign-in / register screens. Because it is browser-local
-there is no server profile field for it — each browser you sign in from
-keeps its own choice.
+the app and the sign-in / register screens. The desktop control and the
+one in the account menu share that setting: changing either one updates
+the other, and the timer dock (including the `00:00:00` digits) picks up
+the new colours immediately. Because it is browser-local there is no
+server profile field for it — each browser you sign in from keeps its
+own choice.
 
 ---
 

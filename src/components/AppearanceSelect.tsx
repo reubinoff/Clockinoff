@@ -2,12 +2,14 @@
 
 import { useEffect, useId, useState } from "react";
 import {
+  APPEARANCE_STORAGE_KEY,
   APPEARANCES,
   type Appearance,
   applyTheme,
+  commitAppearance,
   readAppearance,
   resolveTheme,
-  writeAppearance,
+  subscribeAppearance,
 } from "@/lib/appearance";
 
 /**
@@ -31,10 +33,32 @@ export default function AppearanceSelect({
 
   useEffect(() => {
     // Hydrate from the stored pref on mount so SSR markup (which cannot
-    // read localStorage) still matches. Prior to hydration we render the
-    // default so no client-only branch appears in the server tree.
-    setValue(readAppearance(window.localStorage));
+    // read localStorage) still matches. Re-apply the theme here too: React
+    // hydration can drop the boot-script `data-theme` before this effect,
+    // which left the select on Dark while the timer stayed on the light
+    // tokens until a full reload (#140).
+    const stored = readAppearance(window.localStorage);
+    setValue(stored);
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    applyTheme(document.documentElement, resolveTheme(stored, prefersDark));
     setReady(true);
+
+    const off = subscribeAppearance((next) => {
+      setValue(next);
+    });
+    const onStorage = (event: StorageEvent): void => {
+      // `storage` fires in other tabs only. null key is a clear().
+      if (event.key !== null && event.key !== APPEARANCE_STORAGE_KEY) return;
+      const next = readAppearance(window.localStorage);
+      setValue(next);
+      const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      applyTheme(document.documentElement, resolveTheme(next, dark));
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      off();
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   useEffect(() => {
@@ -52,9 +76,13 @@ export default function AppearanceSelect({
 
   function onSelect(next: Appearance): void {
     setValue(next);
-    writeAppearance(window.localStorage, next);
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    applyTheme(document.documentElement, resolveTheme(next, prefersDark));
+    commitAppearance(
+      window.localStorage,
+      document.documentElement,
+      next,
+      prefersDark,
+    );
   }
 
   const label = (

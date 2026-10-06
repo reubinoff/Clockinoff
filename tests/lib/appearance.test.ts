@@ -1,13 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   APPEARANCES,
   APPEARANCE_STORAGE_KEY,
   DEFAULT_APPEARANCE,
+  _resetAppearanceListenersForTests,
   appearanceBootScript,
   applyTheme,
+  commitAppearance,
+  emitAppearance,
   isAppearance,
   readAppearance,
   resolveTheme,
+  subscribeAppearance,
   writeAppearance,
 } from "@/lib/appearance";
 
@@ -133,6 +137,78 @@ describe("resolveTheme", () => {
   });
 });
 
+describe("appearance subscribers", () => {
+  beforeEach(() => {
+    _resetAppearanceListenersForTests();
+  });
+
+  it("notifies every subscriber and ignores a throwing one", () => {
+    const seen: string[] = [];
+    subscribeAppearance(() => {
+      throw new Error("boom");
+    });
+    subscribeAppearance((value) => {
+      seen.push(value);
+    });
+    emitAppearance("dark");
+    expect(seen).toEqual(["dark"]);
+  });
+
+  it("stops notifying after unsubscribe", () => {
+    let count = 0;
+    const off = subscribeAppearance(() => {
+      count += 1;
+    });
+    emitAppearance("light");
+    off();
+    emitAppearance("dark");
+    expect(count).toBe(1);
+  });
+});
+
+describe("commitAppearance", () => {
+  beforeEach(() => {
+    _resetAppearanceListenersForTests();
+  });
+
+  it("writes the key, flips the theme, and fans out to other selects", () => {
+    const s = makeStorage();
+    const attrs: Record<string, string> = {};
+    const style = { colorScheme: "" };
+    const root = {
+      getAttribute: (k: string): string | null => attrs[k] ?? null,
+      setAttribute: (k: string, v: string): void => {
+        attrs[k] = v;
+      },
+      style,
+    };
+    const seen: string[] = [];
+    subscribeAppearance((value) => seen.push(value));
+    commitAppearance(s, root, "dark", false);
+    expect(s.store.get(APPEARANCE_STORAGE_KEY)).toBe("dark");
+    expect(attrs["data-theme"]).toBe("dark");
+    expect(style.colorScheme).toBe("dark");
+    expect(seen).toEqual(["dark"]);
+  });
+
+  it("resolves system against the OS preference", () => {
+    const s = makeStorage({ [APPEARANCE_STORAGE_KEY]: "dark" });
+    const attrs: Record<string, string> = {};
+    const root = {
+      getAttribute: (k: string): string | null => attrs[k] ?? null,
+      setAttribute: (k: string, v: string): void => {
+        attrs[k] = v;
+      },
+      style: { colorScheme: "" },
+    };
+    commitAppearance(s, root, "system", true);
+    expect(s.store.has(APPEARANCE_STORAGE_KEY)).toBe(false);
+    expect(attrs["data-theme"]).toBe("dark");
+    commitAppearance(s, root, "system", false);
+    expect(attrs["data-theme"]).toBe("light");
+  });
+});
+
 describe("applyTheme", () => {
   it("no-ops when root is missing", () => {
     expect(() => applyTheme(null, "dark")).not.toThrow();
@@ -153,6 +229,18 @@ describe("applyTheme", () => {
     applyTheme(root, "light");
     expect(attrs["data-theme"]).toBe("light");
     expect(style.colorScheme).toBe("light");
+  });
+  it("does not rewrite data-theme when the signal is already set", () => {
+    let writes = 0;
+    const root = {
+      getAttribute: (): string => "dark",
+      setAttribute: (): void => {
+        writes += 1;
+      },
+      style: { colorScheme: "dark" },
+    };
+    applyTheme(root, "dark");
+    expect(writes).toBe(0);
   });
 });
 

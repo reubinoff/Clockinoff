@@ -3,14 +3,14 @@
   <style>
     .qp-pulse-ring { animation: qp-pulse-ring 3s ease-in-out infinite; }
     @keyframes qp-pulse-ring {
-      0%, 100% { opacity: 0.35; }
-      50% { opacity: 0.55; }
+      0%, 100% { opacity: 0.72; }
+      50% { opacity: 1; }
     }
     @media (prefers-reduced-motion: reduce) {
       .qp-pulse-ring { animation: none; }
     }
   </style>
-  <circle cx="48" cy="48" r="36" fill="none" stroke="#6d28d9" stroke-opacity="0.18" stroke-width="2" class="qp-pulse-ring"/>
+  <circle cx="48" cy="48" r="36" fill="none" stroke="#c4b5fd" stroke-opacity="0.95" stroke-width="2.5" class="qp-pulse-ring"/>
   <ellipse cx="48" cy="50" rx="22" ry="26" fill="#6d28d9"/>
   <ellipse cx="40" cy="42" rx="8" ry="10" fill="#ede9fe" fill-opacity="0.35"/>
   <circle cx="42" cy="48" r="2.2" fill="#faf5ff"/>

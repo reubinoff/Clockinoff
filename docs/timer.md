@@ -27,7 +27,9 @@ start/end times — see [Add a manual entry](#add-a-manual-entry) below.
 
 ## Anatomy of the timer dock
 
-The timer dock is always visible while you're signed in:
+The timer dock is always visible while you're signed in. Its colours
+follow the **Appearance** setting immediately — you do not need to
+reload for the digits to match light or dark.
 
 - **Desktop** — it sits as a full-width band under the thin site header
   and sticks with that chrome as you scroll.

@@ -901,3 +901,21 @@
     color: var(--color-ink);
   }
 }
+
+/* #140 timer chrome. Unlayered on purpose: utilities such as `text-ink`
+   lose to this attribute selector, so the digits follow `data-theme` in
+   the same turn as the Appearance commit. A utility color that only
+   resolves on the next document load left 00:00:00 on the previous
+   palette. Literals mirror the Quiet Pulse map in `@layer base`. */
+html[data-theme="light"] [data-timer-dock-root] .timer-digits {
+  color: #0f172a;
+}
+html[data-theme="dark"] [data-timer-dock-root] .timer-digits {
+  color: #f4f4f5;
+}
+html[data-theme="light"] [data-timer-dock-root] .timer-digits.timer-running-pulse {
+  color: #6d28d9;
+}
+html[data-theme="dark"] [data-timer-dock-root] .timer-digits.timer-running-pulse {
+  color: #f4f4f5;
+}

@@ -60,6 +60,11 @@ export function Pulse({ variant, alt, className, style }: PulseProps): JSX.Eleme
       draggable={false}
       className={className}
       style={style}
+      // React 19 preloads every SSR <img> (`rel=preload`). pulse-404 is
+      // only painted on the not-found page; the preload still lands on
+      // other responses and Chrome warns that it was unused (#141).
+      // `fetchPriority="low"` is the opt-out in the React preload check.
+      fetchPriority={variant === "not-found" ? "low" : undefined}
     />
   );
 }

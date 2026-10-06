@@ -74,6 +74,7 @@ export function resolveTheme(
 }
 
 interface ThemeTarget {
+  getAttribute?(name: string): string | null;
   setAttribute(name: string, value: string): void;
   style: { colorScheme: string };
 }
@@ -85,8 +86,59 @@ interface ThemeTarget {
  */
 export function applyTheme(root: ThemeTarget | null | undefined, theme: Theme): void {
   if (!root) return;
-  root.setAttribute("data-theme", theme);
-  root.style.colorScheme = theme;
+  // Skip the write when the signal is already correct. A same-value
+  // setAttribute still notifies observers and would loop a theme watcher.
+  if (root.getAttribute?.("data-theme") !== theme) {
+    root.setAttribute("data-theme", theme);
+  }
+  if (root.style.colorScheme !== theme) {
+    root.style.colorScheme = theme;
+  }
+}
+
+type AppearanceListener = (value: Appearance) => void;
+const appearanceListeners = new Set<AppearanceListener>();
+
+/**
+ * Same-tab fan-out for the locked pref. `storage` events do not fire in the
+ * document that wrote the key, so the desktop and menu selects would
+ * otherwise keep independent React state (#140).
+ */
+export function subscribeAppearance(listener: AppearanceListener): () => void {
+  appearanceListeners.add(listener);
+  return () => {
+    appearanceListeners.delete(listener);
+  };
+}
+
+export function emitAppearance(value: Appearance): void {
+  for (const listener of appearanceListeners) {
+    try {
+      listener(value);
+    } catch {
+      // One broken subscriber must not block the other select.
+    }
+  }
+}
+
+/**
+ * Write the locked key, flip `data-theme`, and tell every mounted select.
+ * Callers pass the OS preference so System resolves the same way as the
+ * pre-paint boot script.
+ */
+export function commitAppearance(
+  storage: StorageLike | null | undefined,
+  root: ThemeTarget | null | undefined,
+  value: Appearance,
+  prefersDark: boolean,
+): void {
+  writeAppearance(storage, value);
+  applyTheme(root, resolveTheme(value, prefersDark));
+  emitAppearance(value);
+}
+
+export function _resetAppearanceListenersForTests(): void {
+  appearanceListeners.clear();
 }
 
 /**

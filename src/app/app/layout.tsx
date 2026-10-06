@@ -44,16 +44,20 @@ export default async function AppLayout({
               <Mark size={24} />
               <span className="text-sm">Clockinoff</span>
             </Link>
-            <div className="hidden min-w-0 md:block">
+            {/* Nav stays shrink-0. A shrunk nowrap nav paints outside its
+                flex item and widens the page (the #141 768 scroll). The
+                account side shrinks instead; below xl it is only the
+                compact initial, so the row fits the tablet width. */}
+            <div className="hidden shrink-0 md:block">
               <AppNav />
             </div>
-            <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2 text-sm">
+            <div className="ml-auto flex min-w-0 shrink items-center gap-2 text-sm">
               {/* xl+ account cluster: email · Account · Docs · Appearance ·
                   Log out on one baseline. At 768 the compact menu below
                   replaces this so the header cannot overflow (#141). */}
-              <div className="hidden xl:flex items-center gap-3">
+              <div className="hidden min-w-0 xl:flex items-center gap-3">
                 <span
-                  className="text-muted max-w-[180px] truncate"
+                  className="text-muted min-w-0 max-w-[180px] truncate"
                   title={user.email}
                 >
                   {user.email}
