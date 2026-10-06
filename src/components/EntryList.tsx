@@ -28,6 +28,7 @@ import {
   IconPlay,
   IconX,
 } from "@/components/icons";
+import DeleteEntryDialog from "@/components/DeleteEntryDialog";
 import EditEntrySheet, { type EditableEntry } from "@/components/EditEntrySheet";
 import { Pulse } from "@/components/mascot/Pulse";
 
@@ -97,6 +98,7 @@ export default function EntryList({
   const [filterUnbilled, setFilterUnbilled] = useState(false);
   const [filterQ, setFilterQ] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Entry | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   // #54 Shaul lock: track every row currently in flight (Save / Delete /
   // Mark billed single-row) so the row can carry the Quiet Pulse dim wash.
@@ -442,9 +444,14 @@ export default function EntryList({
     }
   }
 
-  async function remove(id: string): Promise<void> {
+  function requestDelete(id: string): void {
     setMenuOpenId(null);
-    if (!confirm("Delete this entry?")) return;
+    const entry = entries.find((e) => e.id === id);
+    if (!entry || entry.running) return;
+    setPendingDelete(entry);
+  }
+
+  async function remove(id: string): Promise<void> {
     // #54 Shaul lock: optimistic remove. On auth failure we restore the
     // row; on other failures we also restore so the user doesn't see a
     // ghost delete that never happened.
@@ -949,7 +956,7 @@ export default function EntryList({
                                               onMarkUnbilled={() =>
                                                 void patchSingleBilled(e.id, false)
                                               }
-                                              onDelete={() => void remove(e.id)}
+                                              onDelete={() => requestDelete(e.id)}
                                               size="touch"
                                             />
                                           </>
@@ -1052,12 +1059,31 @@ export default function EntryList({
                   onOpenMenu={(id) => setMenuOpenId(id)}
                   onMarkBilled={(id) => void patchSingleBilled(id, true)}
                   onMarkUnbilled={(id) => void patchSingleBilled(id, false)}
-                  onDelete={(id) => void remove(id)}
+                  onDelete={(id) => requestDelete(id)}
                 />
               </section>
             );
           })}
         </div>
+      )}
+
+      {pendingDelete && (
+        <DeleteEntryDialog
+          entry={{
+            projectName: pendingDelete.project_name,
+            description: pendingDelete.description,
+            startAt: pendingDelete.start_at,
+            endAt: pendingDelete.end_at,
+            durationSeconds: pendingDelete.duration_seconds,
+          }}
+          timezone={timezone}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => {
+            const id = pendingDelete.id;
+            setPendingDelete(null);
+            void remove(id);
+          }}
+        />
       )}
 
       {editing && (

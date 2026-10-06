@@ -16,8 +16,25 @@ import {
   validatePassword,
 } from "@/lib/password";
 import { googleAuthErrorMessage } from "@/lib/google-auth-errors";
+import { REGISTER_FAILURE_COPY } from "@/lib/register-copy";
 
-const GENERIC_REGISTER_ERROR = "Unable to complete sign-up. Please try again.";
+function RegisterFailureMessage(): JSX.Element {
+  const linkLabel = "Sign in";
+  const idx = REGISTER_FAILURE_COPY.indexOf(linkLabel);
+  if (idx < 0) return <>{REGISTER_FAILURE_COPY}</>;
+  return (
+    <>
+      {REGISTER_FAILURE_COPY.slice(0, idx)}
+      <Link
+        href="/login"
+        className="font-medium underline underline-offset-2"
+      >
+        {linkLabel}
+      </Link>
+      {REGISTER_FAILURE_COPY.slice(idx + linkLabel.length)}
+    </>
+  );
+}
 
 export default function RegisterPage(): JSX.Element {
   return (
@@ -64,18 +81,16 @@ function RegisterForm(): JSX.Element {
         body: JSON.stringify({ email, password, timezone }),
       });
       if (!res.ok) {
-        // Deliberately generic — never surface "email already registered"
-        // or any other server hint that would enumerate accounts. The
-        // client already validated the field shape above, so any 4xx we
-        // hit here is either the duplicate-email path or something the
-        // user cannot act on individually.
-        setError(GENERIC_REGISTER_ERROR);
+        // Same string for a duplicate email and any other failure. A
+        // Sign-in link is part of that string — it does not mean we
+        // confirmed the address is registered or which sign-in it uses.
+        setError(REGISTER_FAILURE_COPY);
         return;
       }
       router.push("/app?welcome=1");
       router.refresh();
     } catch {
-      setError(GENERIC_REGISTER_ERROR);
+      setError(REGISTER_FAILURE_COPY);
     } finally {
       setPending(false);
     }
@@ -154,7 +169,13 @@ function RegisterForm(): JSX.Element {
             className="flex items-start gap-2 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger"
           >
             <IconAlert size={16} className="mt-0.5 shrink-0" />
-            <span>{error}</span>
+            <span>
+              {error === REGISTER_FAILURE_COPY ? (
+                <RegisterFailureMessage />
+              ) : (
+                error
+              )}
+            </span>
           </p>
         ) : null}
       </form>

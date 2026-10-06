@@ -119,15 +119,15 @@ zero entries, and disappears as soon as you dismiss it or log your
 first entry. Later visits to `/app` (without `?welcome=1`) never show
 it again, so it stays a one-time nudge.
 
-Register only returns a single generic error string — *"Unable to
-complete sign-up. Please try again."* — for any failure past the field
-validation, including when the email is already in use. This is on
-purpose: Clockinoff never tells a stranger whether a given email is
-registered. If you know the account exists, use the
-[sign-in flow](#sign-in-later) instead; if you see the generic error
-and you *don't* know whether you have an account, try signing in — the
-sign-in page's failure message is equally generic but a valid password
-just works.
+If **Create account** fails after the fields look valid, the form
+stays on `/register` and shows *"Couldn't complete sign-up. Sign in,
+or try again."* **Sign in** in that message is a link to `/login`.
+The wording is the same when the email is already a password account,
+already a Google-only account, or the sign-up failed for another
+reason — Clockinoff does not say which, and it does not say the
+address is registered. Use [Sign in](#sign-in-later) if you think
+you already track time here. The sign-in page's failure message is
+equally generic, but a valid password just works.
 
 Clockinoff also caps the number of registration attempts from the same
 network within a short window. If you exceed the budget — regardless
