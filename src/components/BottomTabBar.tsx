@@ -10,6 +10,7 @@ import {
   IconExport,
   type IconProps,
 } from "@/components/icons";
+import { useRunningTimer } from "@/components/RunningTimerProvider";
 
 type TabItem = {
   href: string;
@@ -55,6 +56,8 @@ const TABS: TabItem[] = [
 
 export default function BottomTabBar(): JSX.Element {
   const pathname = usePathname() ?? "/app";
+  const running = useRunningTimer();
+  const showRunning = Boolean(running?.config && running.running);
   return (
     <nav
       aria-label="Primary"
@@ -63,18 +66,36 @@ export default function BottomTabBar(): JSX.Element {
       <ul className="flex items-stretch justify-around">
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match(pathname);
+          const timerRunning = label === "Timer" && showRunning;
+          const caption = timerRunning ? running!.label : label;
           return (
             <li key={label} className="flex-1">
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
-                aria-label={label}
+                aria-label={
+                  timerRunning ? `Timer running ${running!.label}` : label
+                }
                 className={
                   "tab-link" + (active ? " tab-link-active" : "")
                 }
+                data-running-timer-tab={timerRunning ? "true" : undefined}
               >
                 <Icon size={22} aria-hidden />
-                <span className="text-[11px] leading-none">{label}</span>
+                <span
+                  className={
+                    "text-[11px] leading-none" +
+                    (timerRunning ? " timer-digits" : "")
+                  }
+                >
+                  {timerRunning && (
+                    <span
+                      className="timer-running-dot mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle"
+                      aria-hidden
+                    />
+                  )}
+                  {caption}
+                </span>
               </Link>
             </li>
           );

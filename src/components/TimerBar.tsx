@@ -15,7 +15,6 @@ import {
   IconStop,
   IconDiscard,
   IconBillable,
-  IconChevronDown,
   IconEdit,
 } from "@/components/icons";
 import ManualEntryForm from "@/components/ManualEntryForm";
@@ -38,6 +37,60 @@ interface Project {
   archivedAt: string | null;
 }
 
+function ProjectField({
+  projectId,
+  projects,
+  onChange,
+  className,
+}: {
+  projectId: string;
+  projects: Project[];
+  onChange: (id: string) => void;
+  className: string;
+}): JSX.Element {
+  return (
+    <select
+      className={className}
+      value={projectId}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label="Project"
+    >
+      <option value="">No project</option>
+      {projects.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function BillableField({
+  billable,
+  onToggle,
+  className,
+}: {
+  billable: boolean;
+  onToggle: () => void;
+  className: string;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={billable}
+      aria-label="Billable"
+      onClick={onToggle}
+      className={className}
+      title="Billable — counts toward client work"
+      data-timer-billable-toggle="true"
+    >
+      <IconBillable size={14} aria-hidden />
+      <span>Billable</span>
+    </button>
+  );
+}
+
 // `timezone` is still accepted so the server layout keeps supplying it, but
 // per #64 the timezone label no longer renders inside the dock — it lives in
 // the desktop footer / Account page only. #65 Manual mode and #83 mobile
@@ -58,8 +111,8 @@ export default function TimerBar({
   const [billable, setBillable] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [pending, setPending] = useState(false);
-  // V2-5 Shaul lock: Details (project + billable + tz) collapsed by default.
-  // Description stays visible because it's the primary interaction.
+  // Mobile-only: the grabber expands the description editor. Project and
+  // Billable stay visible without that expand (#101).
   const [detailsOpen, setDetailsOpen] = useState(false);
   // #65 Manual mode: md+ dock toggle Timer ↔ Manual. Default Timer. While a
   // timer is running the toggle is hidden and `mode` is forced back to
@@ -305,6 +358,13 @@ export default function TimerBar({
   const sheetShouldBeOpen = manualSheetOpen && !running;
 
   const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }));
+  const toggleBillable = (): void => {
+    setBillable((b) => {
+      const next = !b;
+      emitToast(next ? "Billable on" : "Billable off");
+      return next;
+    });
+  };
   // #82 mobile collapsed band preview: show the typed/running description
   // if there is one, otherwise fall back to the same placeholder the input
   // uses so the band reads as an invitation to tap in. We trim so a stray
@@ -500,13 +560,12 @@ export default function TimerBar({
           (manualActive ? "md:hidden" : "")
         }
       >
-        {/* #64 md+ dock lock (Moshe product-lock 2026-10-01):
+        {/* #64 md+ dock lock, #101 project always visible:
               description | Project ▾ | Billable chip | 00:00:00 | Start
-            is one `items-center` baseline. On md+ we flow every control into
-            the same flex row and use `md:order-*` to put project + billable
-            BEFORE the duration + Start cluster so the chevron can stay at the
-            far right without breaking the dock order. Mobile keeps the
-            calm stack (description → duration + Start → optional Details). */}
+            is one `items-center` baseline. `md:order-*` places project and
+            billable before the duration cluster. Mobile keeps description
+            editing behind the grabber; project and billable are a separate
+            always-visible row. */}
         <input
           className="input w-full md:flex-1 md:w-auto md:min-w-0 md:order-1"
           placeholder="What are you working on?"
@@ -582,76 +641,42 @@ export default function TimerBar({
               </button>
             </>
           )}
-          <button
-            type="button"
-            className="btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2 shrink-0 md:order-7 hidden md:inline-flex"
-            onClick={() => setDetailsOpen((v) => !v)}
-            aria-expanded={detailsOpen}
-            aria-controls="timer-details"
-            aria-label={detailsOpen ? "Hide timer details" : "Show timer details"}
-            title={detailsOpen ? "Hide details" : "Details"}
-          >
-            <IconChevronDown
-              size={16}
-              aria-hidden
-              className={
-                "transition-transform" + (detailsOpen ? " rotate-180" : "")
-              }
-            />
-          </button>
+          <ProjectField
+            projectId={projectId}
+            projects={projects}
+            onChange={setProjectId}
+            className="input hidden md:block md:flex-none md:w-auto md:max-w-[200px] md:order-2"
+          />
+          <BillableField
+            billable={billable}
+            onToggle={toggleBillable}
+            className={
+              "chip min-h-[44px] shrink-0 hidden md:inline-flex md:order-3" +
+              (billable ? " chip-on" : "")
+            }
+          />
         </div>
-        {/* Details (project + billable) — collapsed by default per V2-5.
-             #64 md+ lock: on md+ project + billable flow INLINE in the main
-             dock row via `md:contents` + `md:order-2/3`, so the whole dock
-             reads as a single band. The helper copy "Counts toward client
-             work." is now a tooltip on the chip (Dana lock) instead of a
-             stacked span that broke the chip's baseline. Timezone no longer
-             appears here — it lives in the desktop footer and the Account
-             page (see #64 brief). Billable itself is still persisted
-             server-side via PATCH /api/timer above so a refresh keeps the
-             choice, and the flag is copied onto the entry on Stop. */}
-        {detailsOpen && (
-          <div
-            id="timer-details"
-            className="flex flex-col gap-2 md:flex-row md:items-center md:contents"
-          >
-            <select
-              className="input flex-1 md:flex-none md:w-auto md:max-w-[200px] md:order-2"
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              aria-label="Project"
-            >
-              <option value="">No project</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={billable}
-              aria-label="Billable"
-              onClick={() => {
-                setBillable((b) => {
-                  const next = !b;
-                  emitToast(next ? "Billable on" : "Billable off");
-                  return next;
-                });
-              }}
-              className={
-                "chip min-h-[44px] shrink-0 md:order-3" +
-                (billable ? " chip-on" : "")
-              }
-              title="Billable — counts toward client work"
-              data-timer-billable-toggle="true"
-            >
-              <IconBillable size={14} aria-hidden />
-              <span>Billable</span>
-            </button>
-          </div>
-        )}
+      </div>
+      {/* #101 Project + Billable stay on the phone dock even when the
+          description editor is collapsed. Desktop renders the same controls
+          inline in the row above (`md:contents` order). */}
+      <div
+        className="md:hidden mx-auto flex max-w-6xl items-center gap-2 px-4 pb-2"
+        data-timer-project-row="true"
+      >
+        <ProjectField
+          projectId={projectId}
+          projects={projects}
+          onChange={setProjectId}
+          className="input min-w-0 flex-1"
+        />
+        <BillableField
+          billable={billable}
+          onToggle={toggleBillable}
+          className={
+            "chip min-h-[44px] shrink-0" + (billable ? " chip-on" : "")
+          }
+        />
       </div>
       {sheetShouldBeOpen && (
         <ManualEntrySheet

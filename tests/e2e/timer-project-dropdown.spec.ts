@@ -17,16 +17,10 @@ test("timer project dropdown updates after project create", async ({ page }) => 
   await page.click('button[type="submit"]');
   await page.waitForURL(/\/app/);
 
-  // V2-5: dock details (project + billable + tz) are collapsed by default —
-  // expand them so the project dropdown is in the accessibility tree.
+  // #101: project is visible on the timer dock without expanding details.
+  // #102: the dock is hidden on /app/projects, so the dropdown is read on
+  // the timer page after the project is created.
   const timerDock = page.locator(".timer-dock");
-  await timerDock
-    .getByRole("button", { name: "Show timer details" })
-    .click();
-
-  // The entry list also renders a "Filter by project" combobox, so a
-  // page-wide getByRole({ name: "Project" }) is ambiguous under strict mode
-  // (substring match). Scope to the dock + require an exact accessible name.
   const projectSelect = timerDock.getByRole("combobox", {
     name: "Project",
     exact: true,
@@ -36,19 +30,17 @@ test("timer project dropdown updates after project create", async ({ page }) => 
   await expect(projectSelect.locator("option")).toHaveText(["No project"]);
 
   await page.goto("/app/projects");
-  // Full navigation remounts the dock; expand details again so the
-  // dropdown re-enters the DOM.
-  await timerDock
-    .getByRole("button", { name: "Show timer details" })
-    .click();
+  await expect(page.locator(".timer-dock")).toHaveCount(0);
   // The Name input is the required text input in the "Add project" form.
   await page.locator('form input[required]').first().fill(projectName);
   await page.click("button:has-text('Add')");
+  await expect(page.getByText(projectName).first()).toBeVisible({ timeout: 5000 });
 
-  // Dropdown lives in the sticky header (same page tree); the new project
-  // must appear without a manual page reload. Native <option> elements are
-  // not "visible" per Playwright until the select opens, so assert on the
-  // rendered option list and then verify selection works.
+  await page.goto("/app");
+  await expect(projectSelect).toBeVisible();
+  // Native <option> elements are not "visible" per Playwright until the
+  // select opens, so assert on the rendered option list and then verify
+  // selection works.
   await expect
     .poll(async () => projectSelect.locator("option").allInnerTexts(), { timeout: 5000 })
     .toContain(projectName);

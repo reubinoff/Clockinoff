@@ -30,7 +30,9 @@ controls collapse into an account menu (your initial) so the header
 does not overflow.
 
 Open **Account** from the header (wide desktop) or the account menu
-(tablet and phone) to see your sign-in methods.
+(tablet and phone) to see your sign-in methods. The timer dock is
+hidden on this page. A running timer still shows as a small elapsed
+counter in the header, or on the **Timer** tab on a phone.
 
 The v1 UI does not include a "change email" flow. Support for that is a
 future improvement.

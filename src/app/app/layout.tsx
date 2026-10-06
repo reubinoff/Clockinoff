@@ -3,13 +3,17 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, getSessionUser } from "@/server/auth/session";
-import TimerBar from "@/components/TimerBar";
 import LogoutButton from "@/components/LogoutButton";
 import AppNav from "@/components/AppNav";
 import BottomTabBar from "@/components/BottomTabBar";
 import HeaderUserMenu from "@/components/HeaderUserMenu";
 import Toaster from "@/components/Toaster";
 import AppearanceSelect from "@/components/AppearanceSelect";
+import { AppMain, TimerDockSlot } from "@/components/AppShell";
+import {
+  RunningTimerChip,
+  RunningTimerProvider,
+} from "@/components/RunningTimerProvider";
 import { Mark } from "@/components/brand/Mark";
 import { DOCS_URL } from "@/lib/docs";
 
@@ -25,6 +29,7 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   return (
+    <RunningTimerProvider>
     <div className="min-h-screen flex flex-col bg-canvas min-w-0">
       {/* Shell B: sticky chrome wrapper is header + dock so #99's
           `--app-header-h` measures both. The <header> itself is the thin
@@ -52,6 +57,7 @@ export default async function AppLayout({
               <AppNav />
             </div>
             <div className="ml-auto flex min-w-0 shrink items-center gap-2 text-sm">
+              <RunningTimerChip />
               {/* xl+ account cluster: email · Account · Docs · Appearance ·
                   Log out on one baseline. At 768 the compact menu below
                   replaces this so the header cannot overflow (#141). */}
@@ -94,36 +100,9 @@ export default async function AppLayout({
             </div>
           </div>
         </header>
-        <div
-          className={
-            // Docked bottom on mobile (above tab bar), full-bleed band
-            // under the thin header on desktop. Not a header child.
-            // safe-area-inset-bottom only lives on the tab bar; the dock
-            // sits exactly above it so the inset is not applied twice.
-            "w-full md:static md:z-auto md:inset-x-auto md:bottom-auto " +
-            "fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 " +
-            "shadow-[0_-1px_2px_rgba(17,24,39,0.04)] md:shadow-none"
-          }
-          data-app-dock="true"
-        >
-          <TimerBar timezone={user.timezone} />
-        </div>
+        <TimerDockSlot timezone={user.timezone} />
       </div>
-      <main
-        className={
-          "flex-1 mx-auto max-w-6xl w-full min-w-0 px-4 py-6 " +
-          // #82 Reserve room for docked timer + bottom tab bar on mobile.
-          // The dock is now a thin collapsed band by default (grabber + one
-          // row of description/elapsed/primary), so the base reservation is
-          // smaller than the previous 16rem. When the grabber is expanded,
-          // globals.css bumps this to 22rem via :has() on the dock's
-          // `data-timer-details-open="true"` attribute so the expanded
-          // panel never permanently covers the first entry row.
-          "pb-[calc(9rem+env(safe-area-inset-bottom))] md:pb-6"
-        }
-      >
-        {children}
-      </main>
+      <AppMain>{children}</AppMain>
       <footer className="hidden md:block border-t border-border py-4 text-center text-xs text-muted">
         <span>Clockinoff · {user.timezone}</span>
         <span aria-hidden="true"> · </span>
@@ -139,5 +118,6 @@ export default async function AppLayout({
       <BottomTabBar />
       <Toaster />
     </div>
+    </RunningTimerProvider>
   );
 }

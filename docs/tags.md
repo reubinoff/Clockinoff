@@ -24,6 +24,10 @@ Manage tags at `/app/tags`. On desktop, open **Library** in the top nav
 and pick **Tags**. On a phone, tap the **Library** tab, then the Tags
 segment.
 
+The timer dock is not shown on this page. If a timer is running, use
+the elapsed counter in the header (or the **Timer** tab on a phone) to
+jump back and stop it.
+
 Before you add your first tag the page shows:
 
 > No tags yet. Tags help you filter exports later.

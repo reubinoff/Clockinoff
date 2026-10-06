@@ -359,6 +359,12 @@
     color: var(--color-accent);
     animation: timer-pulse 2s ease-in-out infinite;
   }
+  /* Header / tab running counter. Opacity only — the accent fill is the
+     dot itself, so this must not set `color` the way .timer-running-pulse does. */
+  .timer-running-dot {
+    background-color: var(--color-accent);
+    animation: timer-pulse 2s ease-in-out infinite;
+  }
   /* V2-5 §3 running wash: the whole dock swaps to an accent-soft surface with
      an accent-tinted top border while a timer is running. V2-10: uses the
      tokenized `accent-soft` fill and `--border-accent-tint` so the wash
@@ -706,6 +712,7 @@
        animation — the animation still runs, just with a 0ms cycle. Kill the
        decorative motion outright, same as .timer-running-pulse. */
     .timer-running-pulse,
+    .timer-running-dot,
     .timer-start-idle {
       animation: none;
     }

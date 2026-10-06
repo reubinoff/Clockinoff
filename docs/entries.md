@@ -71,7 +71,7 @@ On a phone the week band is **sticky** below the top app header, so
 as you scroll a long range you always see which week the rows
 underneath belong to. On tablet / desktop (`md+`, ≥ 768 px) the band
 is also sticky — it pins just below the app header (whose height
-tracks the timer dock as you expand or collapse it) so the current
+includes the timer dock on this page) so the current
 week stays visible while you scroll a long range. Column labels and
 day headers below are *not* sticky, so only one layer of chrome ever
 floats over the scrolling rows.

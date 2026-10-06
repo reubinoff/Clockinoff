@@ -177,20 +177,27 @@ whether the email is registered.
 
 ## What you see after signing in
 
-At the top of every `/app/*` page you get two rows:
+At the top of every `/app/*` page you get a **thin header** with the
+Clockinoff mark, top nav (**Timer**, **Library**, **Reports**,
+**Export**), and the account cluster. **Library** is sentence case and
+groups **Projects**, **Clients**, and **Tags** in a menu — there is no
+left sidebar. On a wide desktop the account cluster is your email,
+**Account**, **Docs**, **Appearance**, and **Log out** on one line.
+Around tablet width that cluster collapses to your initial so the
+header stays full width and never scrolls sideways.
 
-1. **Thin header** with the Clockinoff mark, top nav (**Timer**,
-   **Library**, **Reports**, **Export**), and the account cluster.
-   **Library** is sentence case and groups **Projects**, **Clients**,
-   and **Tags** in a menu — there is no left sidebar. On a wide desktop
-   the account cluster is your email, **Account**, **Docs**,
-   **Appearance**, and **Log out** on one line. Around tablet width
-   that cluster collapses to your initial so the header stays full
-   width and never scrolls sideways.
-2. **Timer dock** as a full-width band *under* the header (not inside
-   it) with a description field, project dropdown, billable toggle,
-   elapsed time, and a **Start** button (or **Stop** / **Discard**
-   while a timer is running).
+On the **Timer**, **Reports**, and **Export** pages a **timer dock**
+sits as a full-width band *under* the header (not inside it) with a
+description field, a project dropdown, a billable toggle, elapsed
+time, and a **Start** button (or **Stop** / **Discard** while a timer
+is running). The project dropdown and the Billable chip are always
+visible in that dock — they are not tucked behind a details control.
+
+On **Projects**, **Clients**, **Tags**, and **Account** the dock is
+hidden so you can edit configuration without the Start bar in the way.
+If a timer is already running, the header shows a small elapsed
+counter (desktop). On a phone that counter replaces the **Timer**
+label in the bottom tab bar. Either one links back to the Timer page.
 
 On phones the chrome stays a bottom tab bar — **Timer**, **Library**,
 **Reports**, and **Export** — where **Library** groups the projects,

@@ -14,8 +14,9 @@ learning enterprise software.
 
 You get:
 
-- **One running timer** at a time, with a big Start / Stop bar at the top
-  of every page.
+- **One running timer** at a time, with a Start / Stop dock on the Timer
+  page (and on Reports and Export). Configuration pages hide that dock
+  and, while a timer is running, show a small elapsed counter instead.
 - **Manual entries** when you forgot the timer — a quiet
   Timer / Manual toggle in the dock lets you type start / end times and
   pick a date (desktop + mobile, see [Using the timer]({{ '/timer' | relative_url }}#add-a-manual-entry)).

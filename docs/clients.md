@@ -24,6 +24,10 @@ Manage clients at `/app/clients`. On desktop, open **Library** in the
 top nav and pick **Clients**. On a phone, tap the **Library** tab, then
 the Clients segment.
 
+The timer dock is not shown on this page. If a timer is running, use
+the elapsed counter in the header (or the **Timer** tab on a phone) to
+jump back and stop it.
+
 Before you add your first client the page shows:
 
 > No clients yet. Link them to projects when you’re ready.

@@ -99,8 +99,9 @@ so if you host your own instance you can update entries from a script.
 
 **Can I add an entry without running a timer?**
 
-Yes. The timer dock has a **Timer | Manual** toggle (desktop) and a
-secondary **Manual** button next to **Start** (mobile) while idle;
+Yes. On the Timer page the dock has a **Timer | Manual** toggle
+(desktop) and a secondary **Manual** button next to **Start** (mobile)
+while idle;
 either opens the manual-entry form, where you type a description,
 start / end times, and a date, and the duration is derived for you.
 See [Using the timer → Add a manual entry]({{ '/timer' | relative_url }}#add-a-manual-entry)

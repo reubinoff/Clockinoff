@@ -16,8 +16,8 @@ nav_order: 3
 
 ---
 
-Clockinoff has a single, always-visible timer at the top of every `/app/*`
-page. You can only have **one running timer at a time**.
+Clockinoff has a single timer dock on the **Timer**, **Reports**, and
+**Export** pages. You can only have **one running timer at a time**.
 
 If you forgot to start the timer, you don't have to pretend otherwise:
 Clockinoff also lets you add an entry **manually** with explicit
@@ -25,11 +25,32 @@ start/end times — see [Add a manual entry](#add-a-manual-entry) below.
 
 ---
 
+## Where the timer dock shows
+
+The full dock (description, project, billable, elapsed time, Start /
+Stop) is on the Timer page, and it stays available on Reports and
+Export so you can keep an eye on a running timer while you review or
+download time.
+
+It is **hidden** on configuration pages — Projects, Clients, Tags, and
+Account — so those forms are not covered by the Start bar. If a timer
+is already running while you are on one of those pages:
+
+- **Desktop** — a compact counter sits in the top header (a purple dot
+  and `HH:MM:SS`). Click it to return to the Timer page and stop or
+  discard.
+- **Phone** — the **Timer** tab in the bottom bar shows the same
+  elapsed time in place of the word Timer. Tap that tab to open the
+  dock and stop.
+
+The counter only appears while a timer is running. Idle configuration
+pages show no timer chrome.
+
 ## Anatomy of the timer dock
 
-The timer dock is always visible while you're signed in. Its colours
-follow the **Appearance** setting immediately — you do not need to
-reload for the digits to match light or dark.
+On the pages where it is shown, the dock's colours follow the
+**Appearance** setting immediately — you do not need to reload for the
+digits to match light or dark.
 
 - **Desktop** — it sits as a full-width band under the thin site header
   and sticks with that chrome as you scroll.
@@ -42,14 +63,27 @@ reload for the digits to match light or dark.
   primary purple **Start** so you can open the manual-entry sheet
   without leaving the page.
 
-The dock stays compact by default and contains, left to right (or top
-to bottom on narrow screens):
+The dock stays compact and contains, left to right (or top to bottom
+on narrow screens):
 
 - **Description** — free text for "What are you working on?".
   On tablet/desktop this is an inline input you can type into right in
   the dock. On phones the collapsed band shows the description as a
   tappable label — tap it (or the grabber above the band) to open the
   expanded editor with a full input.
+- **Project dropdown** — always visible. Pick a project you already
+  created, or leave as **No project**. On tablet/desktop it sits in
+  the same row as the description. On phones it sits on its own row
+  under the Start button, even when the description editor is
+  collapsed.
+- **Billable chip** — always visible, next to the project dropdown.
+  Quiet toggle labelled **Billable** (tooltip: *Billable — counts
+  toward client work*). **Default is on**, so a new timer is billable
+  unless you explicitly turn it off. The value is persisted
+  server-side on the running entry, so a refresh keeps whatever you
+  last picked, and it is copied onto the entry when you hit **Stop**.
+  Flipping the switch shows a **Billable on** / **Billable off** toast
+  so the change is visible without pulling attention.
 - **Elapsed time** — `HH:MM:SS`, updates every second while a timer is
   running.
 - **Buttons** — **Start** when idle, or **Stop** while a timer is
@@ -57,42 +91,19 @@ to bottom on narrow screens):
   tablet/desktop a quiet **Discard** ghost button sits next to **Stop**
   while running; on phones **Discard** lives in the expanded panel so
   the collapsed band stays focused on the primary action.
-- **Grabber / details chevron** — on phones a short pill-shaped
-  grabber at the top of the dock expands the full editor (description
-  input, project, billable, Discard). On tablet/desktop a chevron
-  button on the right of the dock expands the Project dropdown and
-  the Billable chip inline.
+- **Grabber** — on phones only, a short pill-shaped handle at the top
+  of the dock expands the description editor (and Discard, while a
+  timer is running). It does not hide the project dropdown or the
+  Billable chip.
 
-### Details (collapsed by default)
+On tablet / desktop (`md+`, ≥ 768 px wide) the project dropdown and the
+Billable chip share the same horizontal band as the description,
+duration, and Start, so the whole dock stays on one baseline.
 
-On phones, tap the grabber at the top of the dock (or the description
-label) to expand the editor. On tablet/desktop, click the chevron on
-the right of the dock. In both cases the expanded panel reveals:
-
-- **Project dropdown** — pick a project you already created, or leave as
-  **No project**.
-- **Billable chip** — quiet toggle labelled **Billable** (tooltip:
-  *Billable — counts toward client work*). **Default is on**, so a new
-  timer is billable unless you explicitly turn it off. The value is
-  persisted server-side on the running entry, so a refresh keeps
-  whatever you last picked, and it is copied onto the entry when you
-  hit **Stop**. Flipping the switch shows a **Billable on** /
-  **Billable off** toast so the change is visible without pulling
-  attention.
-
-On tablet / desktop (`md+`, ≥ 768 px wide) opening Details does **not**
-add a second row — the project dropdown and the Billable chip slot into
-the same horizontal band as the description, duration and Start, so the
-whole dock stays on one baseline. On phones the Project dropdown and the
-Billable chip stack below the Start row until you close Details again.
-
-The expanded panel closes again on the next grabber tap (phones) or
-chevron click (tablet/desktop). On phones the entry list reserves
-extra scroll padding while the panel is open so the expanded dock
-never permanently covers the first entry card — the list scrolls up
-to meet the dock instead of hiding under it. The collapsed band
-itself is thin by design, so the first entry card is always visible
-in the default state.
+On phones the entry list reserves extra scroll padding while the
+description editor is open so the expanded dock never permanently
+covers the first entry card — the list scrolls up to meet the dock
+instead of hiding under it.
 
 Your current timezone no longer appears inside the timer dock. It is
 shown in the desktop footer (as `Clockinoff · <timezone>`) and on the

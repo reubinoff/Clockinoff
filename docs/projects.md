@@ -24,6 +24,10 @@ Manage projects at `/app/projects`. On desktop, open **Library** in the
 top nav and pick **Projects**. On a phone, tap the **Library** tab
 (then the Projects segment if you landed on another library page).
 
+The timer dock is not shown on this page. If a timer is running, use
+the elapsed counter in the header (or the **Timer** tab on a phone) to
+jump back and stop it.
+
 When you have no projects yet the page shows the nudge:
 
 > No projects yet — add one so timers stay organized.
