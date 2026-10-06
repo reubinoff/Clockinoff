@@ -1,15 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  formatDate,
-  formatDayLabel,
-  formatDurationHms,
-  formatDurationHours,
-  formatTime,
-  formatWeekRangeLabel,
-  startOfIsoWeekKey,
-} from "@/lib/tz";
+import { formatDurationHms, formatDurationHours, formatTime } from "@/lib/tz";
 import {
   emitToast,
   emitTimerChanged,
@@ -18,6 +10,11 @@ import {
 } from "@/lib/events";
 import { handleAuthFailure, isAuthFailure } from "@/lib/auth-ui";
 import { projectColor } from "@/lib/project-color";
+import {
+  ensureTodayGroup,
+  groupEntriesByWeek,
+  type EntryWeekGroup,
+} from "@/lib/entry-groups";
 import {
   IconBillable,
   IconCheck,
@@ -64,112 +61,7 @@ interface Option {
   name: string;
 }
 
-interface DayGroup {
-  key: string;
-  label: string;
-  totalSeconds: number;
-  entries: Entry[];
-  // #99a desktop running row: Today's day group is the only slot that may
-  // hold the pinned purple-wash row. We mark the Today bucket (and create
-  // it synthetically when there are no closed entries yet today) so the
-  // table knows exactly where to inject it.
-  isToday: boolean;
-}
-
-// #81 Mobile Week → Day → Entry: each week carries its Monday-first date-
-// range label plus the day groups that fall inside it. We keep the day-group
-// shape and totalling untouched so the per-day card chrome keeps working
-// identically; the week wrapper is purely additive.
-interface WeekGroup {
-  key: string;
-  label: string;
-  totalSeconds: number;
-  days: DayGroup[];
-  isCurrent: boolean;
-}
-
-// V2-7 §Day groups → #81 Week → Day groups: bucket the filtered list by
-// zoned day-key first, then by that day's ISO (Monday-first) week-key,
-// preserving the server's newest-first order. `now` is passed in so
-// Today/Yesterday labels + the "This week" week-label track the user's
-// clock without re-rendering every second — both boundaries are stable
-// within a session for practical purposes.
-function groupByWeek(entries: Entry[], timezone: string, now: Date): WeekGroup[] {
-  const weeks: WeekGroup[] = [];
-  const byWeekKey = new Map<string, WeekGroup>();
-  const byDayKey = new Map<string, DayGroup>();
-  const todayKey = formatDate(now, timezone);
-  const thisWeekKey = startOfIsoWeekKey(now, timezone);
-  for (const e of entries) {
-    const start = new Date(e.start_at);
-    const dayKey = formatDate(start, timezone);
-    const weekKey = startOfIsoWeekKey(start, timezone);
-    let w = byWeekKey.get(weekKey);
-    if (!w) {
-      w = {
-        key: weekKey,
-        label: formatWeekRangeLabel(weekKey, now, timezone),
-        totalSeconds: 0,
-        days: [],
-        isCurrent: weekKey === thisWeekKey,
-      };
-      byWeekKey.set(weekKey, w);
-      weeks.push(w);
-    }
-    let d = byDayKey.get(dayKey);
-    if (!d) {
-      d = {
-        key: dayKey,
-        label: formatDayLabel(start, timezone, now),
-        totalSeconds: 0,
-        entries: [],
-        isToday: dayKey === todayKey,
-      };
-      byDayKey.set(dayKey, d);
-      w.days.push(d);
-    }
-    d.entries.push(e);
-    d.totalSeconds += e.duration_seconds;
-    w.totalSeconds += e.duration_seconds;
-  }
-  return weeks;
-}
-
-// #99a desktop running row: a pinned purple-wash row sits at the top of
-// the Today day group. If Today currently has no closed entries, we
-// synthesise an empty Today group (zero total — #81 math stays closed-
-// only) in the current week so the running row has a home. A synthesised
-// week is also created when the user hasn't logged anything this week yet.
-function ensureTodayGroup(
-  weeks: WeekGroup[],
-  timezone: string,
-  now: Date,
-): WeekGroup[] {
-  const todayKey = formatDate(now, timezone);
-  const thisWeekKey = startOfIsoWeekKey(now, timezone);
-  if (weeks.some((w) => w.days.some((d) => d.key === todayKey))) return weeks;
-  const todayGroup: DayGroup = {
-    key: todayKey,
-    label: formatDayLabel(now, timezone, now),
-    totalSeconds: 0,
-    entries: [],
-    isToday: true,
-  };
-  const currentWeek = weeks.find((w) => w.key === thisWeekKey);
-  if (currentWeek) {
-    return weeks.map((w) =>
-      w === currentWeek ? { ...w, days: [todayGroup, ...w.days] } : w,
-    );
-  }
-  const synthetic: WeekGroup = {
-    key: thisWeekKey,
-    label: formatWeekRangeLabel(thisWeekKey, now, timezone),
-    totalSeconds: 0,
-    days: [todayGroup],
-    isCurrent: true,
-  };
-  return [synthetic, ...weeks];
-}
+type WeekGroup = EntryWeekGroup<Entry>;
 
 // Shaul-locked (2026-10-01) billed redesign: a closed billable entry is the
 // only shape the Select / sticky bar can act on. Running timer never shows a
@@ -411,7 +303,7 @@ export default function EntryList({
   // labels after hydration.
   const now = useMemo(() => new Date(), []);
   const closedWeeks = useMemo(
-    () => groupByWeek(filtered, timezone, now),
+    () => groupEntriesByWeek(filtered, timezone, now),
     [filtered, timezone, now],
   );
   // Inject the Today group (synthesised when empty) only when a timer is
