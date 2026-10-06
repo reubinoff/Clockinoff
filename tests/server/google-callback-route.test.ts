@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/auth/google/callback/route";
+import { publicOrigin } from "@/lib/base-url";
 import { serialiseOAuthState } from "@/lib/oauth-next";
 import { register } from "@/server/auth/service";
 import { getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
@@ -348,7 +349,7 @@ describe("GET /api/auth/google/callback", () => {
       }),
     );
     const loc = new URL(res.headers.get("location") ?? "");
-    expect(loc.origin).toBe("http://test");
+    expect(loc.origin).toBe(publicOrigin(new Request("http://test/api/auth/google/callback")));
     expect(loc.hostname).not.toBe("evil.example");
     expect(loc.pathname).toBe("/app");
   });
