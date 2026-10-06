@@ -111,7 +111,10 @@ describe("auth", () => {
     });
 
     async function captureUnauthorized(input: { email: string; password: string }) {
+      // Vitest 5 reuses the existing spy, so a second spyOn in this test
+      // would otherwise keep the previous login's call in mock.calls.
       const spy = vi.spyOn(passwords, "verifyPassword");
+      spy.mockClear();
       const err = await login(input).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ApiError);
       const api = err as ApiError;
