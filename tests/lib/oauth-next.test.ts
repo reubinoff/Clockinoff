@@ -63,15 +63,11 @@ describe("sanitiseNext", () => {
     expect(sanitiseNext("/app", "not a url")).toBe("/app");
   });
 
-  it("#123 password login: external next cannot leave origin", () => {
-    // Same shape as /login: `const next = params.get("next") || "/app"` then
-    // `router.push(sanitiseNext(next))`. Typed as string | null so the
-    // fallback is a real branch (a string literal || "/app" is always truthy).
-    const raw: string | null = "https://evil.example";
-    const next = raw || "/app";
-    expect(sanitiseNext(next)).toBe("/app");
-    expect(sanitiseNext("https://evil.example/phish")).toBe("/app");
-    expect(sanitiseNext("//evil.example")).toBe("/app");
+  it("#123 password login: open-redirect payloads sanitise to /app", () => {
+    // Same helper as `router.push(sanitiseNext(next))` on /login.
+    expect(sanitiseNext("/\t/evil.example")).toBe("/app");
+    expect(sanitiseNext("/%5Cevil.example")).toBe("/app");
+    expect(sanitiseNext("javascript:alert(1)")).toBe("/app");
     expect(sanitiseNext("/app/entries")).toBe("/app/entries");
   });
 });
