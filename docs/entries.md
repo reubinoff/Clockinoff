@@ -81,7 +81,9 @@ using the start date in your timezone. Each day section has a quieter
 header — a small uppercase label — with the day on the left and a
 muted total of all durations for that day (in hours) on the right.
 There is a touch of extra air between the header and the first card
-so the day group reads as a sub-section, not as another row.
+so the day group reads as a sub-section, not as another row. On a
+phone, cards in the same day sit **8 px** apart; one day group sits
+**16 px** below the next.
 
 Day labels use this format:
 
@@ -100,24 +102,27 @@ so the week boundary never shifts when you switch regions.
 On a phone each entry renders as a card scanned top-to-bottom:
 
 - **Top row** — the **project chip** on the left (small coloured dot
-  plus the project name so you can tell projects apart at a glance),
-  and a right-aligned cluster with the **duration** (hours, e.g.
-  `1.25h`), an **edit** control (pencil icon) that opens the edit
-  sheet, and a **more** control (**⋯**) with Mark as billed / Mark
-  as unbilled / Delete. Entries with no project show a muted
-  *No project* placeholder in the same slot. Edit and ⋯ are
-  compact in this top cluster so they don't crowd the project name.
+  plus the project name so you can tell projects apart at a glance;
+  a long name truncates inside the chip), and a right-aligned
+  cluster with the **duration** (hours, e.g. `1.25h`), an **edit**
+  control (pencil icon) that opens the edit sheet, and a **more**
+  control (**⋯**) with Mark as billed / Mark as unbilled / Delete.
+  Entries with no project show a muted *No project* placeholder in
+  the same slot. Edit and ⋯ are **48 × 48 px** tap targets; the
+  icons stay the same size so the cluster does not crowd the
+  project name.
 - **Middle** — the **description** in primary ink (whatever you
   typed in the timer bar; long text is clamped to two lines). Empty
   descriptions render as a muted *No description* so the card never
   collapses to a bare chip.
 - **Bottom row** — the **time range** (start–end in your timezone;
   end is `…` for a running entry, only visible if you filter it in),
-  any tag chips, and the muted **Billed** pill if the entry has been
-  marked as billed — all on the left. The **play** control (▶, a
-  44 × 44 px tap target, see [Resume an entry](#resume-an-entry)
-  below) sits on the right, well clear of Edit so it reads as the
-  primary row action.
+  any tag chips, a muted `$` if the entry is billable (the billable
+  flag — not an amount), and the muted **Billed** pill if the entry
+  has been invoiced — `$` sits immediately before **Billed**. The
+  **play** control (▶, a 48 × 48 px tap target, see
+  [Resume an entry](#resume-an-entry) below) sits on the right, well
+  clear of Edit so it reads as the primary row action.
 
 On tablets and desktops (`md+`, ≥ 768 px wide) the same data renders
 as a **real table** — one continuous table per week, with a header row
@@ -170,6 +175,9 @@ Above the list there are four controls:
 
 - **Search box** — matches the description field, case-insensitive.
 - **Project dropdown** — pick a single project (or **All projects**).
+  On a phone the control is full-width so the **All projects** label
+  is fully visible; a long selected name ellipsises inside the
+  control instead of clipping mid-word.
 - **Unbilled chip** — a single quiet toggle. Off (default) shows every
   entry; on shows only entries that are **billable and not yet billed**,
   i.e. work you have done but not invoiced. When the chip is on and no

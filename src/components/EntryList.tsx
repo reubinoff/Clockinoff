@@ -676,19 +676,30 @@ export default function EntryList({
   const showMobileEmpty = emptyKind !== null;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-4 min-w-0">
+      <div className="flex flex-wrap items-center gap-2 min-w-0">
         <input
-          className="input w-full sm:w-auto sm:max-w-xs"
+          className="input w-full min-w-0 sm:w-auto sm:max-w-xs"
           placeholder="Search description…"
           value={filterQ}
           onChange={(e) => setFilterQ(e.target.value)}
         />
+        {/* #99b: on <md the select is its own full-width row so
+            "All projects" (and typical names) fit instead of clipping
+            mid-word ("All projec"). Long names ellipsis inside the
+            control; the native title carries the full label. */}
         <select
-          className="input flex-1 sm:flex-none sm:max-w-[180px]"
+          className="entry-project-filter input"
           value={filterProject}
           onChange={(e) => setFilterProject(e.target.value)}
           aria-label="Filter by project"
+          title={
+            filterProject
+              ? (projects.find((p) => p.id === filterProject)?.name ??
+                "All projects")
+              : "All projects"
+          }
+          data-entries-project-filter="true"
         >
           <option value="">All projects</option>
           {projects.map((p) => (
@@ -731,7 +742,7 @@ export default function EntryList({
             Select
           </button>
         )}
-        <span className="text-xs text-muted">
+        <span className="text-xs entry-day-total">
           {filtered.length} of {entries.length}
         </span>
       </div>
@@ -817,7 +828,7 @@ export default function EntryList({
                       {w.label}
                     </h2>
                     <span
-                      className="text-body-sm text-muted tabular-nums shrink-0"
+                      className="text-body-sm tabular-nums shrink-0 entry-day-total"
                       data-entries-week-total={w.key}
                     >
                       <span className="timer-digits text-ink font-medium">
@@ -828,9 +839,10 @@ export default function EntryList({
                   </div>
                 </header>
 
-                {/* Mobile <md: keep the locked per-day card stack. 99a is a
-                    desktop-only slice — mobile 48px polish lives in 99b. */}
-                <div className="space-y-6 md:hidden">
+                {/* Mobile <md: locked PR #96 card, 99b polish. Individual
+                    cards with 8px same-day gap and 16px between days
+                    (Dana 390). Edit / ⋯ / Play are 48px hit targets. */}
+                <div className="space-y-4 md:hidden">
                   {w.days.map((g) => (
                     <section
                       key={g.key}
@@ -853,7 +865,7 @@ export default function EntryList({
                         </span>
                       </header>
                       {g.entries.length > 0 && (
-                        <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+                        <ul className="space-y-2">
                           {g.entries.map((e) => {
                             const s = new Date(e.start_at);
                             const en = e.end_at ? new Date(e.end_at) : null;
@@ -865,7 +877,7 @@ export default function EntryList({
                               <li
                                 key={e.id}
                                 className={
-                                  "entry-row relative px-3 py-2.5 " +
+                                  "card entry-row relative px-3 py-2.5 " +
                                   (selected ? "bg-accent-soft " : "") +
                                   (springIds.has(e.id) ? "entry-spring-in " : "") +
                                   (rowPending ? "entry-row-pending " : "") +
@@ -898,7 +910,7 @@ export default function EntryList({
                                           <ProjectChip
                                             name={e.project_name}
                                             projectId={e.project_id}
-                                            className="max-w-full"
+                                            className="max-w-full min-w-0"
                                           />
                                         ) : (
                                           <span className="text-xs text-muted">
@@ -916,7 +928,7 @@ export default function EntryList({
                                         {!inSelect && !e.running && (
                                           <>
                                             <button
-                                              className="btn btn-ghost h-9 min-h-[36px] w-9 min-w-[36px] px-0"
+                                              className="btn btn-ghost entry-hit-touch px-0"
                                               onClick={() => beginEdit(e)}
                                               aria-label="Edit entry"
                                               title="Edit"
@@ -937,7 +949,7 @@ export default function EntryList({
                                                 void patchSingleBilled(e.id, false)
                                               }
                                               onDelete={() => void remove(e.id)}
-                                              compact
+                                              size="touch"
                                             />
                                           </>
                                         )}
@@ -957,6 +969,7 @@ export default function EntryList({
                                           {en ? formatTime(en, timezone) : "…"}
                                         </p>
                                         {(e.tag_names.length > 0 ||
+                                          e.billable ||
                                           e.billed ||
                                           (inSelect && !selectable)) && (
                                           <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -965,13 +978,22 @@ export default function EntryList({
                                                 {t}
                                               </span>
                                             ))}
+                                            {e.billable && (
+                                              <span
+                                                className="text-xs text-muted shrink-0"
+                                                aria-label="Billable"
+                                                title="Billable"
+                                              >
+                                                $
+                                              </span>
+                                            )}
                                             {e.billed && (
                                               <span
-                                                className="inline-flex items-center gap-1 rounded-full border border-border bg-canvas-2 px-2 py-0.5 text-xs text-muted"
+                                                className="entry-billed-pill"
                                                 title="Already billed"
                                                 aria-label="Billed"
                                               >
-                                                <IconCheck size={12} aria-hidden />
+                                                <IconCheck size={10} aria-hidden />
                                                 Billed
                                               </span>
                                             )}
@@ -988,6 +1010,7 @@ export default function EntryList({
                                           pending={resumePendingIds.has(e.id)}
                                           timerRunning={timerRunning}
                                           onResume={() => void resume(e)}
+                                          size="touch"
                                         />
                                       )}
                                     </div>
@@ -1550,7 +1573,7 @@ function ProjectChip({
   const color = projectColor(projectId ?? name);
   return (
     <span
-      className={"chip inline-flex items-center gap-1.5 truncate " + className}
+      className={"chip inline-flex min-w-0 items-center gap-1.5 truncate " + className}
       data-entry-project-chip="true"
       title={name}
     >
@@ -1578,7 +1601,7 @@ function ResumeButton({
   timerRunning: boolean;
   onResume: () => void;
   compact?: boolean;
-  size?: "sm";
+  size?: "sm" | "touch";
 }): JSX.Element {
   // #84 play-to-resume. Visual: accent-tinted ghost so the icon pops but
   // never fights the dock's primary purple Start — the dock remains the
@@ -1589,9 +1612,11 @@ function ResumeButton({
   const sizeClass =
     size === "sm"
       ? "h-8 min-h-[32px] w-8 min-w-[32px]"
-      : compact
-        ? "h-9 min-h-[36px] w-9 min-w-[36px]"
-        : "h-11 min-h-[44px] w-11 min-w-[44px]";
+      : size === "touch"
+        ? "entry-hit-touch"
+        : compact
+          ? "h-9 min-h-[36px] w-9 min-w-[36px]"
+          : "h-11 min-h-[44px] w-11 min-w-[44px]";
   const title = timerRunning
     ? "Stop the current timer first"
     : pending
@@ -1682,16 +1707,18 @@ function RowMoreMenu({
   onMarkUnbilled: () => void;
   onDelete: () => void;
   compact?: boolean;
-  size?: "sm";
+  size?: "sm" | "touch";
 }): JSX.Element {
   const canBill = entry.billable && !entry.billed;
   const canUnbill = entry.billable && entry.billed;
   const btnClass =
     size === "sm"
       ? "btn btn-ghost h-8 min-h-[32px] w-8 min-w-[32px] px-0"
-      : compact
-        ? "btn btn-ghost h-9 min-h-[36px] w-9 min-w-[36px] px-0"
-        : "btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0";
+      : size === "touch"
+        ? "btn btn-ghost entry-hit-touch px-0"
+        : compact
+          ? "btn btn-ghost h-9 min-h-[36px] w-9 min-w-[36px] px-0"
+          : "btn btn-ghost h-11 min-h-[44px] w-11 min-w-[44px] px-0";
   return (
     <div className="relative">
       <button

@@ -493,6 +493,33 @@
       opacity: 1;
     }
   }
+  /* #99b mobile polish. 48×48 hit targets for Edit / ⋯ / Play; negative
+     margin pulls the extra padding back so the card rhythm doesn't grow.
+     Project filter is full-width under md so "All projects" isn't clipped
+     mid-word, then a capped width from sm up with an ellipsis for long
+     names. */
+  .entry-hit-touch {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    margin: -6px;
+  }
+  .entry-project-filter {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  @media (min-width: 640px) {
+    .entry-project-filter {
+      width: auto;
+      flex: 0 1 auto;
+      max-width: 220px;
+    }
+  }
   /* #99a day-header / day-total contrast. Light `muted` on canvas fails
      AA (4.10:1); `ink-2` (#334155 on #f7f6f3) is ~8.8:1. Dark `ink-2`
      is fine but the locked map uses `muted` (7.65:1 on canvas). We

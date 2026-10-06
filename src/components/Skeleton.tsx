@@ -28,7 +28,7 @@ export function SkeletonBar({
 
 export function SkeletonEntryRow(): JSX.Element {
   return (
-    <li className="entry-row relative px-3 py-2.5 md:hidden">
+    <li className="card entry-row relative px-3 py-2.5 md:hidden">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-start justify-between gap-3">
@@ -72,12 +72,12 @@ export function SkeletonDaySection({ rows = 3 }: { rows?: number }): JSX.Element
   return (
     <section aria-hidden className="space-y-2">
       {/* mobile card shape */}
-      <div className="md:hidden">
+      <div className="md:hidden space-y-3">
         <header className="flex items-baseline justify-between px-1">
           <SkeletonBar width="80px" height="0.9rem" />
           <SkeletonBar width="56px" height="0.7rem" />
         </header>
-        <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+        <ul className="space-y-2">
           {Array.from({ length: rows }).map((_, i) => (
             <SkeletonEntryRow key={i} />
           ))}
@@ -140,7 +140,7 @@ export function SkeletonList({
     <div className="space-y-4" role="status" aria-label="Loading entries">
       {header}
       {showToolbar && <SkeletonFilterToolbar />}
-      <div className="space-y-5">
+      <div className="space-y-4 md:space-y-5">
         {Array.from({ length: days }).map((_, i) => (
           <SkeletonDaySection key={i} rows={rowsPerDay} />
         ))}
