@@ -6,7 +6,7 @@ export const SESSION_PURGE_INTERVAL_MS = 60 * 60 * 1000;
 let purgeTimer: ReturnType<typeof setInterval> | null = null;
 
 export function shouldStartSessionPurge(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): boolean {
   if (env.NEXT_RUNTIME && env.NEXT_RUNTIME !== "nodejs") return false;
   if (env.NODE_ENV === "test" || env.VITEST) return false;
