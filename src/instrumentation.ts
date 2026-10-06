@@ -6,12 +6,23 @@
 // the connection string configured on the App Service (see AGENTS.md
 // §14 Deploy to Azure → Application Insights).
 //
-// - No-op when `APPLICATIONINSIGHTS_CONNECTION_STRING` is unset (local dev, CI).
+// - Azure Monitor is a no-op when `APPLICATIONINSIGHTS_CONNECTION_STRING`
+//   is unset (local dev, CI).
 // - Node-only: the edge / browser runtimes never load the Azure SDK.
+// - Hourly expired-session purge (#150) starts on Node boot when
+//   DATABASE_URL is set (skipped in test / `next build`).
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
   const { assertOAuthStateSecretInProduction } = await import("./lib/oauth-state");
   assertOAuthStateSecretInProduction();
+  // Hourly expired-session purge (#150). Lives here — not in
+  // `instrumentation.node.ts` — because that file only loads when
+  // Application Insights is configured. Azure Web App Node always
+  // hits this Node-runtime branch of `register()`.
+  const { shouldStartSessionPurge, startSessionPurgeLoop } = await import(
+    "./server/auth/session-purge"
+  );
+  if (shouldStartSessionPurge()) startSessionPurgeLoop();
   if (!process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) return;
   await import("./instrumentation.node");
 }

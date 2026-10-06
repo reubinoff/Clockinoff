@@ -142,6 +142,9 @@ Any other browsers or devices where you were signed in with a *different*
 session cookie remain signed in — signing out only affects the current
 device.
 
+You can stay signed in on up to 20 browsers or devices at the same
+time. Signing in on an additional device signs out the oldest session.
+
 ---
 
 ## Deleting your account

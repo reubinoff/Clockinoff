@@ -158,7 +158,13 @@ whether the email is registered.
 
 - Your session is stored in the database and referenced by an
   `httpOnly / SameSite=Lax` cookie called `timely_session`.
+- The cookie holds a random token. The database stores only a SHA-256
+  hash of that token, so a copy of the database is not enough to take
+  over a session.
 - In production the cookie is also `Secure` (HTTPS-only).
+- A session lasts 30 days. You can stay signed in on up to 20 browsers
+  or devices at once; signing in somewhere new beyond that signs out
+  the oldest session.
 - To end the session, use the **Log out** control in the top right of
   `/app/*` — this deletes the row in the sessions table and clears the
   cookie.

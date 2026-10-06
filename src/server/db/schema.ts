@@ -37,6 +37,7 @@ export const users = pgTable(
 export const sessions = pgTable(
   "sessions",
   {
+    // sha256(hex) of the cookie token — never the raw token (#124).
     id: text("id").primaryKey(),
     userId: uuid("user_id")
       .notNull()

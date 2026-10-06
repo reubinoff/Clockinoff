@@ -5,10 +5,15 @@ import {
   createSession,
   deleteSession,
   getSessionUser,
+  hashSessionToken,
   purgeExpiredSessions,
   sessionCookieOptions,
+  MAX_SESSIONS_PER_USER,
   SESSION_COOKIE,
 } from "@/server/auth/session";
+import { getDb } from "@/server/db/client";
+import { sessions } from "@/server/db/schema";
+import { eq } from "drizzle-orm";
 import { ApiError } from "@/lib/errors";
 import { PASSWORD_COPY } from "@/lib/password";
 import { truncateAll } from "../setup";
@@ -39,6 +44,11 @@ describe("auth", () => {
     expect(session.id).toMatch(/^[A-Za-z0-9_-]+$/);
     const found = await getSessionUser(session.id);
     expect(found?.id).toBe(user.id);
+    const rows = await getDb().select().from(sessions).where(eq(sessions.userId, user.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(hashSessionToken(session.id));
+    expect(rows[0].id).not.toBe(session.id);
+    expect(await getSessionUser(rows[0].id)).toBeNull();
   });
 
   it("rejects duplicate emails with the same generic error as any other failed sign-up", async () => {
@@ -116,12 +126,41 @@ describe("auth", () => {
     expect(purged).toBeGreaterThanOrEqual(1);
   });
 
+  it("deleteSession hashes the cookie value before deleting", async () => {
+    const { user, session } = await register({ email: "del@example.com", password: PW });
+    await deleteSession(session.id);
+    expect(await getSessionUser(session.id)).toBeNull();
+    const rows = await getDb().select().from(sessions).where(eq(sessions.userId, user.id));
+    expect(rows).toHaveLength(0);
+  });
+
   it("deleteSession is idempotent and handles null", async () => {
     await deleteSession(null);
     await deleteSession(undefined);
     await deleteSession("does-not-exist");
     expect(await getSessionUser(null)).toBeNull();
     expect(await getSessionUser("")).toBeNull();
+  });
+
+  it(`the ${MAX_SESSIONS_PER_USER + 1}th session for a user evicts the oldest`, async () => {
+    const { user, session: first } = await register({
+      email: "cap@example.com",
+      password: PW,
+    });
+    const kept: string[] = [];
+    const base = Date.now() + 1_000;
+    for (let i = 0; i < MAX_SESSIONS_PER_USER; i += 1) {
+      const created = await createSession(user.id, new Date(base + i * 1_000));
+      kept.push(created.id);
+    }
+    expect(await getSessionUser(first.id)).toBeNull();
+    for (const token of kept) {
+      expect(await getSessionUser(token)).not.toBeNull();
+    }
+    const rows = await getDb().select().from(sessions).where(eq(sessions.userId, user.id));
+    expect(rows).toHaveLength(MAX_SESSIONS_PER_USER);
+    expect(rows.map((r) => r.id)).not.toContain(hashSessionToken(first.id));
+    expect(rows.map((r) => r.id).sort()).toEqual(kept.map(hashSessionToken).sort());
   });
 
   it("sessionCookieOptions describes cookie shape", () => {

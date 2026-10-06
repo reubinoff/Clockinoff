@@ -1,10 +1,12 @@
-import { and, eq, gt, lt, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { and, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { sessions, users } from "@/server/db/schema";
 import { tokenId } from "@/lib/id";
 
 export const SESSION_COOKIE = "timely_session";
 export const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+export const MAX_SESSIONS_PER_USER = 20;
 
 export interface SessionUser {
   id: string;
@@ -13,16 +15,43 @@ export interface SessionUser {
 }
 
 export interface CreatedSession {
+  /** Raw cookie token. The DB stores only sha256(hex) of this value. */
   id: string;
   expiresAt: Date;
 }
 
+export function hashSessionToken(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
 export async function createSession(userId: string, now: Date = new Date()): Promise<CreatedSession> {
   const db = getDb();
-  const id = tokenId(32);
+  const rawToken = tokenId(32);
+  const tokenHash = hashSessionToken(rawToken);
   const expiresAt = new Date(now.getTime() + SESSION_DURATION_MS);
-  await db.insert(sessions).values({ id, userId, expiresAt });
-  return { id, expiresAt };
+  await db.transaction(async (tx) => {
+    await tx.insert(sessions).values({
+      id: tokenHash,
+      userId,
+      expiresAt,
+      createdAt: now,
+    });
+    const extras = await tx
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.userId, userId))
+      .orderBy(desc(sessions.createdAt), desc(sessions.id))
+      .offset(MAX_SESSIONS_PER_USER);
+    if (extras.length > 0) {
+      await tx.delete(sessions).where(
+        inArray(
+          sessions.id,
+          extras.map((row) => row.id),
+        ),
+      );
+    }
+  });
+  return { id: rawToken, expiresAt };
 }
 
 export async function getSessionUser(
@@ -31,6 +60,7 @@ export async function getSessionUser(
 ): Promise<SessionUser | null> {
   if (!sessionId) return null;
   const db = getDb();
+  const tokenHash = hashSessionToken(sessionId);
   const rows = await db
     .select({
       id: users.id,
@@ -40,7 +70,7 @@ export async function getSessionUser(
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
-    .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, now)))
+    .where(and(eq(sessions.id, tokenHash), gt(sessions.expiresAt, now)))
     .limit(1);
   const row = rows[0];
   if (!row) return null;
@@ -50,7 +80,7 @@ export async function getSessionUser(
 export async function deleteSession(sessionId: string | null | undefined): Promise<void> {
   if (!sessionId) return;
   const db = getDb();
-  await db.delete(sessions).where(eq(sessions.id, sessionId));
+  await db.delete(sessions).where(eq(sessions.id, hashSessionToken(sessionId)));
 }
 
 export async function purgeExpiredSessions(now: Date = new Date()): Promise<number> {

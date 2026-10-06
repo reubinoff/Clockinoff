@@ -127,7 +127,9 @@ There is no "reset my account" button. If you self-host, deleting rows
 from the `time_entries`, `projects`, `clients`, `tags`, and
 `time_entry_tags` tables (scoped by your `user_id`) is the supported
 path. Session rows in the `sessions` table are safe to clear as well —
-it just signs you out.
+it just signs you out. The cookie holds a random token; the table
+stores only a hash of it. A deploy that hashes session tokens at rest
+invalidates existing sessions, so everyone signs in once more.
 
 ## Light and dark
 

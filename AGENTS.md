@@ -438,9 +438,13 @@ Clockinoff has two sign-in paths that share one user table:
 
 1. **Email + password** (primary). Passwords are stored as **argon2id**
    hashes; the plaintext is never persisted or logged. Sessions are rows
-   in the `sessions` table, referenced by an
-   `httpOnly / SameSite=Lax` cookie called `timely_session` (also
-   `Secure` in production).
+   in the `sessions` table. The `timely_session` cookie carries a
+   high-entropy token; the row primary key is `sha256(token)` so a
+   database or backup leak is not enough to impersonate a user. Cookie
+   flags: `httpOnly` / `SameSite=Lax` (also `Secure` in production).
+   Expired rows are purged hourly from the Node instrumentation hook.
+   Each user is capped at 20 concurrent sessions; the oldest is evicted
+   on the 21st sign-in.
 2. **Continue with Google** (optional, deployer-configured). A single
    secondary button on `/login` and `/register` runs a server-side
    OAuth 2.0 / OIDC flow against Google, verifies the `id_token`, and
