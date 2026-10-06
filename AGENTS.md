@@ -60,6 +60,7 @@ tests/
 .github/              dependabot.yml (weekly npm + Actions updates)
   workflows/          ci.yml (test+build) + cd.yml (Azure Web App deploy)
                       + dependency-check.yml (manifest-change audit)
+                      + grype.yml (prod-deps / High+ fail / SARIF)
 ```
 
 ### Invariants an agent must not silently break
