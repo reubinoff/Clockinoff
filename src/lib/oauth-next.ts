@@ -24,9 +24,12 @@ const UNSAFE_PERCENT = /%(?:0[0-9A-Fa-f]|1[0-9A-Fa-f]|7[Ff]|5[Cc])/;
 
 export type OAuthIntent = "signin" | "connect";
 
-export type OAuthStatePayload =
-  | { s: string; n: string }
-  | { s: string; n: string; i: "connect"; uid: string };
+export interface OAuthStatePayload {
+  s: string;
+  n: string;
+  i?: OAuthIntent;
+  uid?: string;
+}
 
 export function readRequestCookie(req: Request, name: string): string | undefined {
   const raw = req.headers.get("cookie");
@@ -117,6 +120,12 @@ export function sanitiseNext(input: string | null | undefined, origin = SANITISE
   if (!input || typeof input !== "string") return DEFAULT_NEXT;
   if (input.length > 1024) return DEFAULT_NEXT;
   if (UNSAFE_CHAR.test(input) || UNSAFE_PERCENT.test(input)) return DEFAULT_NEXT;
+  // Bare tokens like `not-a-path` are same-origin relative paths after
+  // `new URL(input, origin)`. Only a leading `/` or an absolute URL is
+  // eligible — then the origin check decides.
+  if (!input.startsWith("/") && !/^[a-zA-Z][a-zA-Z+.-]*:/.test(input)) {
+    return DEFAULT_NEXT;
+  }
   let base: string;
   try {
     base = new URL(origin).origin;
