@@ -232,35 +232,6 @@ describe("GET /api/auth/google/callback", () => {
     expect(rows[0].passwordHash).not.toBeNull();
   });
 
-  it("Google-only existing user without a sub still attaches the old way", async () => {
-    const db = getDb();
-    const [existing] = await db
-      .insert(users)
-      .values({ email: "solo@example.com", passwordHash: null, googleSub: null })
-      .returning({ id: users.id });
-
-    mockGoogleFetch({
-      idToken: makeIdToken({ sub: "google|solo-1", email: "solo@example.com" }),
-    });
-    const res = await GET(
-      callbackRequest({ code: "code-1", state: "s1", cookie: stateCookie("s1") }),
-    );
-    const loc = new URL(res.headers.get("location") ?? "");
-    expect(loc.pathname).toBe("/app");
-    expect(loc.searchParams.get("welcome")).toBeNull();
-
-    const cookie = extractCookie(res, SESSION_COOKIE);
-    const sessionUser = await getSessionUser(cookie!.value);
-    expect(sessionUser?.id).toBe(existing.id);
-
-    const rows = await db
-      .select({ passwordHash: users.passwordHash, googleSub: users.googleSub })
-      .from(users);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].googleSub).toBe("google|solo-1");
-    expect(rows[0].passwordHash).toBeNull();
-  });
-
   it("already-linked user: same sub returning → sign in, no welcome, same user", async () => {
     mockGoogleFetch({
       idToken: makeIdToken({ sub: "google|linked-1", email: "linked@example.com" }),

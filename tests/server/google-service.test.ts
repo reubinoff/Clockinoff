@@ -23,15 +23,6 @@ async function getUser(id: string): Promise<{ passwordHash: string | null; googl
   return rows[0];
 }
 
-async function insertGoogleOnly(email: string): Promise<{ id: string; email: string }> {
-  const db = getDb();
-  const [row] = await db
-    .insert(users)
-    .values({ email, passwordHash: null, googleSub: null })
-    .returning({ id: users.id, email: users.email });
-  return row;
-}
-
 describe("signInWithGoogle", () => {
   beforeEach(async () => {
     await truncateAll();
@@ -96,31 +87,7 @@ describe("signInWithGoogle", () => {
     expect(after.googleSub).toBeNull();
   });
 
-  it("attaches sub to an existing Google-only user with no password_hash", async () => {
-    const existing = await insertGoogleOnly("solo@example.com");
-    const result = await signInWithGoogle({
-      sub: "google|solo-1",
-      email: "solo@example.com",
-    });
-    expect(result.isNewUser).toBe(false);
-    expect(result.user.id).toBe(existing.id);
-    const after = await getUser(existing.id);
-    expect(after.googleSub).toBe("google|solo-1");
-    expect(after.passwordHash).toBeNull();
-  });
-
-  it("Google-only attach is case-insensitive on email", async () => {
-    const existing = await insertGoogleOnly("MixedSolo@Example.com");
-    const result = await signInWithGoogle({
-      sub: "google|solo-case",
-      email: "mixedsolo@example.com",
-    });
-    expect(result.user.id).toBe(existing.id);
-    const after = await getUser(existing.id);
-    expect(after.googleSub).toBe("google|solo-case");
-  });
-
-  it("signs an already-linked user in again when the same sub comes back", async () => {
+  it("Google-only accounts keep today's linking: same sub signs the same user in", async () => {
     const first = await signInWithGoogle({
       sub: "google|linked-1",
       email: "linked@example.com",

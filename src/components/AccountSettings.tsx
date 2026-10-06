@@ -24,28 +24,24 @@ export default function AccountSettings({ email, methods }: Props): JSX.Element 
   const router = useRouter();
   const params = useSearchParams();
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const connected = params.get("google") === "connected";
+  const errorCode = params.get("error");
+  const error =
+    errorCode === "google_email_mismatch"
+      ? googleEmailMismatchMessage(email)
+      : errorCode === "network"
+        ? GOOGLE_AUTH_ERROR_COPY.network
+        : null;
 
   useEffect(() => {
-    if (params.get("google") === "connected") {
-      emitToast(GOOGLE_CONNECTED_TOAST);
-      router.replace("/app/account");
-      return;
-    }
-    const code = params.get("error");
-    if (code === "google_email_mismatch") {
-      setError(googleEmailMismatchMessage(email));
-      return;
-    }
-    if (code === "network") {
-      setError(GOOGLE_AUTH_ERROR_COPY.network);
-    }
-  }, [email, params, router]);
+    if (!connected) return;
+    emitToast(GOOGLE_CONNECTED_TOAST);
+    router.replace("/app/account");
+  }, [connected, router]);
 
   function connectGoogle(): void {
     setPending(true);
-    setError(null);
-    window.location.href = "/api/auth/google/start?intent=connect&next=%2Fapp%2Faccount";
+    window.location.assign("/api/auth/google/start?intent=connect&next=%2Fapp%2Faccount");
   }
 
   return (
