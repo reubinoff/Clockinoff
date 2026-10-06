@@ -34,7 +34,7 @@ export default function LibraryTabs(): JSX.Element {
                 aria-current={active ? "page" : undefined}
                 className={
                   "inline-flex items-center justify-center min-h-[36px] px-3 rounded-full text-body-sm transition-colors " +
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:ring-offset-2 focus-visible:ring-offset-canvas " +
+                  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:ring-offset-2 focus-visible:ring-offset-canvas " +
                   (active
                     ? "bg-accent-soft text-accent"
                     : "text-muted hover:text-ink hover:bg-canvas-2")

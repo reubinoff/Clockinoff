@@ -19,7 +19,7 @@ export function GooglePasswordAccountBanner({ onSignInWithPassword }: Props): JS
       <p className="text-sm text-ink">{GOOGLE_PASSWORD_ACCOUNT_COPY}</p>
       <button
         type="button"
-        className="btn auth-secondary-cta w-full !min-h-[44px]"
+        className="btn auth-secondary-cta w-full min-h-[44px]!"
         onClick={onSignInWithPassword}
       >
         {GOOGLE_PASSWORD_ACCOUNT_CTA}

@@ -78,8 +78,8 @@ export default function HeaderUserMenu({
         className={
           compact
             ? "inline-flex h-8 w-8 items-center justify-center rounded-full bg-canvas-2 text-body-sm font-medium text-ink " +
-              "hover:bg-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
-            : "btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2"
+              "hover:bg-border focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-ring"
+            : "btn btn-ghost min-h-[44px]! min-w-[44px]! px-2!"
         }
         aria-haspopup="menu"
         aria-expanded={open}

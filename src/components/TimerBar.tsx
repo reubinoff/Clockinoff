@@ -395,7 +395,7 @@ export default function TimerBar({
         </span>
         {running ? (
           <button
-            className="btn btn-primary press-scale shrink-0 min-h-[44px] !px-4"
+            className="btn btn-primary press-scale shrink-0 min-h-[44px] px-4!"
             disabled={pending}
             onClick={stop}
             aria-label="Stop timer"
@@ -410,7 +410,7 @@ export default function TimerBar({
             {showMobileManualBtn && (
               <button
                 type="button"
-                className="btn shrink-0 min-h-[44px] !px-3"
+                className="btn shrink-0 min-h-[44px] px-3!"
                 onClick={() => setManualSheetOpen(true)}
                 aria-label="Add manual entry"
                 data-timer-manual-mobile-btn="true"
@@ -420,7 +420,7 @@ export default function TimerBar({
               </button>
             )}
             <button
-              className="btn btn-primary timer-start-idle press-scale shrink-0 min-h-[44px] !px-4"
+              className="btn btn-primary timer-start-idle press-scale shrink-0 min-h-[44px] px-4!"
               disabled={pending}
               onClick={start}
               aria-label="Start timer"
@@ -584,7 +584,7 @@ export default function TimerBar({
           )}
           <button
             type="button"
-            className="btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2 shrink-0 md:order-7 hidden md:inline-flex"
+            className="btn btn-ghost min-h-[44px]! min-w-[44px]! px-2! shrink-0 md:order-7 hidden md:inline-flex"
             onClick={() => setDetailsOpen((v) => !v)}
             aria-expanded={detailsOpen}
             aria-controls="timer-details"

@@ -26,7 +26,7 @@ export function AuthShell({
       }}
     >
       <div className="w-full max-w-md">
-        <div className="rounded-[20px] border border-border bg-surface shadow-card-lg p-6 md:p-8 space-y-6">
+        <div className="rounded-radius-xl border border-border bg-surface shadow-card-lg p-6 md:p-8 space-y-6">
           <div className="flex items-center gap-3">
             <Mark size={40} />
             <span className="text-lg font-semibold leading-none tracking-[-0.01em] text-ink">

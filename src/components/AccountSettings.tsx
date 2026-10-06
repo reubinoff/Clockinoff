@@ -64,7 +64,7 @@ export default function AccountSettings({ email, methods }: Props): JSX.Element 
                 <span className="text-ink">Google</span>
                 <button
                   type="button"
-                  className="btn btn-primary !min-h-[40px] !px-4"
+                  className="btn btn-primary min-h-[40px]! px-4!"
                   onClick={connectGoogle}
                   disabled={pending}
                 >

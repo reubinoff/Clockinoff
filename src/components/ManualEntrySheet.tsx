@@ -106,7 +106,7 @@ export default function ManualEntrySheet({
           <button
             type="button"
             onClick={requestClose}
-            className="btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2"
+            className="btn btn-ghost min-h-[44px]! min-w-[44px]! px-2!"
             aria-label="Close"
           >
             <IconX size={18} aria-hidden />

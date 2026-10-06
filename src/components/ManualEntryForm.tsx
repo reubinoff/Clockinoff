@@ -221,7 +221,7 @@ export default function ManualEntryForm({
         type="time"
         className={
           inline
-            ? "input !min-h-[44px] w-[7.25rem] shrink-0 tabular-nums"
+            ? "input min-h-[44px]! w-29 shrink-0 tabular-nums"
             : "input tabular-nums"
         }
         value={startTime}
@@ -242,7 +242,7 @@ export default function ManualEntryForm({
         type="time"
         className={
           inline
-            ? "input !min-h-[44px] w-[7.25rem] shrink-0 tabular-nums"
+            ? "input min-h-[44px]! w-29 shrink-0 tabular-nums"
             : "input tabular-nums"
         }
         value={endTime}
@@ -263,7 +263,7 @@ export default function ManualEntryForm({
         type="date"
         className={
           inline
-            ? "input !min-h-[44px] w-[9.5rem] shrink-0 tabular-nums"
+            ? "input min-h-[44px]! w-38 shrink-0 tabular-nums"
             : "input tabular-nums"
         }
         value={date}

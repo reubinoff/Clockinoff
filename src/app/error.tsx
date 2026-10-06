@@ -48,7 +48,7 @@ export default function AppError({
         </div>
         {error?.digest ? (
           <p className="mt-5 text-xs text-muted">
-            Ref <code className="rounded bg-canvas-2 px-1.5 py-0.5">{error.digest}</code>
+            Ref <code className="rounded-sm bg-canvas-2 px-1.5 py-0.5">{error.digest}</code>
           </p>
         ) : null}
       </section>

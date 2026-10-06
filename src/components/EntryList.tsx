@@ -814,9 +814,9 @@ export default function EntryList({
                     the mobile timer dock (z-30) so neither is covered. */}
                 <header
                   className={
-                    "sticky top-[64px] z-[5] -mx-4 px-4 py-2.5 border-b border-border " +
-                    "bg-canvas-2/80 backdrop-blur supports-[backdrop-filter]:bg-canvas-2/70 " +
-                    "md:mx-0 md:top-[var(--app-header-h)] md:rounded-t-2xl md:border md:border-b-0 md:border-border " +
+                    "sticky top-[64px] z-5 -mx-4 px-4 py-2.5 border-b border-border " +
+                    "bg-canvas-2/80 backdrop-blur-sm supports-backdrop-filter:bg-canvas-2/70 " +
+                    "md:mx-0 md:top-(--app-header-h) md:rounded-t-2xl md:border md:border-b-0 md:border-border " +
                     "md:bg-canvas-2 md:px-3 md:py-2 md:backdrop-blur-0"
                   }
                   data-entries-week-header="true"
@@ -956,7 +956,7 @@ export default function EntryList({
                                         )}
                                       </div>
                                     </div>
-                                    <p className="text-body-sm text-ink line-clamp-2 break-words">
+                                    <p className="text-body-sm text-ink line-clamp-2 wrap-break-word">
                                       {e.description || (
                                         <span className="text-muted">
                                           No description
