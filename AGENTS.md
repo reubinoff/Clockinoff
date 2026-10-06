@@ -693,6 +693,34 @@ speak directly to Postgres via `DATABASE_URL`. They never take a
 password on the command line. Read the script `--help` / source for
 invocation — do not copy account-name patterns or emails into docs.
 
+---
+
+## Cursor Cloud specific instructions
+
+Cloud Agent VMs boot with Node 22 on `PATH`. This app requires Node ≥ 24.
+The environment install puts Node 24.21.0 in `/opt/node-v24.21.0` and
+symlinks `node`, `npm`, `npx`, and `corepack` into `~/.local/bin` (login
+shells prepend that directory) and `/usr/local/bin`. Confirm with
+`node -v` from a login shell before running npm.
+
+Postgres is the Docker Compose service in `docker-compose.yml` (image
+`postgres:16-alpine`, databases `timely` and `timely_test`, user/password
+`timely` / `timely`). Inside this nested VM the daemon must use the
+`fuse-overlayfs` storage driver and legacy iptables; `dockerd` is not
+running until the environment `start` script launches it. That script
+also copies `.env.example` to `.env` when `.env` is missing, waits until
+Postgres accepts connections, and applies migrations to both databases.
+`npm run dev` then listens on port 3000. There is no seed user — register
+at `/register`.
+
+Do not `source .env` in the shell before `npm test` or `npm run
+test:coverage`. `.env.example` sets `OAUTH_STATE_SECRET=placeholder`,
+which is shorter than 32 bytes on purpose. Vitest fills
+`OAUTH_STATE_SECRET` only when it is unset; a short exported value fails
+the Google OAuth route tests. Next.js loads `.env` for the dev server by
+itself. Google sign-in stays disabled when `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` are blank; email + password is the path to exercise.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
