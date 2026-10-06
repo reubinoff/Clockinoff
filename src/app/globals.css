@@ -45,9 +45,9 @@
     --glow-accent: rgba(109, 40, 217, 0.08);
     --border-accent-tint: rgba(109, 40, 217, 0.25);
 
-    /* #99a desktop table — height of the app's sticky header (brand strip +
-       nav + dock). Updated by a ResizeObserver in EntryList so the week
-       band's `top` offset tracks the dock expanding/collapsing. 64px is a
+    /* #99a desktop table — height of the sticky chrome (thin header + dock
+       band). Updated by a ResizeObserver in EntryList so the week band's
+       `top` offset tracks the dock expanding/collapsing. 64px is a
        sensible pre-hydration default matching the mobile brand strip. */
     --app-header-h: 64px;
   }
@@ -187,8 +187,18 @@
   }
   .nav-link {
     @apply inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-body-sm text-muted
+           whitespace-nowrap
            hover:text-ink hover:bg-canvas-2 transition-colors
            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:ring-offset-2 focus-visible:ring-offset-canvas;
+  }
+  /* #141 390 light Account ⋯ menu: Account / Log out must read as ink-2
+     on surface (≥4.5:1), not faint muted. Hover wash is canvas-2. */
+  .account-menu-item {
+    @apply flex w-full items-center justify-start rounded-lg px-2 py-2 text-body-sm
+           text-ink-2 whitespace-nowrap min-h-[44px]
+           hover:bg-canvas-2 hover:text-ink
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .nav-link-active {
     @apply text-ink;
@@ -589,7 +599,8 @@
      by the dock. We bump the padding to 22rem via :has() on the dock's
      `data-timer-details-open="true"` attribute whenever the dock is in its
      mobile position. md+ keeps `md:pb-6` from the layout — the dock there is
-     a header child, not a fixed overlay, so no padding bump is needed. */
+     a sticky chrome sibling under the thin header, not a fixed overlay, so
+     no padding bump is needed. */
   @media (max-width: 767px) {
     html:has([data-timer-dock-root][data-timer-details-open="true"]) main {
       padding-bottom: calc(22rem + env(safe-area-inset-bottom));

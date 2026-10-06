@@ -495,7 +495,7 @@ export default function TimerBar({
           // grabber is open. md+ keeps the one-baseline inline dock from
           // #64 (always visible). The desktop manual-form sub-tree still
           // hides the whole timer row via `md:hidden` on itself below.
-          "mx-auto max-w-6xl px-4 py-2 flex-col gap-2 md:flex md:flex-row md:flex-wrap md:items-center md:gap-3 " +
+          "mx-auto max-w-6xl px-4 py-2 flex-col gap-2 md:flex md:flex-row md:flex-nowrap md:items-center md:gap-3 " +
           (detailsOpen ? "flex " : "hidden ") +
           (manualActive ? "md:hidden" : "")
         }
@@ -508,7 +508,7 @@ export default function TimerBar({
             far right without breaking the dock order. Mobile keeps the
             calm stack (description → duration + Start → optional Details). */}
         <input
-          className="input w-full md:flex-1 md:w-auto md:min-w-[280px] md:order-1"
+          className="input w-full md:flex-1 md:w-auto md:min-w-0 md:order-1"
           placeholder="What are you working on?"
           value={description}
           onChange={(e) => setDescription(e.target.value)}

@@ -17,7 +17,11 @@ export default function LogoutButton(): JSX.Element {
     }
   }
   return (
-    <button className="btn btn-ghost btn-sm" onClick={logout} disabled={pending}>
+    <button
+      className="btn btn-ghost btn-sm whitespace-nowrap"
+      onClick={logout}
+      disabled={pending}
+    >
       {pending ? "…" : "Log out"}
     </button>
   );

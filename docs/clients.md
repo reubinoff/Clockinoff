@@ -20,7 +20,9 @@ Clients group projects for reporting. They are optional — a project can
 live without a client — but attaching them makes filtering and exports
 more useful.
 
-Manage clients at `/app/clients`.
+Manage clients at `/app/clients`. On desktop, open **Library** in the
+top nav and pick **Clients**. On a phone, tap the **Library** tab, then
+the Clients segment.
 
 Before you add your first client the page shows:
 

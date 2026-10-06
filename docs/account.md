@@ -23,11 +23,14 @@ per account, no roles, no invitations, no billing.
 
 ## Your email
 
-The email you registered with is your login and appears in the top-right
-of every `/app/*` page.
+The email you registered with is your login. On a wide desktop it
+appears in the top-right of every `/app/*` page next to **Account**,
+**Docs**, **Appearance**, and **Log out**. Around tablet width those
+controls collapse into an account menu (your initial) so the header
+does not overflow.
 
-Open **Account** from the header (desktop) or the account menu (mobile)
-to see your sign-in methods.
+Open **Account** from the header (wide desktop) or the account menu
+(tablet and phone) to see your sign-in methods.
 
 The v1 UI does not include a "change email" flow. Support for that is a
 future improvement.
@@ -104,7 +107,9 @@ displayed.
 Clockinoff has a light and a dark theme. Pick one from the **Appearance**
 control:
 
-- On desktop, next to your email in the top-right of every `/app/*` page.
+- On a wide desktop, next to your email in the top-right of every
+  `/app/*` page.
+- On tablet, inside the compact account menu (your initial).
 - On mobile, inside the account menu (`⋯` button in the header) above
   **Log out**.
 
@@ -125,7 +130,8 @@ keeps its own choice.
 
 ## Sign out
 
-Click **Sign out** in the top-right of `/app/*`. Clockinoff:
+Click **Log out** in the top-right of `/app/*` (or inside the account
+menu on tablet and phone). Clockinoff:
 
 1. Deletes your session row in the database.
 2. Clears the `timely_session` cookie in your browser.

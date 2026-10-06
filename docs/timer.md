@@ -29,7 +29,8 @@ start/end times — see [Add a manual entry](#add-a-manual-entry) below.
 
 The timer dock is always visible while you're signed in:
 
-- **Desktop** — it sticks to the top of the page under the site header.
+- **Desktop** — it sits as a full-width band under the thin site header
+  and sticks with that chrome as you scroll.
   A quiet **Timer | Manual** segmented toggle sits above the dock while
   idle so you can switch between starting a live timer and logging past
   time (see [Add a manual entry](#add-a-manual-entry)).

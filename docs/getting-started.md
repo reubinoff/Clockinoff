@@ -159,7 +159,7 @@ whether the email is registered.
 - Your session is stored in the database and referenced by an
   `httpOnly / SameSite=Lax` cookie called `timely_session`.
 - In production the cookie is also `Secure` (HTTPS-only).
-- To end the session, use the **Sign out** button in the top right of
+- To end the session, use the **Log out** control in the top right of
   `/app/*` — this deletes the row in the sessions table and clears the
   cookie.
 
@@ -169,18 +169,25 @@ whether the email is registered.
 
 At the top of every `/app/*` page you get two rows:
 
-1. **Nav bar** with links to Timer, Projects, Clients, Tags, Export, plus
-   your email and a **Sign out** button.
-2. **Timer bar** with a description field, project dropdown, billable
-   ($) toggle, elapsed time, and a **Start** button (or **Stop** /
-   **Discard** while a timer is running).
+1. **Thin header** with the Clockinoff mark, top nav (**Timer**,
+   **Library**, **Reports**, **Export**), and the account cluster.
+   **Library** is sentence case and groups **Projects**, **Clients**,
+   and **Tags** in a menu — there is no left sidebar. On a wide desktop
+   the account cluster is your email, **Account**, **Docs**,
+   **Appearance**, and **Log out** on one line. Around tablet width
+   that cluster collapses to your initial so the header stays full
+   width and never scrolls sideways.
+2. **Timer dock** as a full-width band *under* the header (not inside
+   it) with a description field, project dropdown, billable toggle,
+   elapsed time, and a **Start** button (or **Stop** / **Discard**
+   while a timer is running).
 
-On phones the chrome collapses to a bottom tab bar with three tabs —
-**Timer**, **Library**, and **Export** — where **Library** groups the
-projects, clients, and tags pages and defaults to projects. Inside
-Library, a **Projects / Clients / Tags** segment control at the top of
-the page lets you switch between the three. Your email and **Log out**
-live in an overflow menu in the top header.
+On phones the chrome stays a bottom tab bar — **Timer**, **Library**,
+**Reports**, and **Export** — where **Library** groups the projects,
+clients, and tags pages and defaults to projects. Inside Library, a
+**Projects / Clients / Tags** segment control at the top of the page
+lets you switch between the three. **Docs** stays in the top header;
+**Account** and **Log out** live in the overflow menu (`⋯`) there.
 
 The main area shows recent time entries, which are populated once you start
 using the timer.

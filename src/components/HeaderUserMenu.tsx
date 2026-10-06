@@ -5,17 +5,29 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { IconMore } from "@/components/icons";
 import AppearanceSelect from "@/components/AppearanceSelect";
+import { DOCS_URL } from "@/lib/docs";
 
 interface Props {
   email: string;
+  variant: "mobile" | "compact";
 }
 
-export default function HeaderUserMenu({ email }: Props): JSX.Element {
+function initialFromEmail(email: string): string {
+  const trimmed = email.trim();
+  if (!trimmed) return "?";
+  return trimmed[0].toUpperCase();
+}
+
+export default function HeaderUserMenu({
+  email,
+  variant,
+}: Props): JSX.Element {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const compact = variant === "compact";
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -54,17 +66,31 @@ export default function HeaderUserMenu({ email }: Props): JSX.Element {
   }
 
   return (
-    <div ref={containerRef} className="relative md:hidden">
+    <div
+      ref={containerRef}
+      className={
+        "relative " + (compact ? "hidden md:block xl:hidden" : "md:hidden")
+      }
+    >
       <button
         ref={buttonRef}
         type="button"
-        className="btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2"
+        className={
+          compact
+            ? "inline-flex h-8 w-8 items-center justify-center rounded-full bg-canvas-2 text-body-sm font-medium text-ink " +
+              "hover:bg-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
+            : "btn btn-ghost !min-h-[44px] !min-w-[44px] !px-2"
+        }
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account menu"
         onClick={() => setOpen((v) => !v)}
       >
-        <IconMore size={20} aria-hidden />
+        {compact ? (
+          <span aria-hidden>{initialFromEmail(email)}</span>
+        ) : (
+          <IconMore size={20} aria-hidden />
+        )}
       </button>
       {open && (
         <div
@@ -83,15 +109,30 @@ export default function HeaderUserMenu({ email }: Props): JSX.Element {
             <Link
               href="/app/account"
               role="menuitem"
-              className="btn btn-ghost w-full justify-start !min-h-[44px]"
+              className="account-menu-item"
               onClick={close}
             >
               Account
             </Link>
           </div>
-          {/* V2-10 Dark #10: Appearance lives in the mobile account
-              overflow, above Log out, alongside the desktop pref. Same
-              locked `timely.appearance` key backs both. */}
+          {compact ? (
+            <div role="none" className="border-t border-border mt-1 pt-1">
+              <a
+                role="menuitem"
+                className="account-menu-item"
+                href={DOCS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={close}
+              >
+                Docs
+              </a>
+            </div>
+          ) : null}
+          {/* V2-10 Dark #10: Appearance lives in the account overflow,
+              above Log out, alongside the desktop pref. Same locked
+              `timely.appearance` key backs both. #140 owns the
+              desktop-vs-mobile select mismatch — do not restyle here. */}
           <div role="none" className="border-t border-border mt-1 pt-1">
             <AppearanceSelect variant="menu" />
           </div>
@@ -99,7 +140,7 @@ export default function HeaderUserMenu({ email }: Props): JSX.Element {
             <button
               type="button"
               role="menuitem"
-              className="btn btn-ghost w-full justify-start !min-h-[44px]"
+              className="account-menu-item"
               onClick={logout}
               disabled={pending}
             >

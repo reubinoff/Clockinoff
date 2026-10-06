@@ -25,72 +25,89 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   return (
-    <div className="min-h-screen flex flex-col bg-canvas">
-      <header
-        className="border-b border-border bg-surface sticky top-0 z-20"
+    <div className="min-h-screen flex flex-col bg-canvas min-w-0">
+      {/* Shell B: sticky chrome wrapper is header + dock so #99's
+          `--app-header-h` measures both. The <header> itself is the thin
+          brand/nav/account row only — the dock is a sibling band under it,
+          not a child of the header element. */}
+      <div
+        className="sticky top-0 z-20 w-full min-w-0 left-0 right-0"
         data-app-header="true"
       >
-        <div className="mx-auto max-w-6xl px-4 py-2.5 flex items-center gap-6">
-          <Link
-            href="/app"
-            className="inline-flex items-center gap-2 font-semibold tracking-tight text-ink shrink-0"
-            aria-label="Clockinoff home"
-          >
-            <Mark size={24} />
-            <span className="text-sm">Clockinoff</span>
-          </Link>
-          <div className="hidden md:block">
-            <AppNav />
-          </div>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <span
-              className="text-muted max-w-[180px] truncate hidden md:inline"
-              title={user.email}
-            >
-              {user.email}
-            </span>
+        <header className="w-full min-w-0 border-b border-border bg-surface">
+          <div className="mx-auto flex w-full max-w-6xl min-w-0 flex-nowrap items-center gap-3 px-4 py-2">
             <Link
-              href="/app/account"
-              className="text-muted hover:text-ink underline underline-offset-2 hidden md:inline"
+              href="/app"
+              className="inline-flex items-center gap-2 font-semibold tracking-tight text-ink shrink-0"
+              aria-label="Clockinoff home"
             >
-              Account
+              <Mark size={24} />
+              <span className="text-sm">Clockinoff</span>
             </Link>
-            <a
-              className="text-muted hover:text-ink underline underline-offset-2"
-              href={DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Open user documentation in a new tab"
-            >
-              Docs
-            </a>
-            <div className="hidden md:block">
-              {/* V2-10 Dark #10: Appearance picker sits in the desktop
-                  account cluster next to email · docs · Log out. */}
-              <AppearanceSelect />
+            <div className="hidden min-w-0 md:block">
+              <AppNav />
             </div>
-            <div className="hidden md:block">
-              <LogoutButton />
+            <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2 text-sm">
+              {/* xl+ account cluster: email · Account · Docs · Appearance ·
+                  Log out on one baseline. At 768 the compact menu below
+                  replaces this so the header cannot overflow (#141). */}
+              <div className="hidden xl:flex items-center gap-3">
+                <span
+                  className="text-muted max-w-[180px] truncate"
+                  title={user.email}
+                >
+                  {user.email}
+                </span>
+                <Link
+                  href="/app/account"
+                  className="text-muted hover:text-ink underline underline-offset-2 whitespace-nowrap"
+                >
+                  Account
+                </Link>
+                <a
+                  className="text-muted hover:text-ink underline underline-offset-2 whitespace-nowrap"
+                  href={DOCS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Open user documentation in a new tab"
+                >
+                  Docs
+                </a>
+                <AppearanceSelect />
+                <LogoutButton />
+              </div>
+              <HeaderUserMenu email={user.email} variant="compact" />
+              <a
+                className="text-muted hover:text-ink underline underline-offset-2 whitespace-nowrap md:hidden"
+                href={DOCS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open user documentation in a new tab"
+              >
+                Docs
+              </a>
+              <HeaderUserMenu email={user.email} variant="mobile" />
             </div>
-            <HeaderUserMenu email={user.email} />
           </div>
-        </div>
+        </header>
         <div
           className={
-            // Docked bottom on mobile (above tab bar), inline in header on desktop.
-            // safe-area-inset-bottom only lives on the tab bar; the dock sits
-            // exactly above it so the inset is not applied twice.
-            "md:static md:z-auto md:inset-x-auto md:bottom-auto " +
+            // Docked bottom on mobile (above tab bar), full-bleed band
+            // under the thin header on desktop. Not a header child.
+            // safe-area-inset-bottom only lives on the tab bar; the dock
+            // sits exactly above it so the inset is not applied twice.
+            "w-full md:static md:z-auto md:inset-x-auto md:bottom-auto " +
             "fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 " +
             "shadow-[0_-1px_2px_rgba(17,24,39,0.04)] md:shadow-none"
           }
+          data-app-dock="true"
         >
           <TimerBar timezone={user.timezone} />
         </div>
-      </header>
+      </div>
       <main
         className={
-          "flex-1 mx-auto max-w-6xl w-full px-4 py-6 " +
+          "flex-1 mx-auto max-w-6xl w-full min-w-0 px-4 py-6 " +
           // #82 Reserve room for docked timer + bottom tab bar on mobile.
           // The dock is now a thin collapsed band by default (grabber + one
           // row of description/elapsed/primary), so the base reservation is

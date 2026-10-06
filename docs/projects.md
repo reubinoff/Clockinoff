@@ -20,7 +20,9 @@ Projects are the primary way to group entries. Each project can be
 attached to a **Client**, and can carry a **default billable** flag and
 **default rate** that new entries inherit.
 
-Manage projects at `/app/projects`.
+Manage projects at `/app/projects`. On desktop, open **Library** in the
+top nav and pick **Projects**. On a phone, tap the **Library** tab
+(then the Projects segment if you landed on another library page).
 
 When you have no projects yet the page shows the nudge:
 

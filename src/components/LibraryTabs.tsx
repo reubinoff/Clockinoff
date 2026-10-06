@@ -19,8 +19,9 @@ export default function LibraryTabs(): JSX.Element {
   return (
     <nav
       aria-label="Library"
-      // Mobile-first: only shown where the desktop five-link AppNav is
-      // hidden. Desktop already surfaces these routes in the top nav.
+      // Mobile-first: desktop surfaces Projects / Clients / Tags under the
+      // top-nav Library group. This segment stays on the library pages
+      // below md so the bottom-tab Library landing can switch children.
       className="md:hidden mb-4"
     >
       <ul className="inline-flex items-center gap-1 rounded-full border border-border bg-surface p-1">

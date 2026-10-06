@@ -204,12 +204,13 @@ export default function EntryList({
   }, [timerRunning]);
 
   // #99a desktop sticky week band: the band pins to `top: var(--app-header-h)`
-  // on md+ because the app header's height is not stable (the TimerBar
-  // dock can expand its Details panel inside it). A ResizeObserver on the
-  // layout header writes the current height to the CSS variable, so the
-  // week band always sits flush under whichever chrome is currently
-  // showing. The variable has a pre-hydration default of 64px set in
-  // globals.css so there's no first-paint jump before the observer runs.
+  // on md+ because sticky chrome height is not stable (thin header + TimerBar
+  // dock; Details can expand the dock). A ResizeObserver on the chrome
+  // wrapper (`[data-app-header=true]`, header + dock) writes the current
+  // height to the CSS variable, so the week band always sits flush under
+  // whichever chrome is currently showing. The variable has a pre-hydration
+  // default of 64px set in globals.css so there's no first-paint jump
+  // before the observer runs.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const header = document.querySelector(

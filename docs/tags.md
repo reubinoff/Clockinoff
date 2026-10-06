@@ -20,7 +20,9 @@ Tags are lightweight labels you can attach to individual time entries.
 They are handy for slicing your hours by kind of work (e.g. `research`,
 `meetings`, `deep-work`) without spinning up a full project.
 
-Manage tags at `/app/tags`.
+Manage tags at `/app/tags`. On desktop, open **Library** in the top nav
+and pick **Tags**. On a phone, tap the **Library** tab, then the Tags
+segment.
 
 Before you add your first tag the page shows:
 
