@@ -9,14 +9,15 @@ import {
   googleEmailMismatchMessage,
   googlePasswordAccountLoginPath,
   isGooglePasswordAccountError,
+  isGoogleUnavailableError,
 } from "@/lib/google-auth-errors";
 
 describe("googleAuthErrorMessage", () => {
-  it("maps the locked codes to Dana's exact copy", () => {
+  it("maps the locked user-fault codes to Dana's exact copy", () => {
     expect(googleAuthErrorMessage("cancelled")).toBe("Google sign-in was cancelled.");
     expect(googleAuthErrorMessage("unverified")).toBe("Google email isn't verified.");
     expect(googleAuthErrorMessage("network")).toBe("Couldn't connect to Google. Try again.");
-    expect(googleAuthErrorMessage("unavailable")).toBe(
+    expect(GOOGLE_AUTH_ERROR_COPY.unavailable).toBe(
       "Google sign-in isn't available right now. Sign in with your email and password, or try again later.",
     );
   });
@@ -31,6 +32,12 @@ describe("googleAuthErrorMessage", () => {
     expect(isGooglePasswordAccountError(GOOGLE_PASSWORD_ACCOUNT_ERROR)).toBe(true);
     expect(isGooglePasswordAccountError("network")).toBe(false);
     expect(googleAuthErrorMessage(GOOGLE_PASSWORD_ACCOUNT_ERROR)).toBeNull();
+  });
+
+  it("does not paint unavailable as a red user-fault error", () => {
+    expect(isGoogleUnavailableError("unavailable")).toBe(true);
+    expect(isGoogleUnavailableError("network")).toBe(false);
+    expect(googleAuthErrorMessage("unavailable")).toBeNull();
   });
 
   it("falls back to the generic network copy for unknown codes (never leaks the raw code)", () => {

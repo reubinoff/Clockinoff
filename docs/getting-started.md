@@ -69,25 +69,31 @@ What happens behind the scenes depends on your Google email:
   again.
 - **You already have a Clockinoff password for that email.** Clockinoff
   does **not** attach Google automatically. You land back on `/login`
-  with an info banner: *"This email already has a Clockinoff password.
-  Sign in with it first, then connect Google from Settings."* The
-  email field is not filled in; **Sign in with password** focuses it
-  so you can type. Sign in with your password, then open **Account**
+  with an info banner at the top of the card (above Email): *"This
+  email already has a Clockinoff password. Sign in with it first,
+  then connect Google from Settings."* The email field is not filled
+  in. **Sign in with password** is a secondary outline button — it
+  focuses Email so you can type. **Log in** stays the only solid
+  purple action. Sign in with your password, then open **Account**
   and click **Connect Google**.
 - **You already have a Google-only Clockinoff account (no password)
   with the same email.** We attach your Google identity and sign you
   in — same as a first-time Google sign-in returning later.
 - **Your Google email is not verified.** Clockinoff refuses to sign you
-  in and shows *"Google email isn't verified."* Verify the email in
-  your Google account, then try again.
-- **You cancel at Google's screen.** You come back to `/login` with
-  *"Google sign-in was cancelled."* No account change, no session.
-- **Network / other failure.** You come back to `/login` with
-  *"Couldn't connect to Google. Try again."*
-- **Google isn't configured on this instance.** You come back to
-  `/login` with *"Google sign-in isn't available right now. Sign in
-  with your email and password, or try again later."* Email and
-  password still work.
+  in and shows a red message under **Continue with Google**:
+  *"Google email isn't verified."* Verify the email in your Google
+  account, then try again.
+- **You cancel at Google's screen.** You come back to `/login` with a
+  red message under **Continue with Google**: *"Google sign-in was
+  cancelled."* No account change, no session.
+- **Network / other failure.** You come back to `/login` with a red
+  message under **Continue with Google**: *"Couldn't connect to
+  Google. Try again."*
+- **Google isn't configured on this instance.** A neutral info banner
+  at the top of the sign-in card (above Email) says *"Google sign-in
+  isn't available right now. Sign in with your email and password, or
+  try again later."* It is not a red error. Email and password still
+  work.
 
 The Google button is deliberately a secondary visual — email/password
 remains the primary purple action. The icon is Google's official

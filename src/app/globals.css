@@ -146,6 +146,18 @@
   .btn-ghost {
     @apply border-transparent bg-transparent text-muted hover:text-ink hover:bg-canvas-2;
   }
+  /* Auth refusal CTA — secondary outline/ghost. Surface fill, soft accent
+     border, hover canvas-2, focus via .btn's accent-ring. Light label is
+     accent (≥4.5:1 on surface). Dark accent-as-small-text fails AA, so the
+     label stays ink. Never bg-accent + white — Log in is the only solid
+     purple primary on the card. */
+  .auth-secondary-cta {
+    @apply bg-surface text-ink hover:bg-canvas-2;
+    border-color: var(--border-accent-tint);
+  }
+  html[data-theme="light"] .auth-secondary-cta {
+    color: var(--color-accent);
+  }
   .input {
     @apply w-full rounded-xl border border-border-strong bg-surface px-3 py-2 text-body min-h-[48px]
            placeholder:text-muted focus:outline-none focus-visible:outline-none

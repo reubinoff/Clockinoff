@@ -131,6 +131,16 @@ export const IconAlert = makeIcon(
   </>,
 );
 
+// Neutral info (circle + i). Used for our-side notices so they never share
+// the red ! glyph that marks user-fault / transport errors.
+export const IconInfo = makeIcon(
+  <>
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="8" r="0.5" fill="currentColor" />
+    <path d="M12 11.5V17" />
+  </>,
+);
+
 export const IconSearch = makeIcon(
   <>
     <circle cx="11" cy="11" r="6" />

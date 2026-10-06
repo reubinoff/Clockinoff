@@ -8,10 +8,12 @@ import { PasswordField } from "@/components/auth/PasswordField";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { GooglePasswordAccountBanner } from "@/components/auth/GooglePasswordAccountBanner";
+import { GoogleUnavailableBanner } from "@/components/auth/GoogleUnavailableBanner";
 import { IconAlert } from "@/components/icons";
 import {
   googleAuthErrorMessage,
   isGooglePasswordAccountError,
+  isGoogleUnavailableError,
 } from "@/lib/google-auth-errors";
 import { sanitiseNext } from "@/lib/oauth-next-path";
 
@@ -33,6 +35,7 @@ function LoginForm(): JSX.Element {
   const next = params.get("next") || "/app";
   const errorCode = params.get("error");
   const showPasswordAccountBanner = isGooglePasswordAccountError(errorCode);
+  const showUnavailableBanner = isGoogleUnavailableError(errorCode);
   const googleErrorFromQuery = googleAuthErrorMessage(errorCode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -105,6 +108,8 @@ function LoginForm(): JSX.Element {
     >
       {showPasswordAccountBanner ? (
         <GooglePasswordAccountBanner onSignInWithPassword={focusEmail} />
+      ) : showUnavailableBanner ? (
+        <GoogleUnavailableBanner />
       ) : null}
       <form onSubmit={submit} className="space-y-4" noValidate>
         <div className="space-y-1">

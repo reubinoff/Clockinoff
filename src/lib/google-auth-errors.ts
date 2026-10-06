@@ -1,8 +1,10 @@
 // Exact copy locked by Dana (Google auth brief, 2026-10-01, plus #122
 // password-account refusal, 2026-10-06).
 // Login / register map `?error=<code>` from the OAuth callback to one of
-// these strings. `google_password_account` is an info banner, not a red
-// error — it is handled separately so we never paint it as danger.
+// these strings. `google_password_account` and `unavailable` are top-of-card
+// notices, not red errors — they are handled separately so we never paint
+// them as danger. User-fault codes (`cancelled`, `unverified`, `network`)
+// stay on the danger strip under Continue with Google.
 
 export type GoogleAuthErrorCode = "cancelled" | "unverified" | "network" | "unavailable";
 
@@ -27,10 +29,16 @@ export function isGooglePasswordAccountError(code: string | null | undefined): b
   return code === GOOGLE_PASSWORD_ACCOUNT_ERROR;
 }
 
+export function isGoogleUnavailableError(code: string | null | undefined): boolean {
+  return code === "unavailable";
+}
+
 export function googleAuthErrorMessage(code: string | null | undefined): string | null {
   if (!code) return null;
+  // Top-of-card notices (refusal + our-side outage) — never the red strip.
   if (isGooglePasswordAccountError(code)) return null;
-  if (code === "cancelled" || code === "unverified" || code === "network" || code === "unavailable") {
+  if (isGoogleUnavailableError(code)) return null;
+  if (code === "cancelled" || code === "unverified" || code === "network") {
     return GOOGLE_AUTH_ERROR_COPY[code];
   }
   // Unknown but non-empty → use the generic network copy. We never pass a
