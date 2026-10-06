@@ -1157,9 +1157,9 @@ function WeekTable({
             </th>
             <th
               scope="col"
-              className="hidden lg:table-cell text-label uppercase text-muted font-medium px-2"
+              className="w-0 max-w-0 overflow-hidden p-0 text-label uppercase text-muted font-medium lg:w-auto lg:max-w-none lg:px-2"
             >
-              Tags
+              <span className="hidden lg:inline">Tags</span>
             </th>
             <th
               scope="col"
@@ -1344,8 +1344,8 @@ function EntryTableRow({
           )}
         </div>
       </td>
-      <td className="hidden lg:table-cell px-2 align-middle">
-        <div className="flex items-center gap-1.5 flex-nowrap min-w-0 overflow-hidden">
+      <td className="w-0 max-w-0 p-0 overflow-hidden align-middle lg:w-auto lg:max-w-none lg:px-2">
+        <div className="hidden lg:flex items-center gap-1.5 flex-nowrap min-w-0 overflow-hidden">
           {visibleTags.map((t) => (
             <span key={t} className="tag entry-meta-chip truncate max-w-[80px]" title={t}>
               {t}
@@ -1501,8 +1501,10 @@ function RunningTableRow({
           </p>
         </div>
       </td>
-      <td className="hidden lg:table-cell px-2 align-middle">
-        <span className="text-xs text-muted">Controlled from the timer</span>
+      <td className="w-0 max-w-0 p-0 overflow-hidden align-middle lg:w-auto lg:max-w-none lg:px-2">
+        <span className="hidden lg:inline text-xs text-muted">
+          Controlled from the timer
+        </span>
       </td>
       <td className="px-2 align-middle">
         <span className="text-xs text-muted tabular-nums">

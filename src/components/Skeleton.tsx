@@ -54,8 +54,8 @@ function SkeletonTableRow(): JSX.Element {
       <td className="px-2 align-middle">
         <SkeletonBar width="60%" height="0.75rem" />
       </td>
-      <td className="hidden lg:table-cell px-2 align-middle">
-        <SkeletonBar width="120px" height="0.65rem" />
+      <td className="w-0 max-w-0 p-0 overflow-hidden align-middle lg:w-auto lg:max-w-none lg:px-2">
+        <SkeletonBar width="120px" height="0.65rem" className="hidden lg:inline-block" />
       </td>
       <td className="px-2 align-middle">
         <SkeletonBar width="88px" height="0.65rem" />
@@ -90,7 +90,7 @@ export function SkeletonDaySection({ rows = 3 }: { rows?: number }): JSX.Element
           <colgroup>
             <col className="w-[128px] lg:w-[168px]" />
             <col />
-            <col className="hidden lg:table-column w-[176px]" />
+            <col className="w-0 lg:w-[176px]" />
             <col className="w-[104px] lg:w-[112px]" />
             <col className="w-[80px] lg:w-[88px]" />
             <col className="w-[108px]" />
