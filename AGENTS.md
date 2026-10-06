@@ -320,7 +320,8 @@ is done.
   sync, no analytics SDKs, no additional OAuth providers, no telemetry
   SDKs). The existing **Continue with Google** OAuth path on `/login`
   and `/register` is in-scope and may be maintained; do not remove it
-  or regress its account-attach rules without an explicit ask.
+  or re-introduce auto-attach of Google onto an account that already
+  has `password_hash` (see [§12](#12-authentication) / #122).
 - Do **not** relax the coverage gate, the timer unique index, the
   `start_at < end_at` check, or ownership scoping to make a test pass.
 - Do **not** rewrite committed migrations. Add a new one.
@@ -443,31 +444,37 @@ Clockinoff has two sign-in paths that share one user table:
 2. **Continue with Google** (optional, deployer-configured). A single
    secondary button on `/login` and `/register` runs a server-side
    OAuth 2.0 / OIDC flow against Google, verifies the `id_token`, and
-   issues the same session cookie as the password path. Account rules:
-   - **Verified email, no existing user** → create a passwordless user,
-     attach the Google `sub`, sign in.
-   - **Verified email, existing user without a Google `sub`** → attach
-     the `sub` to that user. The existing password keeps working;
-     nothing is replaced.
-   - **Verified email, existing user with the same `sub`** → sign in.
-   - **Verified email, existing user with a *different* `sub`** →
-     fail closed (anomaly; never show "account exists").
+   issues the same session cookie as the password path. Account rules
+   (Shaul / #122):
+   - **Verified email, no existing user** → create a Google-only user
+     (no `password_hash`), attach the Google `sub`, sign in.
+   - **Verified email, existing user already linked to this `sub`** →
+     sign in.
+   - **Verified email, existing Google-only user** (no
+     `password_hash`) → keep today's linking: attach the `sub` if
+     missing; a *different* `sub` fails closed.
+   - **Verified email, existing user with `password_hash` and no
+     matching `sub`** → Google **never** auto-attaches. Refuse and
+     tell the user to sign in with their password, then link Google
+     from Settings.
    - **Email not verified at Google** → fail closed.
 
-Do not regress these attach-vs-create rules without an explicit ask.
-The user-facing walkthrough is
-[`docs/getting-started.md`](./docs/getting-started.md#or-continue-with-google).
+Do not document or re-introduce auto-attach onto a password account.
+That path is a pre-hijack (#122) and is not current behaviour. The
+Settings "link Google" flow is the only way to attach Google to an
+account that already has `password_hash`. In-app `/docs` follow when
+#122 ships — do not copy the old attach-to-password wording forward.
 
 ### Google env vars
 
-Set in [`.env.example`](./.env.example) locally and in Azure Web App
-Configuration (or your platform's equivalent) in production:
+Set in [`.env.example`](./.env.example) locally and in the Web App
+configuration (or your platform's equivalent) in production:
 
 | Variable | Required | Notes |
 |---|---|---|
 | `GOOGLE_CLIENT_ID` | Yes to enable the button | OAuth 2.0 client ID from Google Cloud Console |
 | `GOOGLE_CLIENT_SECRET` | Yes to enable the button | Matching client secret |
-| `GOOGLE_REDIRECT_URI` | Optional | Overrides the default `<NEXTAUTH_URL>/api/auth/google/callback`. Production value is `https://clockinoff.reubinoff.com/api/auth/google/callback` |
+| `GOOGLE_REDIRECT_URI` | Optional | Overrides the default `<NEXTAUTH_URL>/api/auth/google/callback`. Production value is `<prod-callback>` |
 
 Leave `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` blank and the
 `/api/auth/google/start` route fail-closes to `/login?error=network` —
@@ -513,8 +520,8 @@ and UI render in the user's TZ. All day-boundary math goes through
   check; Dependabot covers the weekly scan.
 - **[`cd.yml`](./.github/workflows/cd.yml)** — pushes to `main` build the
   Next.js standalone bundle, run two pre-deploy smoke tests (argon2 native
-  load + a tiny PDF render), and deploy to the **`clockinoff-prod`** Azure
-  Web App via OIDC.
+  load + a tiny PDF render), and deploy to the production Azure Web App
+  (`<webapp>`) via OIDC.
 
 ---
 
@@ -536,8 +543,8 @@ of truth; the short version is:
    | `NEXTAUTH_URL` | Public URL of your Web App |
    | `NODE_ENV` | `production` |
    | `WEBSITE_NODE_DEFAULT_VERSION` | `~24` |
-   | `PG_MIGRATOR_CLIENT_ID` | ClientId of the migrator UAMI assigned to the Web App (required when `PG_AZURE_AD_AUTH=1`; see [Entra / Managed Identity for Postgres](#entra--managed-identity-for-postgres-optional)) |
-   | `PG_MIGRATOR_PG_USER` | Optional override for the Postgres role the migrate step connects as under `PG_AZURE_AD_AUTH=1`. Defaults to `uami-clockinoff-migrator`; leave unset in prod |
+   | `PG_MIGRATOR_CLIENT_ID` | ClientId of the migrator UAMI (`<migrator-uami>`) assigned to the Web App (required when `PG_AZURE_AD_AUTH=1`; see [Entra / Managed Identity for Postgres](#entra--managed-identity-for-postgres-optional)) |
+   | `PG_MIGRATOR_PG_USER` | Optional override for the Postgres role the migrate step connects as under `PG_AZURE_AD_AUTH=1`. Defaults to `<migrator-uami>`; leave unset in prod |
    | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault reference to the App Insights connection string (optional — see below) |
 
 4. The CD job runs `npm run db:migrate` against the target DB before
@@ -553,37 +560,29 @@ of truth; the short version is:
 
 The pool and the migrate script accept a passwordless `DATABASE_URL`
 backed by Microsoft Entra. When the URL has no password component —
-e.g. `postgresql://clockinoff-prod@<host>.postgres.database.azure.com:5432/<db>?sslmode=require` —
-the app mints a short-lived access token for the
-`https://ossrdbms-aad.database.windows.net/.default` scope and feeds
-it to `pg` as the password. Tokens are cached in-process until shortly
-before expiry and refreshed on new pool connections, so no second
-table or background job is required.
+e.g. `postgresql://<runtime-role>@<pg-host>:5432/<db>?sslmode=require` —
+the app mints a short-lived access token for the Azure Postgres Entra
+scope and feeds it to `pg` as the password. Tokens are cached
+in-process until shortly before expiry and refreshed on new pool
+connections.
 
 **Two identities, by design** (Clockinoff #75):
 
 - **Runtime pool** (`src/server/db/client.ts`) — authenticates via
-  `DefaultAzureCredential`, which on App Service binds to the
-  **system-assigned managed identity** (role `clockinoff-prod`,
-  DML-only). All request-handling queries go through this identity.
+  `DefaultAzureCredential` (on App Service, the system-assigned
+  managed identity / `<runtime-role>`, DML-only). All request-handling
+  queries go through this identity.
 - **Startup migrator** (`scripts/migrate.mjs`, run before `node
   server.js`) — authenticates via `ManagedIdentityCredential` pinned
-  to a **user-assigned managed identity**, e.g.
-  `uami-clockinoff-migrator` in prod. That UAMI holds the Entra role
-  on database `clockinoff` with DDL grants on schema `public`. The
-  UAMI's clientId is read from the `PG_MIGRATOR_CLIENT_ID` App Setting
-  (**required** when `PG_AZURE_AD_AUTH` is on — the script fails fast
-  with a clear error if it is missing). The migrate step also
-  **overrides the Postgres `user`** to the migrator role's exact
-  Entra-mapped name (`uami-clockinoff-migrator` by default, overridable
-  with `PG_MIGRATOR_PG_USER`); the passwordless URL's `clockinoff-prod`
-  user is only correct for the runtime pool. Ariel's 2026-10-02 prod
-  probe showed Azure Postgres rejects a UAMI token sent with
-  `user=clockinoff-prod` with SQLSTATE `28000` (principal id mismatch),
-  because the Entra OID in the token must match the OID stored on the
-  Postgres role's `pgaadauth` security label. Without this split the
-  system MI's DML-only role tripped `42501 permission denied for schema
-  public` on the first passwordless cutover.
+  to a user-assigned managed identity (`<migrator-uami>`). That UAMI
+  holds DDL on schema `public`. Its clientId is read from
+  `PG_MIGRATOR_CLIENT_ID` (**required** when `PG_AZURE_AD_AUTH` is on
+  — the script fails fast if it is missing). The migrate step also
+  overrides the Postgres `user` to `<migrator-uami>` (overridable with
+  `PG_MIGRATOR_PG_USER`); the passwordless URL's `<runtime-role>` is
+  only correct for the runtime pool. The Entra principal in the token
+  must match the Postgres role — do not send the migrator token as
+  the runtime user.
 
 Mode selection:
 
@@ -683,25 +682,10 @@ Both smoke tests must print `argon2 OK` and `PDF %PDF`.
 
 ## 15. Ops scripts
 
-One-shot maintenance helpers live under [`scripts/`](./scripts/) and speak
-directly to Postgres via `DATABASE_URL`.
-
-**Delete users by email** (e.g. leftover pentest accounts). Owned rows —
-sessions, clients, projects, tags, entries, entry↔tag rows — cascade
-automatically via the `ON DELETE CASCADE` on `user_id`.
-
-```bash
-# Dry-run: show what would be deleted.
-DATABASE_URL=postgres://... npm run ops:delete-users -- \
-  pentest-ariel-a@example.com pentest-ariel-b@example.com
-
-# Confirm and actually delete.
-DATABASE_URL=postgres://... npm run ops:delete-users -- --yes \
-  pentest-ariel-a@example.com pentest-ariel-b@example.com
-```
-
-Emails are matched case-insensitively. Never pass a password on the
-command line — this script only needs the email.
+One-shot maintenance helpers live under [`scripts/`](./scripts/) and
+speak directly to Postgres via `DATABASE_URL`. They never take a
+password on the command line. Read the script `--help` / source for
+invocation — do not copy account-name patterns or emails into docs.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
