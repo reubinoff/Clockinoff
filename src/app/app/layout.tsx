@@ -49,6 +49,12 @@ export default async function AppLayout({
             >
               {user.email}
             </span>
+            <Link
+              href="/app/account"
+              className="text-muted hover:text-ink underline underline-offset-2 hidden md:inline"
+            >
+              Account
+            </Link>
             <a
               className="text-muted hover:text-ink underline underline-offset-2"
               href={DOCS_URL}

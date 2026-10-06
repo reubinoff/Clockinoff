@@ -9,6 +9,9 @@ if (!process.env.DATABASE_URL_TEST) {
 if (!process.env.NEXTAUTH_SECRET) {
   process.env.NEXTAUTH_SECRET = "test-secret-test-secret-test-secret-x";
 }
+if (!process.env.OAUTH_STATE_SECRET) {
+  process.env.OAUTH_STATE_SECRET = "test-oauth-state-secret-test-oauth-x";
+}
 
 beforeAll(async () => {
   await runMigrations();

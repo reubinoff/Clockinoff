@@ -57,6 +57,7 @@ jobs:
       DATABASE_URL: postgres://timely:timely@localhost:5432/timely
       DATABASE_URL_TEST: postgres://timely:timely@localhost:5432/timely_test
       NEXTAUTH_SECRET: ci-secret-ci-secret-ci-secret-000000
+      OAUTH_STATE_SECRET: ci-oauth-state-secret-ci-oauth-000000
       NEXTAUTH_URL: http://localhost:3000
       NODE_ENV: test
 
@@ -114,6 +115,7 @@ jobs:
     env:
       DATABASE_URL: postgres://timely:timely@localhost:5432/timely
       NEXTAUTH_SECRET: build-secret-build-secret-build-000000
+      OAUTH_STATE_SECRET: build-oauth-state-secret-build-000000
       NEXTAUTH_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v7

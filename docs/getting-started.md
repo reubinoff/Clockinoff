@@ -67,10 +67,16 @@ What happens behind the scenes depends on your Google email:
   `/app?welcome=1` hero on first load. The account has **no password**
   until you choose to set one; use **Continue with Google** to sign in
   again.
-- **You already have a Clockinoff account with the same email.** We
-  attach your Google identity to that account and sign you in. Your
-  existing password keeps working — nothing is replaced, there is no
-  second account, and we never show an "account already exists" error.
+- **You already have a Clockinoff password for that email.** Clockinoff
+  does **not** attach Google automatically. You land back on `/login`
+  with an info banner: *"This email already has a Clockinoff password.
+  Sign in with it first, then connect Google from Settings."* The
+  email field is not filled in; **Sign in with password** focuses it
+  so you can type. Sign in with your password, then open **Account**
+  and click **Connect Google**.
+- **You already have a Google-only Clockinoff account (no password)
+  with the same email.** We attach your Google identity and sign you
+  in — same as a first-time Google sign-in returning later.
 - **Your Google email is not verified.** Clockinoff refuses to sign you
   in and shows *"Google email isn't verified."* Verify the email in
   your Google account, then try again.
@@ -78,6 +84,10 @@ What happens behind the scenes depends on your Google email:
   *"Google sign-in was cancelled."* No account change, no session.
 - **Network / other failure.** You come back to `/login` with
   *"Couldn't connect to Google. Try again."*
+- **Google isn't configured on this instance.** You come back to
+  `/login` with *"Google sign-in isn't available right now. Sign in
+  with your email and password, or try again later."* Email and
+  password still work.
 
 The Google button is deliberately a secondary visual — email/password
 remains the primary purple action. The icon is Google's official

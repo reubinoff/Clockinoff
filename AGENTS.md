@@ -121,6 +121,10 @@ placeholder and document it in the README/AGENTS.md. Actual secret values are
 set by the repo owner in Azure Web App Configuration and GitHub Actions
 secrets — an agent should not touch those.
 
+`OAUTH_STATE_SECRET` is the HMAC key for the Google OAuth state cookie.
+Required in production (boot and `/api/health` fail closed if unset).
+Never reuse `NEXTAUTH_SECRET` for it.
+
 ---
 
 ## 3. Commands an agent should know

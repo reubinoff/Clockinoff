@@ -45,6 +45,7 @@ jobs:
       DATABASE_URL: postgres://timely:timely@localhost:5432/timely
       DATABASE_URL_TEST: postgres://timely:timely@localhost:5432/timely_test
       NEXTAUTH_SECRET: nightly-secret-nightly-secret-000000
+      OAUTH_STATE_SECRET: nightly-oauth-state-secret-000000
       NEXTAUTH_URL: http://localhost:3000
       NODE_ENV: test
 

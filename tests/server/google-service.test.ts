@@ -4,7 +4,12 @@ import { getDb } from "@/server/db/client";
 import { users } from "@/server/db/schema";
 import { register } from "@/server/auth/service";
 import { getSessionUser } from "@/server/auth/session";
-import { GoogleAuthError, signInWithGoogle } from "@/server/auth/google";
+import {
+  connectGoogleToUser,
+  getSignInMethods,
+  GoogleAuthError,
+  signInWithGoogle,
+} from "@/server/auth/google";
 import { truncateAll } from "../setup";
 
 const PW = "correct-horse-battery";
@@ -40,7 +45,7 @@ describe("signInWithGoogle", () => {
     expect(session?.id).toBe(result.user.id);
   });
 
-  it("attaches sub to an existing email/password user, keeps their password, no second user", async () => {
+  it("refuses to auto-attach Google onto an existing password account", async () => {
     const { user: existing } = await register({
       email: "merge@example.com",
       password: PW,
@@ -50,17 +55,19 @@ describe("signInWithGoogle", () => {
     expect(before.passwordHash).not.toBeNull();
     expect(before.googleSub).toBeNull();
 
-    const result = await signInWithGoogle({
-      sub: "google|merge-1",
-      email: "merge@example.com",
+    await expect(
+      signInWithGoogle({
+        sub: "google|merge-1",
+        email: "merge@example.com",
+      }),
+    ).rejects.toMatchObject({
+      name: "GoogleAuthError",
+      reason: "password_account",
+      details: { email: "merge@example.com" },
     });
-    expect(result.isNewUser).toBe(false);
-    expect(result.user.id).toBe(existing.id);
 
     const after = await getUser(existing.id);
-    expect(after.googleSub).toBe("google|merge-1");
-    // Password is preserved — same hash as before. This is the Shaul lock:
-    // attach never clobbers the local credential.
+    expect(after.googleSub).toBeNull();
     expect(after.passwordHash).toBe(before.passwordHash);
 
     const db = getDb();
@@ -68,18 +75,19 @@ describe("signInWithGoogle", () => {
     expect(all).toHaveLength(1);
   });
 
-  it("attach is case-insensitive on email (matches the lower(email) unique index)", async () => {
+  it("refuse is case-insensitive on email (matches the lower(email) unique index)", async () => {
     const { user } = await register({ email: "MixedCase@Example.com", password: PW });
-    const result = await signInWithGoogle({
-      sub: "google|case-1",
-      email: "mixedcase@example.com",
-    });
-    expect(result.user.id).toBe(user.id);
+    await expect(
+      signInWithGoogle({
+        sub: "google|case-1",
+        email: "mixedcase@example.com",
+      }),
+    ).rejects.toMatchObject({ reason: "password_account", details: { email: user.email } });
     const after = await getUser(user.id);
-    expect(after.googleSub).toBe("google|case-1");
+    expect(after.googleSub).toBeNull();
   });
 
-  it("signs an already-linked user in again when the same sub comes back", async () => {
+  it("Google-only accounts keep today's linking: same sub signs the same user in", async () => {
     const first = await signInWithGoogle({
       sub: "google|linked-1",
       email: "linked@example.com",
@@ -109,14 +117,16 @@ describe("signInWithGoogle", () => {
   });
 
   it("refuses to rebind a user to a different Google sub (anomaly path, fail closed)", async () => {
-    const { user } = await register({ email: "pinned@example.com", password: PW });
-    await signInWithGoogle({ sub: "google|pinned-1", email: "pinned@example.com" });
+    const first = await signInWithGoogle({
+      sub: "google|pinned-1",
+      email: "pinned@example.com",
+    });
 
     await expect(
       signInWithGoogle({ sub: "google|intruder", email: "pinned@example.com" }),
     ).rejects.toBeInstanceOf(GoogleAuthError);
 
-    const after = await getUser(user.id);
+    const after = await getUser(first.user.id);
     expect(after.googleSub).toBe("google|pinned-1");
   });
 
@@ -126,6 +136,109 @@ describe("signInWithGoogle", () => {
     });
     await expect(signInWithGoogle({ sub: "google|1", email: "" })).rejects.toMatchObject({
       code: "VALIDATION",
+    });
+  });
+});
+
+describe("connectGoogleToUser / getSignInMethods", () => {
+  beforeEach(async () => {
+    await truncateAll();
+  });
+
+  it("connects a matching Google account to a password user", async () => {
+    const { user } = await register({ email: "settings@example.com", password: PW });
+    const before = await getSignInMethods(user.id);
+    expect(before).toEqual({
+      hasPassword: true,
+      googleConnected: false,
+      googleEmail: null,
+    });
+
+    const result = await connectGoogleToUser(user.id, {
+      sub: "google|settings-1",
+      email: "settings@example.com",
+    });
+    expect(result.email).toBe("settings@example.com");
+
+    const after = await getUser(user.id);
+    expect(after.googleSub).toBe("google|settings-1");
+    expect(after.passwordHash).not.toBeNull();
+    expect(await getSignInMethods(user.id)).toEqual({
+      hasPassword: true,
+      googleConnected: true,
+      googleEmail: "settings@example.com",
+    });
+  });
+
+  it("connect is case-insensitive on email and idempotent for the same sub", async () => {
+    const { user } = await register({ email: "Case@Example.com", password: PW });
+    await connectGoogleToUser(user.id, { sub: "google|case-c", email: "case@example.com" });
+    const again = await connectGoogleToUser(user.id, {
+      sub: "google|case-c",
+      email: "CASE@example.com",
+    });
+    expect(again.email).toBe(user.email);
+    const after = await getUser(user.id);
+    expect(after.googleSub).toBe("google|case-c");
+  });
+
+  it("refuses when the Google email does not match the account", async () => {
+    const { user } = await register({ email: "owner@example.com", password: PW });
+    await expect(
+      connectGoogleToUser(user.id, { sub: "google|other", email: "other@example.com" }),
+    ).rejects.toMatchObject({
+      reason: "email_mismatch",
+      details: { email: "owner@example.com" },
+    });
+    const after = await getUser(user.id);
+    expect(after.googleSub).toBeNull();
+  });
+
+  it("refuses to rebind a connected account to a different sub", async () => {
+    const { user } = await register({ email: "bound@example.com", password: PW });
+    await connectGoogleToUser(user.id, { sub: "google|bound-1", email: "bound@example.com" });
+    await expect(
+      connectGoogleToUser(user.id, { sub: "google|intruder", email: "bound@example.com" }),
+    ).rejects.toMatchObject({ reason: "network" });
+    const after = await getUser(user.id);
+    expect(after.googleSub).toBe("google|bound-1");
+  });
+
+  it("refuses when the Google sub is already linked to another user", async () => {
+    await signInWithGoogle({ sub: "google|taken", email: "first@example.com" });
+    const { user } = await register({ email: "second@example.com", password: PW });
+    await expect(
+      connectGoogleToUser(user.id, { sub: "google|taken", email: "second@example.com" }),
+    ).rejects.toMatchObject({ reason: "network" });
+    const after = await getUser(user.id);
+    expect(after.googleSub).toBeNull();
+  });
+
+  it("rejects empty identity and missing user", async () => {
+    const { user } = await register({ email: "empty@example.com", password: PW });
+    await expect(connectGoogleToUser(user.id, { sub: "", email: "empty@example.com" })).rejects.toMatchObject({
+      code: "VALIDATION",
+    });
+    await expect(connectGoogleToUser(user.id, { sub: "google|x", email: "" })).rejects.toMatchObject({
+      code: "VALIDATION",
+    });
+    await expect(
+      getSignInMethods("00000000-0000-0000-0000-000000000000"),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      connectGoogleToUser("00000000-0000-0000-0000-000000000000", {
+        sub: "google|x",
+        email: "empty@example.com",
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("reports Google-only accounts as password off / Google connected", async () => {
+    const created = await signInWithGoogle({ sub: "google|only", email: "only@example.com" });
+    expect(await getSignInMethods(created.user.id)).toEqual({
+      hasPassword: false,
+      googleConnected: true,
+      googleEmail: "only@example.com",
     });
   });
 });

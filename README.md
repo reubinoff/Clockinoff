@@ -181,7 +181,7 @@ services in `src/server/services/*`. Every error is shaped as
 | `POST` | `/api/auth/logout` | 204, clears cookie |
 | `GET` / `PATCH` | `/api/auth/me` | current user; `PATCH { timezone }` |
 | `GET` | `/api/auth/google/start` | begins the **Continue with Google** flow; 302 to Google (fail-closed to `/login?error=network` when Google env vars are blank) |
-| `GET` | `/api/auth/google/callback` | OIDC callback; 302 to `/app` on success, `/login?error=...` on cancel / unverified / network |
+| `GET` | `/api/auth/google/callback` | OIDC callback; 302 to `/app` on success, `/login?error=...` on cancel / unverified / network / password-account refuse; Settings connect lands on `/app/account` |
 | CRUD | `/api/clients`, `/api/projects`, `/api/tags` | `?archived=true` includes archived |
 | `GET` | `/api/timer` | running entry or `null` |
 | `POST` | `/api/timer/start` | 201 running entry; 409 `TIMER_ALREADY_RUNNING` with `entry_id` |
@@ -216,9 +216,12 @@ Clockinoff has two sign-in paths that share one user table:
    issues the same session cookie as the password path. Account rules:
    - **Verified email, no existing user** → create a passwordless user,
      attach the Google `sub`, sign in.
-   - **Verified email, existing user without a Google `sub`** → attach
-     the `sub` to that user. The existing password keeps working;
-     nothing is replaced.
+   - **Verified email, existing user with a `password_hash` and no
+     matching `sub`** → refuse. Redirect to
+     `/login?error=google_password_account`. The user signs in with
+     their password, then connects Google from Account.
+   - **Verified email, existing Google-only user (no `password_hash`)
+     without a `sub`** → attach the `sub` and sign in.
    - **Verified email, existing user with the same `sub`** → sign in.
    - **Verified email, existing user with a *different* `sub`** →
      fail closed (anomaly; never show "account exists").
@@ -234,6 +237,7 @@ Configuration (or your platform's equivalent) in production:
 | `GOOGLE_CLIENT_ID` | Yes to enable the button | OAuth 2.0 client ID from Google Cloud Console |
 | `GOOGLE_CLIENT_SECRET` | Yes to enable the button | Matching client secret |
 | `GOOGLE_REDIRECT_URI` | Optional | Overrides the default `<NEXTAUTH_URL>/api/auth/google/callback`. Production value is `https://clockinoff.reubinoff.com/api/auth/google/callback` |
+| `OAUTH_STATE_SECRET` | Yes in production | HMAC key for `timely_oauth_state`. Boot and `/api/health` fail closed if unset when `NODE_ENV=production`. Never `NEXTAUTH_SECRET` |
 
 Leave `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` blank and the
 `/api/auth/google/start` route fail-closes to `/login?error=network` —
@@ -330,6 +334,7 @@ of truth; the short version is:
    |---|---|
    | `DATABASE_URL` | `postgres://<user>:<pw>@<host>:5432/<db>?sslmode=require` |
    | `NEXTAUTH_SECRET` | 32+ byte random secret (cookie / crypto surface) |
+   | `OAUTH_STATE_SECRET` | HMAC key for the Google OAuth state cookie. Required in production — boot and `/api/health` fail closed if unset. Never reuse `NEXTAUTH_SECRET` |
    | `NEXTAUTH_URL` | Public URL of your Web App |
    | `NODE_ENV` | `production` |
    | `WEBSITE_NODE_DEFAULT_VERSION` | `~24` |
