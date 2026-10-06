@@ -25,10 +25,14 @@ function fakeUuid(n: number): string {
 }
 
 function jsonReq(url: string, method: string, body: unknown): Request {
+  const payload = JSON.stringify(body);
   return new Request(url, {
     method,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    headers: {
+      "content-type": "application/json",
+      "content-length": String(Buffer.byteLength(payload)),
+    },
+    body: payload,
   });
 }
 
