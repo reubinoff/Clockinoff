@@ -158,6 +158,18 @@
   html[data-theme="light"] .auth-secondary-cta {
     color: var(--color-accent);
   }
+  /* Dark secondary must not match .btn-primary weight; Log in stays the
+     only solid purple. Surface (#1c1924) on the banner's accent-soft
+     (#2e1065) reads as a filled purple twin — transparent fill keeps
+     this outline/ghost. Soft accent border; ink label (AA). */
+  html[data-theme="dark"] .auth-secondary-cta {
+    background-color: transparent;
+    color: var(--color-ink);
+    border-color: var(--border-accent-tint);
+  }
+  html[data-theme="dark"] .auth-secondary-cta:hover {
+    background-color: var(--color-canvas-2);
+  }
   .input {
     @apply w-full rounded-xl border border-border-strong bg-surface px-3 py-2 text-body min-h-[48px]
            placeholder:text-muted focus:outline-none focus-visible:outline-none
