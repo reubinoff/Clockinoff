@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET } from "@/app/api/auth/google/start/route";
-import { OAUTH_STATE_COOKIE, parseOAuthState, sanitiseNext } from "@/lib/oauth-next";
+import { OAUTH_STATE_COOKIE, sanitiseNext } from "@/lib/oauth-next-path";
+import { parseOAuthState } from "@/lib/oauth-state";
 
 const ENV_SNAPSHOT = {
   id: process.env.GOOGLE_CLIENT_ID,
@@ -160,6 +161,14 @@ describe("GET /api/auth/google/start", () => {
 
   it("bounces to /login?error=unavailable when OAUTH_STATE_SECRET is missing", async () => {
     delete process.env.OAUTH_STATE_SECRET;
+    const res = await GET(new Request("http://test/api/auth/google/start"));
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/login");
+    expect(loc.searchParams.get("error")).toBe("unavailable");
+  });
+
+  it("bounces to /login?error=unavailable when OAUTH_STATE_SECRET is shorter than 32 bytes", async () => {
+    process.env.OAUTH_STATE_SECRET = "placeholder";
     const res = await GET(new Request("http://test/api/auth/google/start"));
     const loc = new URL(res.headers.get("location") ?? "");
     expect(loc.pathname).toBe("/login");

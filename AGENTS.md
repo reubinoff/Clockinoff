@@ -122,8 +122,8 @@ set by the repo owner in Azure Web App Configuration and GitHub Actions
 secrets — an agent should not touch those.
 
 `OAUTH_STATE_SECRET` is the HMAC key for the Google OAuth state cookie.
-Required in production (boot and `/api/health` fail closed if unset).
-Never reuse `NEXTAUTH_SECRET` for it.
+Required in production (boot and `/api/health` fail closed if unset or
+shorter than 32 bytes). Never reuse `NEXTAUTH_SECRET` for it.
 
 ---
 

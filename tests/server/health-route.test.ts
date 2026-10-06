@@ -17,8 +17,8 @@ describe("GET /api/health", () => {
     restore();
   });
 
-  it("returns 200 when the OAuth state secret is present", async () => {
-    process.env.OAUTH_STATE_SECRET = "health-secret";
+  it("returns 200 when the OAuth state secret is at least 32 bytes", async () => {
+    process.env.OAUTH_STATE_SECRET = "health-secret-health-secret-0000";
     const res = await GET();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
@@ -26,6 +26,15 @@ describe("GET /api/health", () => {
 
   it("returns 503 in production when OAUTH_STATE_SECRET is missing", async () => {
     delete process.env.OAUTH_STATE_SECRET;
+    (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
+    const res = await GET();
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(false);
+  });
+
+  it("returns 503 in production when OAUTH_STATE_SECRET is shorter than 32 bytes", async () => {
+    process.env.OAUTH_STATE_SECRET = "placeholder";
     (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
     const res = await GET();
     expect(res.status).toBe(503);

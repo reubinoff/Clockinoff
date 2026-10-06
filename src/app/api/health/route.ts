@@ -1,4 +1,4 @@
-import { oauthStateSecretConfigured } from "@/lib/oauth-next";
+import { oauthStateSecretConfigured } from "@/lib/oauth-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

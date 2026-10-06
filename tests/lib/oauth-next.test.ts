@@ -1,108 +1,14 @@
-import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import {
-  assertOAuthStateSecretInProduction,
-  parseOAuthIntent,
-  parseOAuthState,
-  readRequestCookie,
-  sanitiseNext,
-  serialiseOAuthState,
-} from "@/lib/oauth-next";
+import { parseOAuthIntent, readRequestCookie, sanitiseNext } from "@/lib/oauth-next-path";
 
 const PUBLIC_ORIGIN = "https://clockinoff.reubinoff.com";
 
-describe("oauth-next helpers", () => {
+describe("oauth-next-path helpers", () => {
   it("parses intent=connect and defaults everything else to signin", () => {
     expect(parseOAuthIntent("connect")).toBe("connect");
     expect(parseOAuthIntent("signin")).toBe("signin");
     expect(parseOAuthIntent(null)).toBe("signin");
     expect(parseOAuthIntent("other")).toBe("signin");
-  });
-
-  it("round-trips HMAC-signed state with and without connect uid", () => {
-    const signin = { s: "abc", n: "/app" };
-    const signedIn = serialiseOAuthState(signin);
-    expect(signedIn.startsWith("{")).toBe(false);
-    expect(signedIn.includes(".")).toBe(true);
-    expect(parseOAuthState(signedIn)).toEqual(signin);
-
-    const connect = { s: "xyz", n: "/app/account", i: "connect" as const, uid: "user-a" };
-    expect(parseOAuthState(serialiseOAuthState(connect))).toEqual(connect);
-  });
-
-  it("rejects unsigned JSON and tampered signatures", () => {
-    const unsigned = JSON.stringify({ s: "ok", n: "/app", i: "connect", uid: "user-a" });
-    expect(parseOAuthState(unsigned)).toBeNull();
-    expect(parseOAuthState(undefined)).toBeNull();
-    expect(parseOAuthState("")).toBeNull();
-    expect(parseOAuthState("not-json")).toBeNull();
-    expect(parseOAuthState("abc.")).toBeNull();
-    expect(parseOAuthState(".sig")).toBeNull();
-
-    const signed = serialiseOAuthState({ s: "ok", n: "/app" });
-    const [body, sig] = signed.split(".");
-    expect(parseOAuthState(`${body}.${sig.slice(0, -1)}x`)).toBeNull();
-    expect(parseOAuthState(`${body}x.${sig}`)).toBeNull();
-  });
-
-  it("rejects connect state that is missing uid even when the mac is valid", () => {
-    const body = Buffer.from(JSON.stringify({ s: "ok", n: "/app/account", i: "connect" }), "utf8").toString(
-      "base64url",
-    );
-    const sig = createHmac("sha256", process.env.OAUTH_STATE_SECRET!).update(body).digest("base64url");
-    expect(parseOAuthState(`${body}.${sig}`)).toBeNull();
-  });
-
-  it("throws when serialising connect state without uid", () => {
-    expect(() =>
-      serialiseOAuthState({ s: "ok", n: "/app/account", i: "connect", uid: "" }),
-    ).toThrow(/uid/);
-  });
-
-  it("fails closed when OAUTH_STATE_SECRET is missing and never uses NEXTAUTH_SECRET", () => {
-    const prevOauth = process.env.OAUTH_STATE_SECRET;
-    const prevNext = process.env.NEXTAUTH_SECRET;
-    process.env.NEXTAUTH_SECRET = "must-not-be-used-for-oauth-state";
-    delete process.env.OAUTH_STATE_SECRET;
-    try {
-      expect(() => serialiseOAuthState({ s: "ok", n: "/app" })).toThrow(/OAUTH_STATE_SECRET/);
-      expect(parseOAuthState("anything.sig")).toBeNull();
-    } finally {
-      if (prevOauth) process.env.OAUTH_STATE_SECRET = prevOauth;
-      if (prevNext) process.env.NEXTAUTH_SECRET = prevNext;
-      else delete process.env.NEXTAUTH_SECRET;
-    }
-  });
-
-  it("production boot fails closed when OAUTH_STATE_SECRET is missing", () => {
-    const prevOauth = process.env.OAUTH_STATE_SECRET;
-    const prevNode = process.env.NODE_ENV;
-    const prevPhase = process.env.NEXT_PHASE;
-    delete process.env.OAUTH_STATE_SECRET;
-    delete process.env.NEXT_PHASE;
-    (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
-    try {
-      expect(() => assertOAuthStateSecretInProduction()).toThrow(/OAUTH_STATE_SECRET/);
-    } finally {
-      if (prevOauth) process.env.OAUTH_STATE_SECRET = prevOauth;
-      (process.env as { NODE_ENV?: string }).NODE_ENV = prevNode;
-      if (prevPhase) process.env.NEXT_PHASE = prevPhase;
-    }
-  });
-
-  it("skips the production boot check during next build", () => {
-    const prevOauth = process.env.OAUTH_STATE_SECRET;
-    const prevNode = process.env.NODE_ENV;
-    delete process.env.OAUTH_STATE_SECRET;
-    (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
-    process.env.NEXT_PHASE = "phase-production-build";
-    try {
-      expect(() => assertOAuthStateSecretInProduction()).not.toThrow();
-    } finally {
-      if (prevOauth) process.env.OAUTH_STATE_SECRET = prevOauth;
-      (process.env as { NODE_ENV?: string }).NODE_ENV = prevNode;
-      delete process.env.NEXT_PHASE;
-    }
   });
 
   it("reads a named cookie from the request header", () => {

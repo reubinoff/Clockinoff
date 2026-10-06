@@ -6,12 +6,11 @@ import { publicOrigin } from "@/lib/base-url";
 import {
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_MAX_AGE_SECONDS,
-  oauthStateSecretConfigured,
   parseOAuthIntent,
   readRequestCookie,
   sanitiseNext,
-  serialiseOAuthState,
-} from "@/lib/oauth-next";
+} from "@/lib/oauth-next-path";
+import { oauthStateSecretConfigured, serialiseOAuthState } from "@/lib/oauth-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

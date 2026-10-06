@@ -12,12 +12,8 @@ import { getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
 import { logger } from "@/lib/logger";
 import { publicOrigin } from "@/lib/base-url";
 import { googlePasswordAccountLoginPath } from "@/lib/google-auth-errors";
-import {
-  OAUTH_STATE_COOKIE,
-  parseOAuthState,
-  readRequestCookie,
-  sanitiseNext,
-} from "@/lib/oauth-next";
+import { OAUTH_STATE_COOKIE, readRequestCookie, sanitiseNext } from "@/lib/oauth-next-path";
+import { parseOAuthState } from "@/lib/oauth-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

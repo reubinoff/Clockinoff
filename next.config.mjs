@@ -192,10 +192,14 @@ const nextConfig = {
       // in `src/instrumentation.ts` (`NEXT_RUNTIME !== "nodejs"`) already
       // short-circuits before reaching it; the alias keeps the SDK's heavy
       // deps out of the edge bundle so it doesn't try to bundle `fs` / `net`.
+      // Same for `oauth-state`: instrumentation dynamically imports the
+      // server-only HMAC helpers after the Node check, but webpack still
+      // traces the specifier. Stub it so `node:crypto` never enters Edge.
       config.resolve = config.resolve ?? {};
       config.resolve.alias = {
         ...(config.resolve.alias ?? {}),
         "./instrumentation.node": false,
+        "./lib/oauth-state": false,
       };
       return config;
     }

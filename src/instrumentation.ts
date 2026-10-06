@@ -10,7 +10,7 @@
 // - Node-only: the edge / browser runtimes never load the Azure SDK.
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
-  const { assertOAuthStateSecretInProduction } = await import("./lib/oauth-next");
+  const { assertOAuthStateSecretInProduction } = await import("./lib/oauth-state");
   assertOAuthStateSecretInProduction();
   if (!process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) return;
   await import("./instrumentation.node");

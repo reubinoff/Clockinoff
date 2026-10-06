@@ -237,7 +237,7 @@ Configuration (or your platform's equivalent) in production:
 | `GOOGLE_CLIENT_ID` | Yes to enable the button | OAuth 2.0 client ID from Google Cloud Console |
 | `GOOGLE_CLIENT_SECRET` | Yes to enable the button | Matching client secret |
 | `GOOGLE_REDIRECT_URI` | Optional | Overrides the default `<NEXTAUTH_URL>/api/auth/google/callback`. Production value is `https://clockinoff.reubinoff.com/api/auth/google/callback` |
-| `OAUTH_STATE_SECRET` | Yes in production | HMAC key for `timely_oauth_state`. Boot and `/api/health` fail closed if unset when `NODE_ENV=production`. Never `NEXTAUTH_SECRET` |
+| `OAUTH_STATE_SECRET` | Yes in production | HMAC key for `timely_oauth_state`. Boot and `/api/health` fail closed if unset or shorter than 32 bytes when `NODE_ENV=production`. Never `NEXTAUTH_SECRET` |
 
 Leave `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` blank and the
 `/api/auth/google/start` route fail-closes to `/login?error=network` —
@@ -334,7 +334,7 @@ of truth; the short version is:
    |---|---|
    | `DATABASE_URL` | `postgres://<user>:<pw>@<host>:5432/<db>?sslmode=require` |
    | `NEXTAUTH_SECRET` | 32+ byte random secret (cookie / crypto surface) |
-   | `OAUTH_STATE_SECRET` | HMAC key for the Google OAuth state cookie. Required in production — boot and `/api/health` fail closed if unset. Never reuse `NEXTAUTH_SECRET` |
+   | `OAUTH_STATE_SECRET` | HMAC key for the Google OAuth state cookie. Required in production — boot and `/api/health` fail closed if unset or shorter than 32 bytes. Never reuse `NEXTAUTH_SECRET` |
    | `NEXTAUTH_URL` | Public URL of your Web App |
    | `NODE_ENV` | `production` |
    | `WEBSITE_NODE_DEFAULT_VERSION` | `~24` |

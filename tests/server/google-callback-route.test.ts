@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/auth/google/callback/route";
 import { publicOrigin } from "@/lib/base-url";
-import { serialiseOAuthState } from "@/lib/oauth-next";
+import { serialiseOAuthState } from "@/lib/oauth-state";
 import { register } from "@/server/auth/service";
 import { getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
