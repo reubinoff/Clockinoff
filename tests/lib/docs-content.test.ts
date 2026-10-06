@@ -82,6 +82,18 @@ describe("docs-content", () => {
       expect(html).toContain("<h2>Section</h2>");
     });
 
+    it("escapes raw HTML instead of emitting live tags", () => {
+      const html = renderDocMarkdown(
+        '<script>alert(1)</script>\n\n<img src=x onerror="alert(1)">\n\n<div onclick="alert(1)">hi</div>\n',
+      );
+      expect(html).not.toMatch(/<(script|img|div)\b/i);
+      expect(html).not.toContain('onerror="');
+      expect(html).not.toContain('onclick="');
+      expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+      expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+      expect(html).toContain("&lt;div onclick=&quot;alert(1)&quot;&gt;");
+    });
+
     it("marks external links as new-tab with noopener", () => {
       const html = renderDocMarkdown(
         "[GitHub](https://github.com/reubinoff/Clockinoff) and [local](/app)",

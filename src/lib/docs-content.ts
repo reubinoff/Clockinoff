@@ -12,7 +12,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
-import { marked } from "marked";
+import { Marked } from "marked";
 
 export type DocPage = {
   slug: string;
@@ -126,12 +126,34 @@ function preprocessMarkdown(src: string): string {
   return out;
 }
 
-marked.setOptions({ gfm: true, breaks: false });
+// Own instance so option and renderer overrides stay off the global
+// `marked` singleton. v18's renderer methods take a token object.
+const docsMarked = new Marked({ gfm: true, breaks: false });
+
+// Raw HTML in the markdown source is escaped, not emitted. The rendered
+// string is assigned to `dangerouslySetInnerHTML` on `/docs`, and marked
+// passes HTML tokens through unchanged. Repo markdown is trusted, but a
+// raw `<script>` / event-handler tag must not become live DOM.
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+docsMarked.use({
+  renderer: {
+    html({ text }) {
+      return escapeHtml(text);
+    },
+  },
+});
 
 // Post-process the rendered HTML so that off-site links open in a new tab,
-// matching the behaviour of the Docs link in the app shell. We do this
-// as a string pass instead of a custom marked renderer because the
-// renderer signature is unstable across marked majors.
+// matching the behaviour of the Docs link in the app shell. Kept as a
+// string pass: it only rewrites anchors marked itself emitted.
 function openExternalLinksInNewTab(html: string): string {
   return html.replace(
     /<a\s+href="(https?:\/\/[^"]+)"/g,
@@ -142,7 +164,7 @@ function openExternalLinksInNewTab(html: string): string {
 export function renderDocMarkdown(src: string): string {
   const { body } = parseFrontmatter(src);
   const prepared = preprocessMarkdown(body);
-  const html = marked.parse(prepared, { async: false }) as string;
+  const html = docsMarked.parse(prepared, { async: false });
   return openExternalLinksInNewTab(html);
 }
 
