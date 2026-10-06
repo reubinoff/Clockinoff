@@ -26,32 +26,8 @@ per account, no roles, no invitations, no billing.
 The email you registered with is your login and appears in the top-right
 of every `/app/*` page.
 
-Open **Account** from the header (desktop) or the account menu (mobile)
-to see your sign-in methods.
-
 The v1 UI does not include a "change email" flow. Support for that is a
 future improvement.
-
----
-
-## Sign-in methods
-
-The Account page shows how you can sign in:
-
-- **Password · On** when the account was created with an email and
-  password.
-- **Google** with a **Connect Google** button when Google is not linked
-  yet. After you connect, the row reads **Google · connected** and shows
-  the Google email in muted text. A toast confirms: *"Google connected.
-  You can now sign in either way."*
-
-Connect Google only accepts a Google account whose verified email
-matches your Clockinoff email. A mismatch shows: *"That Google account
-uses a different email. Connect one that matches {email}."*
-
-There is no disconnect control in v1. Password accounts never get
-Google attached from the login / register **Continue with Google**
-button — sign in with your password first, then connect here.
 
 ---
 

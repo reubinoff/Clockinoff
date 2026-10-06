@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type Ref } from "react";
+import { useState } from "react";
 import { IconEye, IconEyeOff } from "@/components/icons";
 
 type Props = {
@@ -13,7 +13,6 @@ type Props = {
   helper?: string;
   required?: boolean;
   describedById?: string;
-  inputRef?: Ref<HTMLInputElement>;
 };
 
 export function PasswordField({
@@ -26,7 +25,6 @@ export function PasswordField({
   helper,
   required,
   describedById,
-  inputRef,
 }: Props): JSX.Element {
   const [visible, setVisible] = useState(false);
   const helperId = helper ? `${id}-helper` : undefined;
@@ -40,7 +38,6 @@ export function PasswordField({
       <div className="relative">
         <input
           id={id}
-          ref={inputRef}
           type={visible ? "text" : "password"}
           className="input pr-12"
           value={value}

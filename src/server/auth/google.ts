@@ -1,13 +1,9 @@
 // Google OAuth 2.0 "Continue with Google" — tiny server-side flow.
 //
-// Account rules (Shaul lock 2026-10-01, #122 password-account refuse 2026-10-06):
+// Account rules (locked by Shaul via brief, 2026-10-01):
 //
 //   - verified email + no existing user      → create user, attach `sub`, sign in
-//   - verified email + existing user, no password_hash, no sub
-//       → attach `sub` (Google-only accounts keep today's linking)
-//   - verified email + existing user with password_hash, no matching sub
-//       → NEVER auto-attach. Refuse; user signs in with password, then
-//         connects Google from Settings.
+//   - verified email + existing user, no sub → attach `sub` to that user; keep password
 //   - verified email + existing user, same sub → sign in
 //   - verified email + existing user, DIFFERENT sub → fail closed (anomaly)
 //   - email NOT verified                     → fail closed
@@ -55,18 +51,10 @@ export interface GoogleTokenResponse {
 // Thrown for any Google-side problem we want the callback route to translate
 // into a user-visible `?error=` code. The route catches it, logs, and
 // redirects — never bubbles the raw message to the browser.
-export type GoogleAuthReason =
-  | "cancelled"
-  | "unverified"
-  | "network"
-  | "password_account"
-  | "email_mismatch";
-
 export class GoogleAuthError extends Error {
   constructor(
-    public reason: GoogleAuthReason,
+    public reason: "cancelled" | "unverified" | "network",
     message: string,
-    public details?: { email?: string },
   ) {
     super(message);
     this.name = "GoogleAuthError";
@@ -234,15 +222,14 @@ export async function signInWithGoogle(
     return { user: bySub[0], session, isNewUser: false };
   }
 
-  // 2) Existing user with the SAME verified email. Case-insensitive
-  //    lookup matches the `lower(email)` unique index.
+  // 2) Existing email/password user with the SAME verified email → attach.
+  //    Case-insensitive lookup matches the `lower(email)` unique index.
   const byEmail = await db
     .select({
       id: users.id,
       email: users.email,
       timezone: users.timezone,
       googleSub: users.googleSub,
-      passwordHash: users.passwordHash,
     })
     .from(users)
     .where(sql`lower(${users.email}) = lower(${normalisedEmail})`)
@@ -257,17 +244,6 @@ export async function signInWithGoogle(
         userId: existing.id,
       });
       throw new GoogleAuthError("network", "Account already linked to another Google user");
-    }
-    if (existing.passwordHash) {
-      // #122: a password credential is already on this account. Auto-
-      // attaching Google here is the pre-hijack path (attacker registered
-      // the victim's email first). Refuse; Settings is the only attach.
-      logger.warn("[google] refusing to auto-attach Google onto password account", {
-        userId: existing.id,
-      });
-      throw new GoogleAuthError("password_account", "Password account must sign in first", {
-        email: existing.email,
-      });
     }
     const [updated] = await db
       .update(users)
@@ -303,90 +279,4 @@ export async function signInWithGoogle(
     }
     throw err;
   }
-}
-
-export interface SignInMethods {
-  hasPassword: boolean;
-  googleConnected: boolean;
-  googleEmail: string | null;
-}
-
-export async function getSignInMethods(userId: string): Promise<SignInMethods> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      email: users.email,
-      passwordHash: users.passwordHash,
-      googleSub: users.googleSub,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  const row = rows[0];
-  if (!row) throw errors.notFound("User not found");
-  const googleConnected = Boolean(row.googleSub);
-  return {
-    hasPassword: Boolean(row.passwordHash),
-    googleConnected,
-    googleEmail: googleConnected ? row.email : null,
-  };
-}
-
-// Settings → Account "Connect Google". Session user is the authority;
-// Google email must match that account. Never attaches to a different
-// user, never rebinds an existing sub, never disconnects.
-export async function connectGoogleToUser(
-  userId: string,
-  input: { sub: string; email: string },
-): Promise<{ email: string }> {
-  const db = getDb();
-  const normalisedEmail = input.email.trim();
-  if (!normalisedEmail || !input.sub) {
-    throw errors.validation("Invalid Google identity");
-  }
-
-  const rows = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      googleSub: users.googleSub,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  const user = rows[0];
-  if (!user) throw errors.notFound("User not found");
-
-  if (user.email.toLowerCase() !== normalisedEmail.toLowerCase()) {
-    throw new GoogleAuthError("email_mismatch", "Google email does not match account", {
-      email: user.email,
-    });
-  }
-
-  if (user.googleSub && user.googleSub !== input.sub) {
-    logger.warn("[google] refusing to rebind existing user to new sub on connect", {
-      userId: user.id,
-    });
-    throw new GoogleAuthError("network", "Account already linked to another Google user");
-  }
-
-  if (user.googleSub === input.sub) {
-    return { email: user.email };
-  }
-
-  try {
-    await db
-      .update(users)
-      .set({ googleSub: input.sub })
-      .where(and(eq(users.id, user.id), isNull(users.googleSub)));
-  } catch (err) {
-    if (pgErrorCode(err) === "23505") {
-      logger.warn("[google] connect blocked: sub already linked to another user", {
-        userId: user.id,
-      });
-      throw new GoogleAuthError("network", "Google account already linked to another user");
-    }
-    throw err;
-  }
-  return { email: user.email };
 }

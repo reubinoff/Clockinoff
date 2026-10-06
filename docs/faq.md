@@ -151,12 +151,13 @@ By design, Clockinoff does not include:
 - Calendar view or Gantt-style planning.
 - Team, workspace, or shared entries.
 - Clockify / Toggl / Harvest sync.
-- A control for linking a Google account whose email **differs** from
-  the signed-in user's email, or for **unlinking** Google after you
-  have attached it. Same-email connect lives on
-  [Account]({{ '/account' | relative_url }}#sign-in-methods). Password
-  accounts are never auto-attached from **Continue with Google** — see
-  [Continue with Google]({{ '/getting-started' | relative_url }}#or-continue-with-google).
+- A **Link Google account** control in Settings for linking a Google
+  account whose email **differs** from the signed-in user's email, or
+  for unlinking Google after you have attached it. Attaching is only
+  triggered from the sign-in / sign-up flow, and only when the Google
+  email matches your Clockinoff email verbatim. (Same-email attach
+  happens automatically — see
+  [Continue with Google]({{ '/getting-started' | relative_url }}#or-continue-with-google).)
 - Reporting dashboards beyond the entries list and the CSV/PDF exports.
 - Rates or invoice generation on top of **Billable / Already billed**.
   The two flags are recorded per entry; interpreting them is up to you.

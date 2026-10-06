@@ -47,8 +47,8 @@ wired it up, the **Continue with Google** button on `/login` and
 6. [Tags]({{ '/tags' | relative_url }}) — label individual entries.
 7. [Export CSV & PDF]({{ '/export' | relative_url }}) — pull hours out for
    invoicing or reporting.
-8. [Account & timezone]({{ '/account' | relative_url }}) — connect
-   Google, change your timezone, and sign out.
+8. [Account & timezone]({{ '/account' | relative_url }}) — change your
+   timezone and sign out.
 9. [FAQ]({{ '/faq' | relative_url }}) — one-timer rule, overlaps, and other
    design decisions.
 
