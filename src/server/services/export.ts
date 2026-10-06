@@ -60,6 +60,9 @@ export interface ExportRow {
 
 export function parseExportBound(v: string | null, tz: string, endOfDay = false): Date | undefined {
   if (!v) return undefined;
+  // Reject control characters so `from=2026-01-01%0D%0A` cannot reach
+  // `Content-Disposition` or be silently accepted by `new Date`.
+  if (/[\u0000-\u001F\u007F]/.test(v)) return undefined;
   try {
     if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
       return endOfDay ? endOfDayExclusiveInZone(v, tz) : zonedIsoToUtc(v, tz);

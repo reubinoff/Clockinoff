@@ -49,6 +49,7 @@ describe("GET /api/export/* security caps (#147)", () => {
       getReq("http://x/api/export/csv?from=2026-01-01%0D%0A&to=2026-01-08"),
     );
     expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION");
     expect(res.headers.get("content-disposition")).toBeNull();
   });
 
