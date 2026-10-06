@@ -53,6 +53,8 @@ export function toErrorBody(err: ApiError): ErrorBody & Record<string, unknown> 
 export const errors = {
   validation: (message = "Validation failed", details?: unknown) =>
     new ApiError(400, "VALIDATION", message, { details }),
+  payloadTooLarge: (message = "Request body too large") =>
+    new ApiError(413, "VALIDATION", message),
   unauthorized: (message = "Unauthorized") => new ApiError(401, "UNAUTHORIZED", message),
   notFound: (message = "Not found") => new ApiError(404, "NOT_FOUND", message),
   conflict: (message = "Conflict") => new ApiError(409, "CONFLICT", message),

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { truncateAll } from "../setup";
 import { makeProject, makeTag, makeUser } from "../helpers";
+import { MAX_TAG_IDS } from "@/lib/tag-ids";
 import {
   createEntry,
   deleteEntry,
@@ -137,6 +138,24 @@ describe("timer + entries service", () => {
     await expect(
       startTimer(user.id, { tag_ids: ["00000000-0000-0000-0000-000000000000"] }),
     ).rejects.toMatchObject({ code: "VALIDATION" });
+  });
+
+  it("rejects oversize or malformed tag_ids with VALIDATION", async () => {
+    const { user } = await makeUser();
+    const tooMany = Array.from({ length: MAX_TAG_IDS + 1 }, (_, i) => {
+      const hex = (i + 1).toString(16).padStart(12, "0");
+      return `00000000-0000-4000-8000-${hex}`;
+    });
+    await expect(startTimer(user.id, { tag_ids: tooMany })).rejects.toMatchObject({
+      code: "VALIDATION",
+      status: 400,
+    });
+    await expect(
+      startTimer(user.id, { tag_ids: ["not-a-uuid"] as unknown as string[] }),
+    ).rejects.toMatchObject({ code: "VALIDATION", status: 400 });
+    await expect(
+      startTimer(user.id, { tag_ids: {} as unknown as string[] }),
+    ).rejects.toMatchObject({ code: "VALIDATION", status: 400 });
   });
 
   it("creates manual closed entries; overlaps allowed", async () => {

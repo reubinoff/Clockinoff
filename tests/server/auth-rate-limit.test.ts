@@ -1,13 +1,19 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  LOGIN_IP_RATE_LIMIT,
   LOGIN_RATE_LIMIT,
   REGISTER_RATE_LIMIT,
+  isLoginIpRateLimited,
   isLoginRateLimited,
   isRegisterRateLimited,
+  loginIpMapSize,
+  loginIpRetryAfterSeconds,
+  loginMapSize,
   loginRetryAfterSeconds,
   recordLoginFailure,
   recordLoginSuccess,
   recordRegisterAttempt,
+  registerMapSize,
   registerRetryAfterSeconds,
   resetAuthRateLimits,
 } from "@/server/auth/rate-limit";
@@ -131,5 +137,64 @@ describe("auth/rate-limit", () => {
     const retry = registerRetryAfterSeconds("7.7.7.7", start);
     expect(retry).toBeGreaterThan(0);
     expect(retry).toBeLessThanOrEqual(Math.ceil(REGISTER_RATE_LIMIT.windowMs / 1000));
+  });
+
+  it("limits one IP across emails after the per-IP ceiling", () => {
+    const ip = "8.8.8.8";
+    for (let i = 0; i < LOGIN_IP_RATE_LIMIT.maxFailures; i += 1) {
+      recordLoginFailure(`e${i}@example.com`, ip);
+    }
+    expect(isLoginIpRateLimited(ip)).toBe(true);
+    expect(isLoginIpRateLimited("9.9.9.9")).toBe(false);
+    const retry = loginIpRetryAfterSeconds(ip);
+    expect(retry).toBeGreaterThan(0);
+    expect(loginIpRetryAfterSeconds("fresh-ip")).toBe(0);
+  });
+
+  it("caps the login map and evicts the oldest keys (#145)", () => {
+    for (let i = 0; i < LOGIN_RATE_LIMIT.maxFailures; i += 1) {
+      recordLoginFailure("keep@example.com", "1.1.1.1");
+    }
+    expect(isLoginRateLimited("keep@example.com", "1.1.1.1")).toBe(true);
+
+    for (let i = 0; i < LOGIN_RATE_LIMIT.maxBuckets; i += 1) {
+      recordLoginFailure(`n${i}@example.com`, "2.2.2.2");
+    }
+    expect(loginMapSize()).toBe(LOGIN_RATE_LIMIT.maxBuckets);
+    expect(isLoginRateLimited("keep@example.com", "1.1.1.1")).toBe(false);
+  });
+
+  it("caps the register map at maxBuckets", () => {
+    for (let i = 0; i < REGISTER_RATE_LIMIT.maxBuckets + 25; i += 1) {
+      recordRegisterAttempt(`203.0.113.${i % 255}-${Math.floor(i / 255)}`);
+    }
+    expect(registerMapSize()).toBe(REGISTER_RATE_LIMIT.maxBuckets);
+  });
+
+  it("sweeps a bounded prefix of expired keys instead of the full map", () => {
+    const start = 5_000_000;
+    for (let i = 0; i < 80; i += 1) {
+      recordLoginFailure(`old${i}@example.com`, "1.1.1.1", start);
+    }
+    expect(loginMapSize()).toBe(80);
+    const after = start + LOGIN_RATE_LIMIT.windowMs + 1;
+    recordLoginFailure("fresh@example.com", "1.1.1.1", after);
+    // Incremental prune removes at most pruneScan expired keys per write.
+    expect(loginMapSize()).toBeLessThan(80);
+    expect(loginMapSize()).toBeGreaterThanOrEqual(80 - LOGIN_RATE_LIMIT.pruneScan);
+  });
+
+  it("stays O(1) amortised when the login map is already full", () => {
+    for (let i = 0; i < LOGIN_RATE_LIMIT.maxBuckets; i += 1) {
+      recordLoginFailure(`full${i}@example.com`, "4.4.4.4");
+    }
+    const started = performance.now();
+    for (let i = 0; i < 1_000; i += 1) {
+      recordLoginFailure(`extra${i}@example.com`, "5.5.5.5");
+    }
+    const elapsed = performance.now() - started;
+    expect(loginMapSize()).toBe(LOGIN_RATE_LIMIT.maxBuckets);
+    expect(loginIpMapSize()).toBeLessThanOrEqual(LOGIN_IP_RATE_LIMIT.maxBuckets);
+    expect(elapsed).toBeLessThan(250);
   });
 });

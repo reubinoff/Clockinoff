@@ -59,8 +59,13 @@ they are always active or gone.
 ## Attaching tags to entries
 
 The v1 timer bar and entries table do not include an inline tag picker;
-tag attachment is currently exposed via the API (`POST /api/entries` and
-`PATCH /api/entries/:id` accept `tag_ids: string[]`).
+tag attachment is currently exposed via the API (`POST /api/entries`,
+`PATCH /api/entries/:id`, `POST /api/timer/start`, and `PATCH /api/timer`
+accept `tag_ids: string[]`).
+
+Those write endpoints accept at most **50** tag ids, each a UUID. A
+larger list, a non-array value, or a non-UUID element is rejected with
+`400 VALIDATION`.
 
 The [entries list]({{ '/entries' | relative_url }}) and both exports do
 render the tags attached to each entry, so if you tag entries through

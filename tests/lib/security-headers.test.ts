@@ -75,4 +75,20 @@ describe("security headers (next.config.mjs)", () => {
     const rp = headers.find((h) => h.key === "Referrer-Policy");
     expect(rp?.value).toBe("strict-origin-when-cross-origin");
   });
+
+  it("sets Permissions-Policy disabling camera, microphone, and geolocation", async () => {
+    const headers = await loadBaselineHeaders();
+    const pp = headers.find((h) => h.key === "Permissions-Policy");
+    expect(pp, "missing Permissions-Policy").toBeDefined();
+    expect(pp!.value).toContain("camera=()");
+    expect(pp!.value).toContain("microphone=()");
+    expect(pp!.value).toContain("geolocation=()");
+  });
+
+  it("caps the Next proxy body clone at 64kb", () => {
+    const config = nextConfig as {
+      experimental?: { proxyClientMaxBodySize?: string | number };
+    };
+    expect(config.experimental?.proxyClientMaxBodySize).toBe("64kb");
+  });
 });

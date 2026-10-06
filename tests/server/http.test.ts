@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/errors";
-import { jsonError, noContent, ok, readJson, requireUser } from "@/server/http";
+import { MAX_JSON_BODY_BYTES, jsonError, noContent, ok, readJson, requireUser } from "@/server/http";
 import { truncateAll } from "../setup";
 import { makeUser } from "../helpers";
 
@@ -37,6 +37,43 @@ describe("server/http", () => {
       body: JSON.stringify({ hi: 1 }),
     });
     await expect(readJson(req)).resolves.toEqual({ hi: 1 });
+  });
+
+  it("readJson rejects a Content-Length over the cap with 413", async () => {
+    const req = new Request("http://x", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": String(MAX_JSON_BODY_BYTES + 1),
+      },
+      body: "x",
+    });
+    await expect(readJson(req)).rejects.toMatchObject({
+      status: 413,
+      code: "VALIDATION",
+    });
+  });
+
+  it("readJson rejects an oversized stream without Content-Length", async () => {
+    const encoder = new TextEncoder();
+    let pulls = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        controller.enqueue(encoder.encode("a".repeat(16 * 1024)));
+        if (pulls > 8) controller.close();
+      },
+    });
+    const req = new Request("http://x", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: stream,
+      duplex: "half",
+    } as RequestInit);
+    await expect(readJson(req)).rejects.toMatchObject({
+      status: 413,
+      code: "VALIDATION",
+    });
   });
 
   it("jsonError maps ApiError", async () => {

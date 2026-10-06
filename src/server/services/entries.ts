@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { pgErrorCode } from "@/server/db/errors";
+import { parseTagIds } from "@/lib/tag-ids";
 import {
   clients,
   projects,
@@ -148,9 +149,9 @@ async function assertProjectOwned(userId: string, projectId: string | null | und
   return projectId;
 }
 
-async function loadOwnedTagIds(userId: string, tagIds: readonly string[] | undefined): Promise<string[]> {
-  if (!tagIds || tagIds.length === 0) return [];
-  const unique = Array.from(new Set(tagIds));
+async function loadOwnedTagIds(userId: string, tagIds: unknown): Promise<string[]> {
+  const unique = parseTagIds(tagIds);
+  if (unique.length === 0) return [];
   const db = getDb();
   const rows = await db
     .select({ id: tags.id })

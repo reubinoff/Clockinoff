@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as loginPost } from "@/app/api/auth/login/route";
 import { POST as registerPost } from "@/app/api/auth/register/route";
 import {
+  LOGIN_IP_RATE_LIMIT,
   LOGIN_RATE_LIMIT,
+  recordLoginFailure,
   resetAuthRateLimits,
 } from "@/server/auth/rate-limit";
 import { truncateAll } from "../setup";
@@ -74,5 +76,57 @@ describe("POST /api/auth/login (rate limiting)", () => {
       post("http://test/api/auth/login", { email, password: PW }, "198.51.100.33"),
     );
     expect(legit.status).toBe(200);
+  });
+
+  it("returns 429 before reading the body once the per-IP ceiling is hit (#151)", async () => {
+    const ip = "198.51.100.77";
+    for (let i = 0; i < LOGIN_IP_RATE_LIMIT.maxFailures; i += 1) {
+      recordLoginFailure(`flood-${i}@example.com`, ip);
+    }
+    const res = await loginPost(
+      new Request("http://test/api/auth/login", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(1024 * 1024),
+          "x-forwarded-for": ip,
+        },
+        body: "x".repeat(64),
+      }),
+    );
+    // 429 (not 413) proves the throttle ran before the size-capped parse.
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("RATE_LIMITED");
+  });
+
+  it("rejects a 1 MiB login body with 413 without parsing (#151)", async () => {
+    const parseSpy = vi.spyOn(JSON, "parse");
+    const before = parseSpy.mock.calls.length;
+    const res = await loginPost(
+      new Request("http://test/api/auth/login", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(1024 * 1024),
+          "x-forwarded-for": "198.51.100.50",
+        },
+        body: "x".repeat(64),
+      }),
+    );
+    expect(res.status).toBe(413);
+    expect(parseSpy.mock.calls.length).toBe(before);
+    parseSpy.mockRestore();
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("VALIDATION");
+  });
+
+  it("rejects an empty login email with 400 before the credential check", async () => {
+    const res = await loginPost(
+      post("http://test/api/auth/login", { email: "", password: "x", pad: "y" }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("VALIDATION");
   });
 });

@@ -12,6 +12,8 @@
 //   unconditionally rather than depending on runtime env-checks in the config.
 // - `Referrer-Policy` keeps third-party referers (e.g. clicked links out of
 //   the app) from leaking the authenticated path a user came from.
+// - `Permissions-Policy` disables camera / microphone / geolocation and
+//   other unused powerful APIs (issue #127). The app never asks for them.
 // - `Content-Security-Policy` is a *pragmatic* enforce policy, not a locked-
 //   down one. See the long comment on `CSP` below for the explicit list of
 //   gaps and why they are deliberate for v1.
@@ -74,11 +76,23 @@ const CSP = [
   "object-src 'none'",
 ].join("; ");
 
+const PERMISSIONS_POLICY = [
+  "camera=()",
+  "microphone=()",
+  "geolocation=()",
+  "payment=()",
+  "usb=()",
+  "bluetooth=()",
+  "display-capture=()",
+  "interest-cohort=()",
+].join(", ");
+
 const SECURITY_HEADERS = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Content-Security-Policy", value: CSP },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: PERMISSIONS_POLICY },
   {
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
@@ -91,6 +105,14 @@ const nextConfig = {
   output: "standalone",
   // Drop the `X-Powered-By: Next.js` framework banner (issues #35 and #44).
   poweredByHeader: false,
+  // Next 16 clones the request body for `proxy` + the route handler and
+  // defaults that buffer to 10 MB. Clockinoff has no uploads; 64 KiB is
+  // enough for every JSON route and stops an unauthenticated 10 MB POST
+  // from being fully buffered (#151). `readJson` still enforces the same
+  // cap and returns 413 — the proxy setting only limits the clone.
+  experimental: {
+    proxyClientMaxBodySize: "64kb",
+  },
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },

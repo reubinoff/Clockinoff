@@ -19,6 +19,11 @@ describe("errors", () => {
     expect(rl.message).toMatch(/too many login attempts/i);
     expect(rl.message).not.toMatch(/email|account|exist/i);
     expect(errors.rateLimited("custom").message).toBe("custom");
+
+    const tooBig = errors.payloadTooLarge();
+    expect(tooBig.status).toBe(413);
+    expect(tooBig.code).toBe("VALIDATION");
+    expect(tooBig.message).toMatch(/too large/i);
   });
 
   it("timer-already-running attaches entry_id", () => {
