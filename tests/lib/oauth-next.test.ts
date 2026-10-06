@@ -64,8 +64,11 @@ describe("sanitiseNext", () => {
   });
 
   it("#123 password login: external next cannot leave origin", () => {
-    // Same expression as `router.push(sanitiseNext(next))` on /login.
-    const next = "https://evil.example" || "/app";
+    // Same shape as /login: `const next = params.get("next") || "/app"` then
+    // `router.push(sanitiseNext(next))`. Typed as string | null so the
+    // fallback is a real branch (a string literal || "/app" is always truthy).
+    const raw: string | null = "https://evil.example";
+    const next = raw || "/app";
     expect(sanitiseNext(next)).toBe("/app");
     expect(sanitiseNext("https://evil.example/phish")).toBe("/app");
     expect(sanitiseNext("//evil.example")).toBe("/app");
