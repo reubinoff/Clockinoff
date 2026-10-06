@@ -72,6 +72,10 @@ stop or discard it first if you want it to count.
 The small line underneath restates the range (e.g.
 `Sep 1 – Sep 30, 2026`) and the peak day in the chart.
 
+On a window **1280px or wider**, that total block sits **beside** the
+bar chart in one row. Below 1280 the total stays **above** the chart,
+the same stacked order as before.
+
 ### Bar chart — hours per day
 
 One bar per day in the range, left-to-right in chronological order.
@@ -128,9 +132,9 @@ explicitly deferred:
   `tag_id` / `billable=true|false` query params (see the
   [Export]({{ '/export' | relative_url }}) page) if you need to script a
   narrower range.
-- Mobile-first chart polish (the Reports page re-stacks total → bar →
-  list → donut on narrow widths, but the chart densities are tuned
-  for `md+`).
+- Mobile-first chart polish (below 1280 the total sits above the bar;
+  the project list and donut sit side by side from the `md`
+  breakpoint).
 
 See the [FAQ]({{ '/faq' | relative_url }}) for the full "not in v1"
 list.

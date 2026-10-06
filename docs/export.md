@@ -31,15 +31,19 @@ Go to `/app/export`. You will see:
 
 - **Quick ranges** — a row of chips: **Today**, **This week**,
   **This month**, **Custom**. Picking a preset fills the From/To
-  dates for you. **Custom** is always selectable — clicking it reveals
-  the same From/To inputs so you can dial in any range without
-  disturbing the preset that was previously shown.
-- **From** — start date (inclusive). Required. Shown when **Custom** is
-  selected; the presets fill it silently.
+  dates for you. **Custom** is always selectable — editing either date
+  also selects it, so the chip never claims a preset you have changed.
+- **From** — start date (inclusive). Required. Always on the form.
+  Presets fill it; you can still type over it.
 - **To** — end date (inclusive). Required. Same as above.
-- **Download CSV** / **Download PDF** — one button per format. While a
-  download is being prepared the button label reads **Preparing…** and
-  both buttons disable to prevent a double-fire.
+  From the small-screen breakpoint up, **From** and **To** sit in two
+  columns. On a phone they stack.
+- **Download CSV** / **Download PDF** — one button per format, sharing
+  one row (the same baseline). On a window **1280px or wider** that
+  pair lines up with the bottom of the From and To fields, across the
+  full width of the page. While a download is being prepared the
+  button label reads **Preparing…** and both buttons disable to
+  prevent a double-fire.
 
 Defaults: the page opens on **This month** (from the 1st of the current
 month through today). Both dates are interpreted in your account

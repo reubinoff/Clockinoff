@@ -143,15 +143,13 @@ export default function ExportPage(): JSX.Element {
     }
   }
 
-  const showCustomFields = selected === "custom";
-
   return (
     <section className="space-y-4">
       <div>
         <h2 className="text-title text-ink">Export</h2>
         <p className="text-body-sm text-muted">CSV or PDF. Date range required.</p>
       </div>
-      <div className="card p-6 space-y-4 md:max-w-md">
+      <div className="card w-full p-6 space-y-4">
         <div>
           <label className="label" id="export-quick-label">Quick ranges</label>
           <div
@@ -178,34 +176,49 @@ export default function ExportPage(): JSX.Element {
             })}
           </div>
         </div>
-        {showCustomFields ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="label" htmlFor="export-from">From</label>
-              <input
-                id="export-from"
-                className="input"
-                type="date"
-                value={from}
-                onChange={(e) => editFrom(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor="export-to">To</label>
-              <input
-                id="export-to"
-                className="input"
-                type="date"
-                value={to}
-                onChange={(e) => editTo(e.target.value)}
-              />
-            </div>
+        {/* From/To are two columns from sm up. CSV and PDF stay on one
+            baseline with each other; at xl that pair lines up with the
+            bottom of the date fields. */}
+        <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:flex xl:gap-4">
+          <div className="min-w-0 xl:w-56">
+            <label className="label" htmlFor="export-from">From</label>
+            <input
+              id="export-from"
+              className="input"
+              type="date"
+              value={from}
+              onChange={(e) => editFrom(e.target.value)}
+            />
           </div>
-        ) : (
-          <p className="text-body-sm text-muted tabular-nums">
-            {from} → {to}
-          </p>
-        )}
+          <div className="min-w-0 xl:w-56">
+            <label className="label" htmlFor="export-to">To</label>
+            <input
+              id="export-to"
+              className="input"
+              type="date"
+              value={to}
+              onChange={(e) => editTo(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:items-end xl:col-auto xl:shrink-0">
+            <button
+              className="btn btn-primary w-full sm:w-auto"
+              onClick={() => download("csv")}
+              disabled={!from || !to || pending !== null}
+            >
+              <IconExport size={16} aria-hidden />
+              <span>{pending === "csv" ? "Preparing…" : "Download CSV"}</span>
+            </button>
+            <button
+              className="btn w-full sm:w-auto"
+              onClick={() => download("pdf")}
+              disabled={!from || !to || pending !== null}
+            >
+              <IconExport size={16} aria-hidden />
+              <span>{pending === "pdf" ? "Preparing…" : "Download PDF"}</span>
+            </button>
+          </div>
+        </div>
         {isEmpty && (
           <p
             className="text-body-sm text-muted"
@@ -220,24 +233,6 @@ export default function ExportPage(): JSX.Element {
             {error}
           </p>
         )}
-        <div className="flex flex-col sm:flex-row gap-2">
-          <button
-            className="btn btn-primary w-full sm:flex-1"
-            onClick={() => download("csv")}
-            disabled={!from || !to || pending !== null}
-          >
-            <IconExport size={16} aria-hidden />
-            <span>{pending === "csv" ? "Preparing…" : "Download CSV"}</span>
-          </button>
-          <button
-            className="btn w-full sm:flex-1"
-            onClick={() => download("pdf")}
-            disabled={!from || !to || pending !== null}
-          >
-            <IconExport size={16} aria-hidden />
-            <span>{pending === "pdf" ? "Preparing…" : "Download PDF"}</span>
-          </button>
-        </div>
       </div>
     </section>
   );

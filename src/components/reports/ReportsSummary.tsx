@@ -314,34 +314,39 @@ export default function ReportsSummary({ timezone }: ReportsSummaryProps): JSX.E
         )}
       </div>
 
-      <div className="card p-5 md:p-6 space-y-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <div>
-            <p className="text-label text-muted uppercase tracking-wide">Total</p>
-            <p className="text-[2.5rem] leading-tight font-semibold text-ink tabular-nums">
-              {totalHoursLabel}
-            </p>
-            <p className="text-body-sm text-muted">{rangeLabel}</p>
-          </div>
-          <p className="text-body-sm text-muted">
-            Peak day · {hoursText(peakDay)}
-          </p>
-        </div>
-        <div
-          className="relative"
-          aria-busy={loading}
-          aria-live="polite"
-        >
-          <RangeBarChart days={summary.days} timezone={timezone} />
-          {loading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-surface/60">
-              <span className="quiet-pulse-spinner" aria-hidden />
-              <span className="sr-only">Loading entries…</span>
+      <div className="card p-5 md:p-6">
+        {/* Below 1280 the total stays stacked above the chart. At xl the
+            two share one row so a wide Reports page doesn't burn a full
+            chart-height of empty card under the total. */}
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:gap-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-3 xl:w-56 xl:shrink-0 xl:flex-col xl:items-start xl:justify-end xl:gap-2">
+            <div>
+              <p className="text-label text-muted uppercase tracking-wide">Total</p>
+              <p className="text-[2.5rem] leading-tight font-semibold text-ink tabular-nums">
+                {totalHoursLabel}
+              </p>
+              <p className="text-body-sm text-muted">{rangeLabel}</p>
             </div>
-          )}
+            <p className="text-body-sm text-muted">
+              Peak day · {hoursText(peakDay)}
+            </p>
+          </div>
+          <div
+            className="relative min-w-0 flex-1"
+            aria-busy={loading}
+            aria-live="polite"
+          >
+            <RangeBarChart days={summary.days} timezone={timezone} />
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-surface/60">
+                <span className="quiet-pulse-spinner" aria-hidden />
+                <span className="sr-only">Loading entries…</span>
+              </div>
+            )}
+          </div>
         </div>
         {showEmpty && (
-          <p className="text-body-sm text-muted">
+          <p className="mt-4 text-body-sm text-muted">
             No entries in this range. Try a different window above, or log one from the Timer.
           </p>
         )}
