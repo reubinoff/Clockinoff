@@ -135,6 +135,8 @@ of whether each attempt succeeded — the server responds with
 
 You will be sent to `/app` unless you followed a link deeper in the app; in
 that case Clockinoff returns you to the page you were trying to reach.
+An off-site `?next=` value (for example `https://evil.example`) is ignored
+and you still land on `/app`.
 
 ### Too many failed sign-ins
 

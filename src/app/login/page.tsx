@@ -13,6 +13,7 @@ import {
   googleAuthErrorMessage,
   isGooglePasswordAccountError,
 } from "@/lib/google-auth-errors";
+import { sanitiseNext } from "@/lib/oauth-next-path";
 
 export default function LoginPage(): JSX.Element {
   return (
@@ -69,7 +70,7 @@ function LoginForm(): JSX.Element {
         setError(msg);
         return;
       }
-      router.push(next);
+      router.push(sanitiseNext(next));
       router.refresh();
     } catch {
       setError("Something went wrong. Try again.");

@@ -62,4 +62,13 @@ describe("sanitiseNext", () => {
     expect(sanitiseNext("https://user:pass@clockinoff.reubinoff.com/app", PUBLIC_ORIGIN)).toBe("/app");
     expect(sanitiseNext("/app", "not a url")).toBe("/app");
   });
+
+  it("#123 password login: external next cannot leave origin", () => {
+    // Same expression as `router.push(sanitiseNext(next))` on /login.
+    const next = "https://evil.example" || "/app";
+    expect(sanitiseNext(next)).toBe("/app");
+    expect(sanitiseNext("https://evil.example/phish")).toBe("/app");
+    expect(sanitiseNext("//evil.example")).toBe("/app");
+    expect(sanitiseNext("/app/entries")).toBe("/app/entries");
+  });
 });

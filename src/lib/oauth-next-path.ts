@@ -1,7 +1,7 @@
 // Client-safe helpers for the Google OAuth "next" path and the state cookie
-// name. No Node APIs, no crypto — #123 can import `sanitiseNext` from the
-// login client later. HMAC sign/verify lives in `src/lib/oauth-state.ts`
-// behind `import "server-only"`.
+// name. No Node APIs, no crypto — password login (#123) and Google
+// start/callback import `sanitiseNext` from here. HMAC sign/verify lives
+// in `src/lib/oauth-state.ts` behind `import "server-only"`.
 
 export const OAUTH_STATE_COOKIE = "timely_oauth_state";
 export const OAUTH_STATE_MAX_AGE_SECONDS = 10 * 60;
