@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   GOOGLE_AUTH_ERROR_COPY,
+  GOOGLE_CONNECTED_TOAST,
+  GOOGLE_PASSWORD_ACCOUNT_COPY,
+  GOOGLE_PASSWORD_ACCOUNT_CTA,
+  GOOGLE_PASSWORD_ACCOUNT_ERROR,
   googleAuthErrorMessage,
+  googleEmailMismatchMessage,
+  googlePasswordAccountLoginPath,
+  googlePasswordAccountPrefillEmail,
+  isGooglePasswordAccountError,
 } from "@/lib/google-auth-errors";
 
 describe("googleAuthErrorMessage", () => {
@@ -17,7 +25,43 @@ describe("googleAuthErrorMessage", () => {
     expect(googleAuthErrorMessage("")).toBeNull();
   });
 
+  it("does not paint google_password_account as a red network error", () => {
+    expect(isGooglePasswordAccountError(GOOGLE_PASSWORD_ACCOUNT_ERROR)).toBe(true);
+    expect(isGooglePasswordAccountError("network")).toBe(false);
+    expect(googleAuthErrorMessage(GOOGLE_PASSWORD_ACCOUNT_ERROR)).toBeNull();
+  });
+
   it("falls back to the generic network copy for unknown codes (never leaks the raw code)", () => {
     expect(googleAuthErrorMessage("something-weird")).toBe(GOOGLE_AUTH_ERROR_COPY.network);
+  });
+});
+
+describe("google password-account helpers", () => {
+  it("builds the locked login path with a safe email prefill", () => {
+    expect(googlePasswordAccountLoginPath("merge@example.com")).toBe(
+      "/login?error=google_password_account&email=merge%40example.com",
+    );
+    expect(googlePasswordAccountLoginPath()).toBe("/login?error=google_password_account");
+    expect(googlePasswordAccountLoginPath("not-an-email")).toBe(
+      "/login?error=google_password_account",
+    );
+  });
+
+  it("only prefills a well-shaped email", () => {
+    expect(googlePasswordAccountPrefillEmail("  a@example.com  ")).toBe("a@example.com");
+    expect(googlePasswordAccountPrefillEmail("nope")).toBe("");
+    expect(googlePasswordAccountPrefillEmail(null)).toBe("");
+    expect(googlePasswordAccountPrefillEmail("x".repeat(300) + "@e.com")).toBe("");
+  });
+
+  it("locks Dana banner / mismatch copy", () => {
+    expect(GOOGLE_PASSWORD_ACCOUNT_COPY).toBe(
+      "This email already has a Clockinoff password. Sign in with it first, then connect Google from Settings.",
+    );
+    expect(GOOGLE_PASSWORD_ACCOUNT_CTA).toBe("Sign in with password");
+    expect(GOOGLE_CONNECTED_TOAST).toBe("Google connected. You can now sign in either way.");
+    expect(googleEmailMismatchMessage("dana@example.com")).toBe(
+      "That Google account uses a different email. Connect one that matches dana@example.com.",
+    );
   });
 });

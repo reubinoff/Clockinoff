@@ -31,8 +31,9 @@ function makeIdToken(overrides: Record<string, unknown> = {}): string {
   return `${b64url({ alg: "RS256" })}.${b64url(payload)}.signature`;
 }
 
-function stateCookie(state: string, next = "/app"): string {
-  const value = encodeURIComponent(JSON.stringify({ s: state, n: next }));
+function stateCookie(state: string, next = "/app", intent?: "connect"): string {
+  const payload = intent === "connect" ? { s: state, n: next, i: "connect" } : { s: state, n: next };
+  const value = encodeURIComponent(JSON.stringify(payload));
   return `timely_oauth_state=${value}`;
 }
 
@@ -203,7 +204,7 @@ describe("GET /api/auth/google/callback", () => {
     expect(rows[0].passwordHash).toBeNull();
   });
 
-  it("attach path: existing email/password user signs in with Google, keeps password, no welcome", async () => {
+  it("password-account refuse: existing email/password user is not attached and lands on the banner", async () => {
     const { user: existing } = await register({
       email: "merge@example.com",
       password: "correct-horse-battery",
@@ -216,21 +217,48 @@ describe("GET /api/auth/google/callback", () => {
       callbackRequest({ code: "code-1", state: "s1", cookie: stateCookie("s1") }),
     );
     const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/login");
+    expect(loc.searchParams.get("error")).toBe("google_password_account");
+    expect(loc.searchParams.get("email")).toBe("merge@example.com");
+    expect(extractCookie(res, SESSION_COOKIE)).toBeNull();
+
+    const db = getDb();
+    const rows = await db
+      .select({ id: users.id, passwordHash: users.passwordHash, googleSub: users.googleSub })
+      .from(users);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(existing.id);
+    expect(rows[0].googleSub).toBeNull();
+    expect(rows[0].passwordHash).not.toBeNull();
+  });
+
+  it("Google-only existing user without a sub still attaches the old way", async () => {
+    const db = getDb();
+    const [existing] = await db
+      .insert(users)
+      .values({ email: "solo@example.com", passwordHash: null, googleSub: null })
+      .returning({ id: users.id });
+
+    mockGoogleFetch({
+      idToken: makeIdToken({ sub: "google|solo-1", email: "solo@example.com" }),
+    });
+    const res = await GET(
+      callbackRequest({ code: "code-1", state: "s1", cookie: stateCookie("s1") }),
+    );
+    const loc = new URL(res.headers.get("location") ?? "");
     expect(loc.pathname).toBe("/app");
-    // Not a new user → no welcome=1.
     expect(loc.searchParams.get("welcome")).toBeNull();
 
     const cookie = extractCookie(res, SESSION_COOKIE);
     const sessionUser = await getSessionUser(cookie!.value);
     expect(sessionUser?.id).toBe(existing.id);
 
-    const db = getDb();
     const rows = await db
       .select({ passwordHash: users.passwordHash, googleSub: users.googleSub })
       .from(users);
     expect(rows).toHaveLength(1);
-    expect(rows[0].googleSub).toBe("google|merge-1");
-    expect(rows[0].passwordHash).not.toBeNull();
+    expect(rows[0].googleSub).toBe("google|solo-1");
+    expect(rows[0].passwordHash).toBeNull();
   });
 
   it("already-linked user: same sub returning → sign in, no welcome, same user", async () => {
@@ -326,7 +354,16 @@ describe("GET /api/auth/google/callback", () => {
   });
 
   it("preserves a safe `next` from the state cookie when signing in an existing user", async () => {
-    await register({ email: "deep@example.com", password: "correct-horse-battery" });
+    mockGoogleFetch({
+      idToken: makeIdToken({ sub: "google|deep-1", email: "deep@example.com" }),
+    });
+    const first = await GET(
+      callbackRequest({ code: "code-a", state: "s0", cookie: stateCookie("s0") }),
+    );
+    expect(first.status).toBe(302);
+
+    vi.restoreAllMocks();
+    configure();
     mockGoogleFetch({
       idToken: makeIdToken({ sub: "google|deep-1", email: "deep@example.com" }),
     });
@@ -340,5 +377,99 @@ describe("GET /api/auth/google/callback", () => {
     const loc = new URL(res.headers.get("location") ?? "");
     expect(loc.pathname).toBe("/app/entries");
     expect(loc.searchParams.get("welcome")).toBeNull();
+  });
+
+  it("Settings connect: matching email attaches Google and lands on /app/account?google=connected", async () => {
+    const { user, session } = await register({
+      email: "a@example.com",
+      password: "correct-horse-battery",
+    });
+    mockGoogleFetch({
+      idToken: makeIdToken({ sub: "google|connect-1", email: "a@example.com" }),
+    });
+    const res = await GET(
+      callbackRequest({
+        code: "code-1",
+        state: "s1",
+        cookie: `${stateCookie("s1", "/app/account", "connect")}; ${SESSION_COOKIE}=${session.id}`,
+      }),
+    );
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/app/account");
+    expect(loc.searchParams.get("google")).toBe("connected");
+
+    const db = getDb();
+    const rows = await db
+      .select({ googleSub: users.googleSub })
+      .from(users)
+      .where(eq(users.id, user.id));
+    expect(rows[0].googleSub).toBe("google|connect-1");
+  });
+
+  it("Settings connect: mismatched Google email stays on Account with the mismatch error", async () => {
+    const { session } = await register({
+      email: "a@example.com",
+      password: "correct-horse-battery",
+    });
+    mockGoogleFetch({
+      idToken: makeIdToken({ sub: "google|other", email: "other@example.com" }),
+    });
+    const res = await GET(
+      callbackRequest({
+        code: "code-1",
+        state: "s1",
+        cookie: `${stateCookie("s1", "/app/account", "connect")}; ${SESSION_COOKIE}=${session.id}`,
+      }),
+    );
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/app/account");
+    expect(loc.searchParams.get("error")).toBe("google_email_mismatch");
+  });
+
+  it("Settings connect: unverified Google email stays on Account", async () => {
+    const { session } = await register({
+      email: "a@example.com",
+      password: "correct-horse-battery",
+    });
+    mockGoogleFetch({ idToken: makeIdToken({ email_verified: false }) });
+    const res = await GET(
+      callbackRequest({
+        code: "code-1",
+        state: "s1",
+        cookie: `${stateCookie("s1", "/app/account", "connect")}; ${SESSION_COOKIE}=${session.id}`,
+      }),
+    );
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/app/account");
+    expect(loc.searchParams.get("error")).toBe("network");
+  });
+
+  it("Settings connect: Google cancel stays on Account", async () => {
+    const res = await GET(
+      callbackRequest({
+        errorParam: "access_denied",
+        cookie: stateCookie("abc", "/app/account", "connect"),
+      }),
+    );
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/app/account");
+    expect(loc.searchParams.get("error")).toBe("network");
+  });
+
+  it("Settings connect without a session bounces to login", async () => {
+    mockGoogleFetch({
+      idToken: makeIdToken({ sub: "google|anon", email: "anon@example.com" }),
+    });
+    const res = await GET(
+      callbackRequest({
+        code: "code-1",
+        state: "s1",
+        cookie: stateCookie("s1", "/app/account", "connect"),
+      }),
+    );
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/login");
+    expect(loc.searchParams.get("next")).toBe("/app/account");
+    expect(extractCookie(res, SESSION_COOKIE)).toBeNull();
   });
 });

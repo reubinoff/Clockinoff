@@ -67,10 +67,14 @@ What happens behind the scenes depends on your Google email:
   `/app?welcome=1` hero on first load. The account has **no password**
   until you choose to set one; use **Continue with Google** to sign in
   again.
-- **You already have a Clockinoff account with the same email.** We
-  attach your Google identity to that account and sign you in. Your
-  existing password keeps working — nothing is replaced, there is no
-  second account, and we never show an "account already exists" error.
+- **You already have a Clockinoff password for that email.** Clockinoff
+  does **not** attach Google automatically. You land back on `/login`
+  with an info banner: *"This email already has a Clockinoff password.
+  Sign in with it first, then connect Google from Settings."* Sign in
+  with your password, then open **Account** and click **Connect Google**.
+- **You already have a Google-only Clockinoff account (no password)
+  with the same email.** We attach your Google identity and sign you
+  in — same as a first-time Google sign-in returning later.
 - **Your Google email is not verified.** Clockinoff refuses to sign you
   in and shows *"Google email isn't verified."* Verify the email in
   your Google account, then try again.

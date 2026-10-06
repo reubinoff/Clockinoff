@@ -84,6 +84,58 @@ describe("GET /api/auth/google/start", () => {
     expect(parsed.n).toBe("/app/entries");
   });
 
+  it("stores connect intent in the state cookie when a session is present", async () => {
+    const { createSession } = await import("@/server/auth/session");
+    const { register } = await import("@/server/auth/service");
+    const { truncateAll } = await import("../setup");
+    await truncateAll();
+    const { user } = await register({
+      email: "connect@example.com",
+      password: "correct-horse-battery",
+    });
+    const session = await createSession(user.id);
+    const res = await GET(
+      new Request("http://test/api/auth/google/start?intent=connect", {
+        headers: { cookie: `timely_session=${session.id}` },
+      }),
+    );
+    expect(res.status).toBe(302);
+    const cookie = parseStateCookie(res.headers.get("set-cookie"));
+    const parsed = JSON.parse(cookie.value) as { s: string; n: string; i?: string };
+    expect(parsed.i).toBe("connect");
+    expect(parsed.n).toBe("/app/account");
+  });
+
+  it("bounces connect-without-session to /login?next=/app/account", async () => {
+    const res = await GET(new Request("http://test/api/auth/google/start?intent=connect"));
+    expect(res.status).toBe(302);
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/login");
+    expect(loc.searchParams.get("next")).toBe("/app/account");
+  });
+
+  it("bounces connect config failure to /app/account?error=network", async () => {
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+    const { createSession } = await import("@/server/auth/session");
+    const { register } = await import("@/server/auth/service");
+    const { truncateAll } = await import("../setup");
+    await truncateAll();
+    const { user } = await register({
+      email: "noconfig@example.com",
+      password: "correct-horse-battery",
+    });
+    const session = await createSession(user.id);
+    const res = await GET(
+      new Request("http://test/api/auth/google/start?intent=connect", {
+        headers: { cookie: `timely_session=${session.id}` },
+      }),
+    );
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/app/account");
+    expect(loc.searchParams.get("error")).toBe("network");
+  });
+
   it("rewrites an unsafe next value to /app before storing it", async () => {
     const res = await GET(
       new Request("http://test/api/auth/google/start?next=https%3A%2F%2Fevil.example%2F"),

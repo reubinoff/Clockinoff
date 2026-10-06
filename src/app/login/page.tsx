@@ -7,8 +7,13 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { GoogleButton } from "@/components/auth/GoogleButton";
+import { GooglePasswordAccountBanner } from "@/components/auth/GooglePasswordAccountBanner";
 import { IconAlert } from "@/components/icons";
-import { googleAuthErrorMessage } from "@/lib/google-auth-errors";
+import {
+  googleAuthErrorMessage,
+  googlePasswordAccountPrefillEmail,
+  isGooglePasswordAccountError,
+} from "@/lib/google-auth-errors";
 
 export default function LoginPage(): JSX.Element {
   return (
@@ -26,17 +31,27 @@ function LoginForm(): JSX.Element {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/app";
-  const googleErrorFromQuery = googleAuthErrorMessage(params.get("error"));
-  const [email, setEmail] = useState("");
+  const errorCode = params.get("error");
+  const showPasswordAccountBanner = isGooglePasswordAccountError(errorCode);
+  const googleErrorFromQuery = googleAuthErrorMessage(errorCode);
+  const prefilledEmail = googlePasswordAccountPrefillEmail(params.get("email"));
+  const [email, setEmail] = useState(prefilledEmail);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(googleErrorFromQuery);
   const [pending, setPending] = useState(false);
   const [googlePending, setGooglePending] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (showPasswordAccountBanner) return;
     emailRef.current?.focus();
-  }, []);
+  }, [showPasswordAccountBanner]);
+
+  function focusPasswordAndPrefill(): void {
+    if (!email.trim() && prefilledEmail) setEmail(prefilledEmail);
+    passwordRef.current?.focus();
+  }
 
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -90,6 +105,9 @@ function LoginForm(): JSX.Element {
         </>
       }
     >
+      {showPasswordAccountBanner ? (
+        <GooglePasswordAccountBanner onSignInWithPassword={focusPasswordAndPrefill} />
+      ) : null}
       <form onSubmit={submit} className="space-y-4" noValidate>
         <div className="space-y-1">
           <label htmlFor="email" className="block text-sm font-medium text-ink">
@@ -117,6 +135,7 @@ function LoginForm(): JSX.Element {
           autoComplete="current-password"
           required
           describedById={error ? "auth-error" : undefined}
+          inputRef={passwordRef}
         />
         <button
           type="submit"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { IconMore } from "@/components/icons";
 import AppearanceSelect from "@/components/AppearanceSelect";
@@ -77,6 +78,16 @@ export default function HeaderUserMenu({ email }: Props): JSX.Element {
             title={email}
           >
             {email}
+          </div>
+          <div role="none" className="border-t border-border mt-1 pt-1">
+            <Link
+              href="/app/account"
+              role="menuitem"
+              className="btn btn-ghost w-full justify-start !min-h-[44px]"
+              onClick={close}
+            >
+              Account
+            </Link>
           </div>
           {/* V2-10 Dark #10: Appearance lives in the mobile account
               overflow, above Log out, alongside the desktop pref. Same

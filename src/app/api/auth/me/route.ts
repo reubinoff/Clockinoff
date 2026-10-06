@@ -1,5 +1,6 @@
 import { jsonError, ok, requireUser, readJson } from "@/server/http";
 import { updateTimezone } from "@/server/auth/service";
+import { getSignInMethods } from "@/server/auth/google";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,7 +8,8 @@ export const dynamic = "force-dynamic";
 export async function GET(): Promise<Response> {
   try {
     const user = await requireUser();
-    return ok(user);
+    const methods = await getSignInMethods(user.id);
+    return ok({ ...user, ...methods });
   } catch (err) {
     return jsonError(err);
   }
