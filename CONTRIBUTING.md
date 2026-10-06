@@ -14,8 +14,10 @@ Codex, …) share one operating manual.
 
 - Bugs / feature requests → [GitHub Issues](https://github.com/reubinoff/Clockinoff/issues)
   (template in [AGENTS.md §5](./AGENTS.md#5-opening-issues--bugs))
-- Local dev + commands → [`README.md`](./README.md) and
+- Local dev + commands → [`README.md`](./README.md#quick-start-local-dev) and
   [AGENTS.md §2–3](./AGENTS.md#2-environment-setup)
+- API, auth rules, CI/CD, Azure deploy, ops →
+  [AGENTS.md §11–15](./AGENTS.md#11-api-surface)
 - Commit style → Conventional Commits; agents commit as
   `Cursor Agent <cursoragent@cursor.com>`
   ([AGENTS.md §6](./AGENTS.md#6-commits))

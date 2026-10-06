@@ -3,8 +3,8 @@
 //
 // We wire Azure Monitor / Application Insights here so that server-side HTTP
 // requests, exceptions, `pg` queries, and `console.*` calls are exported to
-// the connection string configured on the App Service (see README, "Azure
-// deployment" → "Application Insights").
+// the connection string configured on the App Service (see AGENTS.md
+// §14 Deploy to Azure → Application Insights).
 //
 // - No-op when `APPLICATIONINSIGHTS_CONNECTION_STRING` is unset (local dev, CI).
 // - Node-only: the edge / browser runtimes never load the Azure SDK.
