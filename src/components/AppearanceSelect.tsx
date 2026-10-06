@@ -80,9 +80,9 @@ export default function AppearanceSelect({
       className={
         variant === "menu"
           ? "w-full min-h-[44px] rounded-lg border border-border bg-surface px-2 text-body-sm text-ink " +
-            "focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
+            "focus:outline-hidden focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-ring"
           : "min-h-[32px] rounded-lg border border-border bg-surface px-2 text-body-sm text-ink " +
-            "focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
+            "focus:outline-hidden focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-ring"
       }
     >
       {APPEARANCES.map((opt) => (
