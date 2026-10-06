@@ -17,10 +17,10 @@ jobs:
     name: Linters
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -61,10 +61,10 @@ jobs:
       NODE_ENV: test
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage
@@ -116,8 +116,8 @@ jobs:
       NEXTAUTH_SECRET: build-secret-build-secret-build-000000
       NEXTAUTH_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -131,7 +131,7 @@ jobs:
       # invalidates it; `restore-keys` lets a new commit warm-start from the
       # previous build's compile cache.
       - name: Cache Next.js build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/.next/cache
           key: ${{ runner.os }}-node${{ env.NODE_VERSION }}-nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*.{js,jsx,ts,tsx}', 'next.config.mjs', 'tsconfig.json') }}
