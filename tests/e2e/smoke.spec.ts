@@ -56,7 +56,14 @@ test.describe.serial("Timer smoke", () => {
 
     // Entries list refresh: after Stop the just-recorded entry must be
     // visible without a manual reload (see EntryList `useEffect` on initial).
-    await expect(page.getByText(description).first()).toBeVisible({ timeout: 10_000 });
+    // The list paints the description twice — a phone card (`md:hidden`)
+    // and the desktop table. Nightly uses the default desktop viewport, so
+    // DOM order makes `.first()` the `display: none` card. That node stays
+    // hidden even after the table row has refreshed (#186). Assert the copy
+    // the viewport can actually see.
+    await expect(
+      page.getByText(description).filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 10_000 });
 
     const today = new Date().toISOString().slice(0, 10);
 
