@@ -5,6 +5,7 @@ import { users } from "@/server/db/schema";
 import { errors } from "@/lib/errors";
 import { validatePassword } from "@/lib/password";
 import { REGISTER_FAILURE_COPY } from "@/lib/register-copy";
+import { isQaTestEmail } from "@/lib/qa-allowlist";
 import { applyBootstrapRole, initialRoleForEmail } from "./admin-bootstrap";
 import { dummyPasswordHash, hashPassword, verifyPassword } from "./passwords";
 import { createSession, sessionUserFromRow, type CreatedSession, type SessionUser } from "./session";
@@ -63,7 +64,13 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
   try {
     const [row] = await db
       .insert(users)
-      .values({ email, passwordHash, timezone, role: initialRoleForEmail(email) })
+      .values({
+        email,
+        passwordHash,
+        timezone,
+        role: initialRoleForEmail(email),
+        isTest: isQaTestEmail(email),
+      })
       .returning({
         id: users.id,
         email: users.email,

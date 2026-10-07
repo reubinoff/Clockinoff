@@ -24,6 +24,9 @@ export const users = pgTable(
     timezone: text("timezone").notNull().default("Asia/Jerusalem"),
     // 'user' | 'admin'. Check constraint lives in 0005_admin_role.sql.
     role: text("role").notNull().default("user"),
+    // QA seeds (#195). Set on create from the #193 allowlist; product
+    // aggregates omit these rows. Admin Users still lists them.
+    isTest: boolean("is_test").notNull().default(false),
     blockedAt: timestamp("blocked_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()

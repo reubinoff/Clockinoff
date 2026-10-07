@@ -439,7 +439,7 @@ services in `src/server/services/*`. Every error is shaped as
 | `POST` | `/api/admin/users/:id/unblock` | clear block |
 | `POST` | `/api/admin/users/:id/promote` | role → admin |
 | `POST` | `/api/admin/users/:id/demote` | no self-demote, no last admin |
-| `GET` | `/api/admin/stats?from&to` | instance KPIs + signup / active / hours series |
+| `GET` | `/api/admin/stats?from&to` | instance KPIs + signup / active / hours series; omits `is_test` users |
 
 User-facing walkthroughs live under [`/docs`](./docs). Do not dump this
 table into the public README.
@@ -448,9 +448,20 @@ table into the public README.
 
 ## 12. Authentication
 
-Users carry `role` (`user` | `admin`, default `user`) and an optional
-`blocked_at`. Admins reach `/admin` and `/api/admin/*`. Everyone else
-is redirected from `/admin` to `/app`; the API returns `403 FORBIDDEN`.
+Users carry `role` (`user` | `admin`, default `user`), an optional
+`blocked_at`, and `is_test` (boolean, default false). Admins reach
+`/admin` and `/api/admin/*`. Everyone else is redirected from `/admin`
+to `/app`; the API returns `403 FORBIDDEN`.
+
+`is_test` is set on create when the lowercased email matches the #193
+QA seed allowlist
+`^(gabi|dana|ariel)\.qa\.[a-z0-9.+_-]+@primesec\.ai$`
+(`src/lib/qa-allowlist.ts`). `drizzle/0006_users_is_test.sql` backfills
+existing matches. Admin Overview (`GET /api/admin/stats`: user, active,
+admin, hours, entries, billable, and the signup / active / hours series)
+omits those rows. Admin Users still lists them. Owner-scoped Reports and
+CSV/PDF stay the signed-in user's own entries.
+
 A blocked user cannot sign in (same `401` body as a bad password) and
 any live session is ignored. Blocking also deletes that user's session
 rows. Bootstrap the first admin with `ADMIN_EMAILS` and/or

@@ -36,6 +36,17 @@ describe("auth", () => {
     expect(await verifyPassword("not-a-hash", "secret-passphrase")).toBe(false);
   });
 
+  it("marks QA seed emails is_test on register", async () => {
+    const qa = await register({ email: "Gabi.QA.Smoke1@primesec.ai", password: PW });
+    const near = await register({ email: "gabi.qa@primesec.ai", password: PW });
+    const rows = await getDb()
+      .select({ id: users.id, isTest: users.isTest })
+      .from(users);
+    const byId = new Map(rows.map((row) => [row.id, row.isTest]));
+    expect(byId.get(qa.user.id)).toBe(true);
+    expect(byId.get(near.user.id)).toBe(false);
+  });
+
   it("registers a user and creates a session", async () => {
     const { user, session } = await register({
       email: "a@example.com",
@@ -43,6 +54,11 @@ describe("auth", () => {
     });
     expect(user.email).toBe("a@example.com");
     expect(user.timezone).toBe("Asia/Jerusalem");
+    const stored = await getDb()
+      .select({ isTest: users.isTest })
+      .from(users)
+      .where(eq(users.id, user.id));
+    expect(stored[0]?.isTest).toBe(false);
     expect(session.id).toMatch(/^[A-Za-z0-9_-]+$/);
     const found = await getSessionUser(session.id);
     expect(found?.id).toBe(user.id);

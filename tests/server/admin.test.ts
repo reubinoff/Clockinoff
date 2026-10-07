@@ -333,4 +333,54 @@ describe("admin service", () => {
       status: 404,
     });
   });
+
+  it("omits is_test users from instance stats and still lists them", async () => {
+    const worker = await insertUser("worker-real@ex.com");
+    const qa = await insertUser("gabi.qa.stats@primesec.ai");
+    const day = startOfDayInZone("2026-10-06", TZ);
+    const start = new Date(day.getTime() + 3 * 60 * 60 * 1000);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    await getDb().update(users).set({ createdAt: start }).where(eq(users.id, worker.id));
+    await getDb()
+      .update(users)
+      .set({ isTest: true, createdAt: start, role: "admin" })
+      .where(eq(users.id, qa.id));
+    await getDb().insert(timeEntries).values({
+      userId: worker.id,
+      description: "real",
+      startAt: start,
+      endAt: end,
+      billable: true,
+      rate: "10.00",
+    });
+    await getDb().insert(timeEntries).values({
+      userId: qa.id,
+      description: "qa",
+      startAt: start,
+      endAt: end,
+      billable: true,
+      rate: "99.00",
+    });
+
+    const stats = await getAdminStats(TZ, "2026-10-06", "2026-10-06");
+    expect(stats.users).toBe(1);
+    expect(stats.active).toBe(1);
+    expect(stats.admins).toBe(0);
+    expect(stats.entries).toBe(1);
+    expect(stats.hours).toBe(1);
+    expect(stats.billable_amount).toBe(10);
+    expect(stats.active_users_in_range).toBe(1);
+    expect(stats.signups_by_day).toEqual([{ date: "2026-10-06", count: 1 }]);
+    expect(stats.active_users_by_day).toEqual([{ date: "2026-10-06", count: 1 }]);
+    expect(stats.hours_by_day).toEqual([{ date: "2026-10-06", hours: 1 }]);
+
+    const listed = await listAdminUsers({ q: "gabi.qa.stats" });
+    expect(listed.total).toBe(1);
+    expect(listed.users[0]?.email).toBe("gabi.qa.stats@primesec.ai");
+    expect(listed.admins_count).toBe(1);
+
+    const detail = await getAdminUser(qa.id);
+    expect(detail.stats.entries).toBe(1);
+    expect(detail.stats.hours).toBe(1);
+  });
 });

@@ -431,21 +431,29 @@ export async function getAdminStats(
 ): Promise<AdminStats> {
   const { from, to, days } = assertRange(fromKey, toKey, timezone);
   const db = getDb();
+  // Instance KPIs and series are product aggregates (#195). QA seeds
+  // (users.is_test) stay on Admin Users; they do not count here.
+  const productUsers = eq(users.isTest, false);
   const [counts] = await db
     .select({
       users: sql<number>`count(*)::int`,
       active: sql<number>`count(*) filter (where ${users.blockedAt} is null)::int`,
       admins: sql<number>`count(*) filter (where ${users.role} = 'admin')::int`,
     })
-    .from(users);
+    .from(users)
+    .where(productUsers);
 
   const signupRows = await db
     .select({ createdAt: users.createdAt })
     .from(users)
-    .where(and(gte(users.createdAt, from), lt(users.createdAt, to)));
+    .where(and(productUsers, gte(users.createdAt, from), lt(users.createdAt, to)));
 
   const facts = await entryFacts(
-    and(gte(timeEntries.startAt, from), lt(timeEntries.startAt, to)),
+    and(
+      gte(timeEntries.startAt, from),
+      lt(timeEntries.startAt, to),
+      sql`${timeEntries.userId} in (select ${users.id} from ${users} where ${users.isTest} = false)`,
+    ),
   );
 
   const signups = new Map<string, number>();

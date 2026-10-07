@@ -14,10 +14,20 @@ import { truncateAll } from "../setup";
 
 const PW = "correct-horse-battery";
 
-async function getUser(id: string): Promise<{ passwordHash: string | null; googleSub: string | null; email: string }> {
+async function getUser(id: string): Promise<{
+  passwordHash: string | null;
+  googleSub: string | null;
+  email: string;
+  isTest: boolean;
+}> {
   const db = getDb();
   const rows = await db
-    .select({ email: users.email, passwordHash: users.passwordHash, googleSub: users.googleSub })
+    .select({
+      email: users.email,
+      passwordHash: users.passwordHash,
+      googleSub: users.googleSub,
+      isTest: users.isTest,
+    })
     .from(users)
     .where(eq(users.id, id));
   return rows[0];
@@ -26,6 +36,16 @@ async function getUser(id: string): Promise<{ passwordHash: string | null; googl
 describe("signInWithGoogle", () => {
   beforeEach(async () => {
     await truncateAll();
+  });
+
+  it("marks a new Google QA seed is_test", async () => {
+    const result = await signInWithGoogle({
+      sub: "google|qa-1",
+      email: "ariel.qa.run@primesec.ai",
+    });
+    const row = await getUser(result.user.id);
+    expect(row.isTest).toBe(true);
+    expect(row.passwordHash).toBeNull();
   });
 
   it("creates a brand new user, attaches sub, and returns isNewUser=true", async () => {
@@ -40,6 +60,7 @@ describe("signInWithGoogle", () => {
     const row = await getUser(result.user.id);
     expect(row.googleSub).toBe("google|new-1");
     expect(row.passwordHash).toBeNull();
+    expect(row.isTest).toBe(false);
 
     const session = await getSessionUser(result.session.id);
     expect(session?.id).toBe(result.user.id);

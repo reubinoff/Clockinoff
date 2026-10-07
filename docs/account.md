@@ -54,6 +54,10 @@ operator of a self-hosted instance designates the first admin outside
 the app (an environment list or an ops script) — there is no invite
 screen.
 
+**Overview** counts (users, active, admins, hours, and the signup,
+active-user, and hours charts) leave out QA seed accounts. Those
+people still appear on **Users**.
+
 The v1 UI does not include a "change email" flow. Support for that is a
 future improvement.
 

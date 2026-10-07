@@ -19,6 +19,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { pgErrorCode } from "@/server/db/errors";
 import { users } from "@/server/db/schema";
+import { isQaTestEmail } from "@/lib/qa-allowlist";
 import { applyBootstrapRole, initialRoleForEmail } from "./admin-bootstrap";
 import { createSession, sessionUserFromRow, type CreatedSession, type SessionUser } from "./session";
 import { tokenId } from "@/lib/id";
@@ -353,6 +354,7 @@ export async function signInWithGoogle(
         googleSub: input.sub,
         timezone,
         role: initialRoleForEmail(normalisedEmail),
+        isTest: isQaTestEmail(normalisedEmail),
       })
       .returning({
         id: users.id,
