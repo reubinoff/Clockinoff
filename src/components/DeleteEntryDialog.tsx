@@ -104,7 +104,7 @@ export default function DeleteEntryDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 sheet-backdrop-enter"
+      className="dialog-scrim fixed inset-0 z-50 flex items-center justify-center p-4 sheet-backdrop-enter"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -148,7 +148,7 @@ export default function DeleteEntryDialog({
           >
             Cancel
           </button>
-          <button type="button" className="btn btn-danger" onClick={onConfirm}>
+          <button type="button" className="btn btn-danger-fill" onClick={onConfirm}>
             Delete
           </button>
         </div>

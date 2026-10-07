@@ -221,6 +221,24 @@
   .btn-danger {
     @apply border-border-strong text-danger bg-surface hover:bg-danger-soft;
   }
+  /* Confirm-dialog Delete. Outline danger sits too close to Cancel;
+     a filled control is the danger action. Light danger (#b91c1c) takes
+     a white label (~6.5:1). Dark danger (#f87171) is a light red, so the
+     label uses canvas (~7:1) instead of white. */
+  .btn.btn-danger-fill {
+    background-color: var(--color-danger);
+    border-color: var(--color-danger);
+    color: var(--color-accent-fg);
+  }
+  .btn.btn-danger-fill:hover {
+    background-color: color-mix(in srgb, var(--color-danger) 86%, black);
+    border-color: color-mix(in srgb, var(--color-danger) 86%, black);
+    color: var(--color-accent-fg);
+  }
+  html[data-theme="dark"] .btn.btn-danger-fill,
+  html[data-theme="dark"] .btn.btn-danger-fill:hover {
+    color: var(--color-canvas);
+  }
   .btn-ghost {
     @apply border-transparent bg-transparent text-muted hover:text-ink hover:bg-canvas-2;
   }
@@ -253,6 +271,24 @@
            placeholder:text-muted focus:outline-hidden focus-visible:outline-hidden
            focus:ring-2 focus:ring-accent-ring focus:border-accent
            focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:border-accent;
+  }
+  /* Native time controls reserve a clock icon and, in 12-hour locales,
+     an AM/PM field. `.input`'s px-3 plus a 7.25rem width clipped the
+     leading hour at the 768 and 1280 manual dock. */
+  .input-time {
+    padding-left: 0.5rem;
+    padding-right: 0.25rem;
+  }
+  .input-time::-webkit-datetime-edit,
+  .input-time::-webkit-datetime-edit-fields-wrapper,
+  .input-time::-webkit-datetime-edit-hour-field,
+  .input-time::-webkit-datetime-edit-minute-field,
+  .input-time::-webkit-datetime-edit-ampm-field {
+    padding: 0;
+  }
+  .input-time::-webkit-calendar-picker-indicator {
+    margin: 0;
+    padding: 0 0 0 0.125rem;
   }
   .card {
     @apply rounded-2xl border border-border bg-surface shadow-card;
@@ -469,6 +505,14 @@
   }
   .sheet-backdrop-enter {
     animation: sheet-backdrop-in var(--duration-moderate) var(--ease-out) both;
+  }
+  /* Delete dialog scrim. Light ink at 40% is a dim overlay. Dark ink is
+     near-white, so the same mix paints a light wash — use black instead. */
+  .dialog-scrim {
+    background-color: color-mix(in srgb, var(--color-ink) 40%, transparent);
+  }
+  html[data-theme="dark"] .dialog-scrim {
+    background-color: rgb(0 0 0 / 0.72);
   }
   .sheet-backdrop-exit {
     animation: sheet-backdrop-out var(--duration-fast) var(--ease-in) both;
@@ -925,4 +969,23 @@ html[data-theme="light"] [data-timer-dock-root] .timer-digits.timer-running-puls
 }
 html[data-theme="dark"] [data-timer-dock-root] .timer-digits.timer-running-pulse {
   color: #f4f4f5;
+}
+
+/* Unlayered so these beat Tailwind color utilities (utilities live in a
+   later cascade layer than @layer components). Phone/tablet Projects ·
+   Clients · Tags segment (≤767). Dark accent (#7c3aed) on accent-soft
+   (#2e1065) is ~2.7:1. Inactive muted on the dark track is raised to
+   ink-2; the selected pill uses ink on a lifted violet wash so the
+   label stays ≥4.5:1 and the pill separates from the surface track. */
+html[data-theme="dark"] .library-segment {
+  color: var(--color-ink-2);
+}
+html[data-theme="dark"] .library-segment:hover {
+  color: var(--color-ink);
+}
+html[data-theme="dark"] .library-segment-active,
+html[data-theme="dark"] .library-segment-active:hover {
+  color: var(--color-ink);
+  background-color: color-mix(in srgb, var(--color-accent) 42%, var(--color-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, white);
 }

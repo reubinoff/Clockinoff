@@ -221,8 +221,8 @@ export default function ManualEntryForm({
         type="time"
         className={
           inline
-            ? "input !min-h-[44px] w-[7.25rem] shrink-0 tabular-nums"
-            : "input tabular-nums"
+            ? "input input-time !min-h-[44px] w-[11.5rem] min-w-[11.5rem] shrink-0 tabular-nums"
+            : "input input-time tabular-nums"
         }
         value={startTime}
         onChange={(e) => setStartTime(e.target.value)}
@@ -242,8 +242,8 @@ export default function ManualEntryForm({
         type="time"
         className={
           inline
-            ? "input !min-h-[44px] w-[7.25rem] shrink-0 tabular-nums"
-            : "input tabular-nums"
+            ? "input input-time !min-h-[44px] w-[11.5rem] min-w-[11.5rem] shrink-0 tabular-nums"
+            : "input input-time tabular-nums"
         }
         value={endTime}
         onChange={(e) => setEndTime(e.target.value)}
@@ -380,7 +380,7 @@ export default function ManualEntryForm({
           <input
             id="manual-start"
             type="time"
-            className="input tabular-nums"
+            className="input input-time tabular-nums"
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
             data-manual-start="true"
@@ -393,7 +393,7 @@ export default function ManualEntryForm({
           <input
             id="manual-end"
             type="time"
-            className="input tabular-nums"
+            className="input input-time tabular-nums"
             value={endTime}
             onChange={(e) => setEndTime(e.target.value)}
             data-manual-end="true"
