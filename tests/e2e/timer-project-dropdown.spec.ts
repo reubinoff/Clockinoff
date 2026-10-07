@@ -34,7 +34,14 @@ test("timer project dropdown updates after project create", async ({ page }) => 
   // The Name input is the required text input in the "Add project" form.
   await page.locator('form input[required]').first().fill(projectName);
   await page.click("button:has-text('Add')");
-  await expect(page.getByText(projectName).first()).toBeVisible({ timeout: 5000 });
+  // The page renders the name twice: a phone card (`md:hidden`,
+  // `<p class="truncate">`) and the desktop table. Nightly uses the default
+  // desktop viewport, so DOM order makes `getByText().first()` the hidden
+  // card. That node stays hidden after create succeeds (#205, same family
+  // as #186). Assert the row the viewport can actually see.
+  await expect(
+    page.getByText(projectName, { exact: true }).filter({ visible: true }),
+  ).toBeVisible({ timeout: 5000 });
 
   await page.goto("/app");
   await expect(projectSelect).toBeVisible();
