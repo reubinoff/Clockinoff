@@ -544,13 +544,13 @@ of truth; the short version is:
 
    | App Setting | Value |
    |---|---|
-   | `DATABASE_URL` | `postgres://<user>:<pw>@<host>:5432/<db>?sslmode=require` |
+   | `DATABASE_URL` | `postgres://<user>:<pw>@<host>:5432/<db>?sslmode=verify-full` |
    | `NEXTAUTH_SECRET` | 32+ byte random secret (cookie / crypto surface) |
    | `NEXTAUTH_URL` | Public URL of your Web App |
    | `NODE_ENV` | `production` |
    | `WEBSITE_NODE_DEFAULT_VERSION` | `~24` |
    | `PG_MIGRATOR_CLIENT_ID` | ClientId of the migrator UAMI (`<migrator-uami>`) assigned to the Web App (required when `PG_AZURE_AD_AUTH=1`; see [Entra / Managed Identity for Postgres](#entra--managed-identity-for-postgres-optional)) |
-   | `PG_MIGRATOR_PG_USER` | Optional override for the Postgres role the migrate step connects as under `PG_AZURE_AD_AUTH=1`. Defaults to `<migrator-uami>`; leave unset in prod |
+   | `PG_MIGRATOR_PG_USER` | Required in production when `PG_AZURE_AD_AUTH` is on. Postgres role the migrate step connects as. Non-production may omit it |
    | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault reference to the App Insights connection string (optional — see below) |
 
 4. The CD job runs `npm run db:migrate` against the target DB before
@@ -566,7 +566,7 @@ of truth; the short version is:
 
 The pool and the migrate script accept a passwordless `DATABASE_URL`
 backed by Microsoft Entra. When the URL has no password component —
-e.g. `postgresql://<runtime-role>@<pg-host>:5432/<db>?sslmode=require` —
+e.g. `postgresql://<runtime-role>@<pg-host>:5432/<db>?sslmode=verify-full` —
 the app mints a short-lived access token for the Azure Postgres Entra
 scope and feeds it to `pg` as the password. Tokens are cached
 in-process until shortly before expiry and refreshed on new pool
@@ -584,11 +584,22 @@ connections.
   holds DDL on schema `public`. Its clientId is read from
   `PG_MIGRATOR_CLIENT_ID` (**required** when `PG_AZURE_AD_AUTH` is on
   — the script fails fast if it is missing). The migrate step also
-  overrides the Postgres `user` to `<migrator-uami>` (overridable with
-  `PG_MIGRATOR_PG_USER`); the passwordless URL's `<runtime-role>` is
-  only correct for the runtime pool. The Entra principal in the token
-  must match the Postgres role — do not send the migrator token as
-  the runtime user.
+  overrides the Postgres `user` to the role in `PG_MIGRATOR_PG_USER`.
+  That variable is **required in production** when AAD auth is on
+  (Nati confirmed the App Setting is set). Non-production may omit it
+  and fall back to `DEFAULT_MIGRATOR_PG_USER` in `scripts/migrate.mjs`.
+  The passwordless URL's `<runtime-role>` is only correct for the
+  runtime pool. The Entra principal in the token must match the
+  Postgres role — do not send the migrator token as the runtime user.
+
+**TLS (`sslmode`, #139).** Production `DATABASE_URL` must use
+`sslmode=verify-full`. Boot (`src/instrumentation.ts`) and
+`scripts/migrate.mjs` refuse to start in production when `sslmode` is
+`disable`, `no-verify`, or missing. Loopback hosts are exempt so
+Nightly `next start` can keep using the CI Postgres container.
+`sslmode=require` still boots: Nati must flip the Key Vault secret /
+App Setting `DATABASE_URL` from `require` to `verify-full`. Do not
+invent or commit that secret.
 
 Mode selection:
 

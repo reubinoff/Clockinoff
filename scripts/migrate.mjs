@@ -30,39 +30,17 @@
 // the static password path if the URL still carries a password or the
 // flag is `0`/`false`.
 //
-// MIGRATOR IDENTITY CONTRACT — DO NOT RELAX (Clockinoff #75):
-// Startup migrations must authenticate as the migrator user-assigned
-// managed identity (`uami-clockinoff-migrator` in prod — the only Entra
-// role with DDL grants on database `clockinoff`), NOT as the App Service
-// system-assigned MI (`clockinoff-prod` — DML-only). The 2026-10-01
-// passwordless cutover failed with `42501 permission denied for schema
-// public` because this script was using `DefaultAzureCredential`, which
-// on an App Service with both identities assigned binds to the system MI.
+// MIGRATOR IDENTITY (#75): when AAD mode is on, migrations authenticate
+// as the migrator user-assigned identity (`PG_MIGRATOR_CLIENT_ID` →
+// `ManagedIdentityCredential`), not the app identity. The Postgres role
+// name comes from `PG_MIGRATOR_PG_USER`, which is required in production
+// so the token's principal matches that role. Non-production may omit it
+// and fall back to `DEFAULT_MIGRATOR_PG_USER`. The runtime pool
+// (`src/server/db/client.ts`) keeps the URL user and DefaultAzureCredential.
 //
-// Contract: when AAD mode is on, this script reads the migrator UAMI's
-// clientId from `PG_MIGRATOR_CLIENT_ID` and feeds it to
-// `ManagedIdentityCredential({ clientId })` so the token request is
-// pinned to that UAMI. We fail fast with a clear error if the env var is
-// missing — surface the real misconfig instead of letting Postgres
-// return a confusing permission error after reconnecting as the wrong
-// principal. The runtime app pool (`src/server/db/client.ts`) keeps
-// using `DefaultAzureCredential` so DML stays on the system MI.
-//
-// MIGRATOR PG USER OVERRIDE — Ariel's oid-mismatch gate (Clockinoff #75):
-// Azure Postgres Entra auth does NOT ignore the libpq `user` field. The
-// server checks that the Entra OID carried in the access token matches
-// the OID stored on the Postgres role's `pgaadauth` security label and
-// rejects with SQLSTATE `28000` ("Authentication failed … principal id
-// mismatch") when they differ. The 2026-10-02 prod probe reproduced
-// this: a token minted for the migrator UAMI combined with
-// `user=clockinoff-prod` (from the passwordless `DATABASE_URL`) hit the
-// 28000 mismatch because the `clockinoff-prod` role is labelled with
-// the App Service system MI's OID, not the UAMI's. So in AAD mode we
-// override the discrete `user` field to the migrator role's exact Entra
-// Postgres role name — read from `PG_MIGRATOR_PG_USER`, defaulting to
-// `uami-clockinoff-migrator`. The runtime app pool keeps the URL's
-// `clockinoff-prod` user because the system MI's token matches that
-// role's label.
+// Production also refuses `DATABASE_URL` sslmodes `disable`, `no-verify`,
+// and missing (loopback exempt). Prod should use `sslmode=verify-full`.
+// Mirror of `src/server/db/pg-ssl.ts`.
 //
 // This file mirrors `src/server/db/azure-ad.ts` on purpose: both the
 // runtime and the migration runner must build the AAD pool config with
@@ -189,33 +167,84 @@ function resolveMigratorClientId(env = process.env) {
   return clientId;
 }
 
-// Ariel's oid-mismatch gate (Clockinoff #75): the Postgres `user` field
-// in AAD mode must name the Entra Postgres role whose security-label OID
-// matches the token the pool is minting — overriding the role embedded in
-// the passwordless URL. Defaults to `uami-clockinoff-migrator`, overridable
-// via `PG_MIGRATOR_PG_USER` for non-prod environments / alt role names.
-// Fails fast under AAD if the resolved value is empty so we never silently
-// fall back to the URL's `clockinoff-prod` and reproduce the 28000 mismatch.
+// In AAD mode the Postgres `user` must be the migrator role, not the role
+// embedded in the passwordless URL. Production requires
+// `PG_MIGRATOR_PG_USER` (no hardcoded default). Other environments fall
+// back to `DEFAULT_MIGRATOR_PG_USER`.
+function isProductionEnv(env) {
+  return String(env.NODE_ENV ?? "").trim() === "production";
+}
+
 function resolveMigratorPgUser(env = process.env) {
   const raw = env[PG_MIGRATOR_PG_USER_ENV];
   const explicit = typeof raw === "string" ? raw.trim() : "";
+  if (isProductionEnv(env)) {
+    if (!explicit) {
+      throw new Error(
+        PG_MIGRATOR_PG_USER_ENV +
+          " is required in production when Azure AD auth is enabled." +
+          " Set it to the migrator Postgres role. There is no hardcoded" +
+          " default on the production path.",
+      );
+    }
+    return explicit;
+  }
   const user = explicit || DEFAULT_MIGRATOR_PG_USER;
   if (!user) {
     throw new Error(
       PG_MIGRATOR_PG_USER_ENV +
         " resolved to an empty value under PG_AZURE_AD_AUTH; the migrate" +
-        " step must set the Postgres user to the migrator Entra role" +
-        " (e.g. uami-clockinoff-migrator) to satisfy Azure Postgres" +
-        " Entra OID matching. See Clockinoff #75.",
+        " step must set the Postgres user to the migrator Entra role.",
     );
   }
   return user;
 }
 
+const REFUSED_SSLMODES = new Set(["disable", "no-verify"]);
+
+function isLoopbackHost(hostname) {
+  const host = String(hostname ?? "")
+    .replace(/^\[|\]$/g, "")
+    .toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+// Mirror of src/server/db/pg-ssl.ts. Keep the refused modes in sync.
+function assertProductionDatabaseSslMode(url, env = process.env) {
+  if (env.NEXT_PHASE === "phase-production-build") return;
+  if (env.NODE_ENV !== "production") return;
+  if (!url) {
+    throw new Error(
+      "DATABASE_URL is required in production and must set sslmode=verify-full",
+    );
+  }
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(
+      "DATABASE_URL is not a valid postgres URL; refusing to start in production",
+    );
+  }
+  if (!/^postgres(ql)?:$/i.test(parsed.protocol)) {
+    throw new Error(
+      "DATABASE_URL must be a postgres URL in production (sslmode=verify-full)",
+    );
+  }
+  if (isLoopbackHost(parsed.hostname)) return;
+  const sslmode = (parsed.searchParams.get("sslmode") ?? "").trim().toLowerCase();
+  if (!sslmode || REFUSED_SSLMODES.has(sslmode)) {
+    throw new Error(
+      "Refusing to start in production: DATABASE_URL sslmode must not be" +
+        " disable, no-verify, or missing. Use sslmode=verify-full.",
+    );
+  }
+}
+
 async function createAzurePasswordProvider(credentialOverride) {
   // In AAD mode the migrate step binds to the migrator UAMI's clientId via
   // ManagedIdentityCredential. Tests may inject a fake credential to avoid
-  // hitting IMDS. See the MIGRATOR IDENTITY CONTRACT comment at the top.
+  // hitting IMDS. See the migrator identity comment at the top.
   let credential;
   if (credentialOverride) {
     credential = credentialOverride;
@@ -283,8 +312,7 @@ async function buildPoolConfig(url, options = {}) {
   // together, so pg's ConnectionParameters Object.assign cannot clobber
   // the callback with an empty parsed password.
   const discrete = parsePostgresUrl(url);
-  // Ariel's oid-mismatch gate: override the URL-derived `user` so the
-  // Postgres role matches the token's Entra OID (see header comment).
+  // Override the URL user with the migrator role (see header comment).
   const migratorUser =
     options.pgUser !== undefined ? options.pgUser : resolveMigratorPgUser();
   const config = {
@@ -309,6 +337,7 @@ async function buildPoolConfig(url, options = {}) {
 async function runMigrations() {
   const dir = resolveMigrationsDir();
   const url = resolveDatabaseUrl();
+  assertProductionDatabaseSslMode(url);
   const pool = new Pool(await buildPoolConfig(url));
   const applied = [];
   const client = await pool.connect();
@@ -369,6 +398,7 @@ export {
   DEFAULT_MIGRATOR_PG_USER,
   PG_MIGRATOR_CLIENT_ID_ENV,
   PG_MIGRATOR_PG_USER_ENV,
+  assertProductionDatabaseSslMode,
   buildPoolConfig,
   createAzurePasswordProvider,
   isPasswordlessPostgresUrl,

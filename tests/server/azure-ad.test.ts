@@ -18,7 +18,7 @@ import {
 const ConnectionParameters = require("pg/lib/connection-parameters");
 
 const PASSWORDLESS_URL =
-  "postgresql://clockinoff-prod@guide-me.postgres.database.azure.com:5432/clockinoff?sslmode=require";
+  "postgresql://app-role@pg.example.com:5432/appdb?sslmode=require";
 
 function fakeCredential(
   tokens: Array<{ token: string; expiresOnTimestamp: number }>,
@@ -36,7 +36,7 @@ describe("isPasswordlessPostgresUrl", () => {
   it("accepts a passwordless postgres URL with user component", () => {
     expect(
       isPasswordlessPostgresUrl(
-        "postgresql://clockinoff-prod@host.postgres.database.azure.com:5432/db?sslmode=require",
+        "postgresql://app-role@pg.example.com:5432/db?sslmode=require",
       ),
     ).toBe(true);
     expect(
@@ -65,7 +65,7 @@ describe("isPasswordlessPostgresUrl", () => {
 describe("shouldUseAzureAdAuth", () => {
   const passworded = "postgres://timely:timely@localhost:5432/timely";
   const passwordless =
-    "postgresql://clockinoff-prod@host.postgres.database.azure.com:5432/db?sslmode=require";
+    "postgresql://app-role@pg.example.com:5432/db?sslmode=require";
 
   it("honours an explicit on flag over the URL shape", () => {
     expect(shouldUseAzureAdAuth(passworded, { PG_AZURE_AD_AUTH: "1" })).toBe(true);
@@ -269,10 +269,10 @@ describe("buildPgPoolConfig", () => {
       passwordProvider: provider,
     });
     expect(cfg.connectionString).toBeUndefined();
-    expect(cfg.user).toBe("clockinoff-prod");
-    expect(cfg.host).toBe("guide-me.postgres.database.azure.com");
+    expect(cfg.user).toBe("app-role");
+    expect(cfg.host).toBe("pg.example.com");
     expect(cfg.port).toBe(5432);
-    expect(cfg.database).toBe("clockinoff");
+    expect(cfg.database).toBe("appdb");
     expect(cfg.ssl).toBeTruthy();
     expect(typeof cfg.password).toBe("function");
     expect(cfg.password).toBe(provider);
@@ -323,11 +323,11 @@ describe("buildPgPoolConfig", () => {
   it("AAD mode handles URLs without an explicit port", () => {
     const provider = async () => "FAKE_TOKEN";
     const cfg = buildPgPoolConfig(
-      "postgresql://clockinoff-prod@h.postgres.database.azure.com/clockinoff?sslmode=require",
+      "postgresql://app-role@db.example.com/appdb?sslmode=require",
       { azureAdAuth: true, passwordProvider: provider },
     );
     expect(cfg.port).toBeUndefined();
-    expect(cfg.user).toBe("clockinoff-prod");
+    expect(cfg.user).toBe("app-role");
     expect(cfg.password).toBe(provider);
   });
 });
@@ -342,24 +342,24 @@ describe("createMigratorAzurePasswordProvider (migrator UAMI contract — #75)",
       return { getToken } as TokenCredential;
     };
     const getPassword = createMigratorAzurePasswordProvider({
-      env: { [PG_MIGRATOR_CLIENT_ID_ENV]: "876081d8-7e33-4451-a9db-ebc1004f3463" },
+      env: { [PG_MIGRATOR_CLIENT_ID_ENV]: "00000000-0000-4000-8000-000000000001" },
       credentialFactory,
       log: () => {},
     });
     await expect(getPassword()).resolves.toBe("migrator-tok");
-    expect(seenClientIds).toEqual(["876081d8-7e33-4451-a9db-ebc1004f3463"]);
+    expect(seenClientIds).toEqual(["00000000-0000-4000-8000-000000000001"]);
     expect(getToken).toHaveBeenCalledWith(AZURE_POSTGRES_SCOPE);
   });
 
   it("trims surrounding whitespace off the clientId env", () => {
     const credentialFactory = vi.fn(
       (clientId: string): TokenCredential => {
-        expect(clientId).toBe("876081d8-7e33-4451-a9db-ebc1004f3463");
+        expect(clientId).toBe("00000000-0000-4000-8000-000000000001");
         return { getToken: vi.fn(async () => null) };
       },
     );
     createMigratorAzurePasswordProvider({
-      env: { [PG_MIGRATOR_CLIENT_ID_ENV]: "  876081d8-7e33-4451-a9db-ebc1004f3463  " },
+      env: { [PG_MIGRATOR_CLIENT_ID_ENV]: "  00000000-0000-4000-8000-000000000001  " },
       credentialFactory,
       log: () => {},
     });
@@ -398,7 +398,7 @@ describe("createMigratorAzurePasswordProvider (migrator UAMI contract — #75)",
       })),
     });
     const getPassword = createMigratorAzurePasswordProvider({
-      env: { [PG_MIGRATOR_CLIENT_ID_ENV]: "876081d8-7e33-4451-a9db-ebc1004f3463" },
+      env: { [PG_MIGRATOR_CLIENT_ID_ENV]: "00000000-0000-4000-8000-000000000001" },
       credentialFactory,
       log: () => {},
     });
@@ -428,10 +428,10 @@ describe("pg does not clobber the token provider (regression for #75)", () => {
     const params = new ConnectionParameters(cfg);
     expect(typeof params.password).toBe("function");
     expect(params.password).toBe(provider);
-    expect(params.user).toBe("clockinoff-prod");
-    expect(params.host).toBe("guide-me.postgres.database.azure.com");
+    expect(params.user).toBe("app-role");
+    expect(params.host).toBe("pg.example.com");
     expect(params.port).toBe(5432);
-    expect(params.database).toBe("clockinoff");
+    expect(params.database).toBe("appdb");
   });
 
   it("new Pool(cfg) carries the provider through to the pool options", async () => {

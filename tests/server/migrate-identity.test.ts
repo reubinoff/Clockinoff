@@ -21,6 +21,10 @@ interface MigrateScriptExports {
   readonly PG_MIGRATOR_PG_USER_ENV: string;
   resolveMigratorClientId(env?: Record<string, string | undefined>): string;
   resolveMigratorPgUser(env?: Record<string, string | undefined>): string;
+  assertProductionDatabaseSslMode(
+    url: string | undefined,
+    env?: Record<string, string | undefined>,
+  ): void;
   shouldUseAzureAdAuth(url: string): boolean;
   isPasswordlessPostgresUrl(url: string): boolean;
   parsePostgresUrl(url: string): PoolConfig;
@@ -40,9 +44,9 @@ import * as migrateScriptRaw from "../../scripts/migrate.mjs";
 const migrateScript = migrateScriptRaw as unknown as MigrateScriptExports;
 
 const PASSWORDLESS_URL =
-  "postgresql://clockinoff-prod@guide-me.postgres.database.azure.com:5432/clockinoff?sslmode=require";
+  "postgresql://app-role@pg.example.com:5432/appdb?sslmode=require";
 
-const MIGRATOR_CLIENT_ID = "876081d8-7e33-4451-a9db-ebc1004f3463";
+const MIGRATOR_CLIENT_ID = "00000000-0000-4000-8000-000000000001";
 
 describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
   const originalAad = process.env.PG_AZURE_AD_AUTH;
@@ -89,14 +93,12 @@ describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
     })) as PoolConfig;
 
     expect(cfg.connectionString).toBeUndefined();
-    // Ariel's oid-mismatch gate (#75): migrate pool must override the
-    // URL-derived `clockinoff-prod` user with the migrator Entra role
-    // whose OID matches the UAMI token we just minted. Default is
-    // `uami-clockinoff-migrator` (prod role name).
-    expect(cfg.user).toBe("uami-clockinoff-migrator");
-    expect(cfg.user).not.toBe("clockinoff-prod");
-    expect(cfg.host).toBe("guide-me.postgres.database.azure.com");
-    expect(cfg.database).toBe("clockinoff");
+    // Non-production falls back to DEFAULT_MIGRATOR_PG_USER and must not
+    // keep the role embedded in the passwordless URL.
+    expect(cfg.user).toBe(migrateScript.DEFAULT_MIGRATOR_PG_USER);
+    expect(cfg.user).not.toBe("app-role");
+    expect(cfg.host).toBe("pg.example.com");
+    expect(cfg.database).toBe("appdb");
     expect(cfg.max).toBe(1);
     expect(typeof cfg.password).toBe("function");
 
@@ -109,7 +111,7 @@ describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
 
   it("honours PG_MIGRATOR_PG_USER override for alternate role names", async () => {
     process.env.PG_MIGRATOR_CLIENT_ID = MIGRATOR_CLIENT_ID;
-    process.env.PG_MIGRATOR_PG_USER = "uami-clockinoff-stage-migrator";
+    process.env.PG_MIGRATOR_PG_USER = "stage-migrator-role";
     const credential: TokenCredential = {
       getToken: vi.fn(async () => ({
         token: "stage-tok",
@@ -120,30 +122,51 @@ describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
     const cfg = (await migrateScript.buildPoolConfig(PASSWORDLESS_URL, {
       credential,
     })) as PoolConfig;
-    expect(cfg.user).toBe("uami-clockinoff-stage-migrator");
+    expect(cfg.user).toBe("stage-migrator-role");
   });
 
   it("trims whitespace off PG_MIGRATOR_PG_USER", () => {
     expect(
       migrateScript.resolveMigratorPgUser({
-        PG_MIGRATOR_PG_USER: "  uami-clockinoff-migrator  ",
+        PG_MIGRATOR_PG_USER: "  migrator-role  ",
       }),
-    ).toBe("uami-clockinoff-migrator");
+    ).toBe("migrator-role");
   });
 
-  it("defaults the migrator pg user to uami-clockinoff-migrator", () => {
-    expect(migrateScript.DEFAULT_MIGRATOR_PG_USER).toBe(
-      "uami-clockinoff-migrator",
-    );
+  it("non-production falls back to DEFAULT_MIGRATOR_PG_USER", () => {
     expect(migrateScript.resolveMigratorPgUser({})).toBe(
-      "uami-clockinoff-migrator",
+      migrateScript.DEFAULT_MIGRATOR_PG_USER,
     );
     expect(
       migrateScript.resolveMigratorPgUser({ PG_MIGRATOR_PG_USER: "" }),
-    ).toBe("uami-clockinoff-migrator");
+    ).toBe(migrateScript.DEFAULT_MIGRATOR_PG_USER);
     expect(
       migrateScript.resolveMigratorPgUser({ PG_MIGRATOR_PG_USER: "   " }),
-    ).toBe("uami-clockinoff-migrator");
+    ).toBe(migrateScript.DEFAULT_MIGRATOR_PG_USER);
+  });
+
+  it("production requires PG_MIGRATOR_PG_USER and ignores the hardcoded default", () => {
+    expect(() =>
+      migrateScript.resolveMigratorPgUser({ NODE_ENV: "production" }),
+    ).toThrow(/PG_MIGRATOR_PG_USER is required in production/);
+    expect(() =>
+      migrateScript.resolveMigratorPgUser({
+        NODE_ENV: "production",
+        PG_MIGRATOR_PG_USER: "   ",
+      }),
+    ).toThrow(/required in production/);
+    expect(
+      migrateScript.resolveMigratorPgUser({
+        NODE_ENV: "production",
+        PG_MIGRATOR_PG_USER: "  migrator-role  ",
+      }),
+    ).toBe("migrator-role");
+    expect(
+      migrateScript.resolveMigratorPgUser({
+        NODE_ENV: "production",
+        PG_MIGRATOR_PG_USER: "migrator-role",
+      }),
+    ).not.toBe(migrateScript.DEFAULT_MIGRATOR_PG_USER);
   });
 
   it("accepts an explicit pgUser option (test / ops injection)", async () => {
@@ -158,9 +181,9 @@ describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const cfg = (await migrateScript.buildPoolConfig(PASSWORDLESS_URL, {
       credential,
-      pgUser: "uami-explicit",
+      pgUser: "explicit-role",
     })) as PoolConfig;
-    expect(cfg.user).toBe("uami-explicit");
+    expect(cfg.user).toBe("explicit-role");
   });
 
   it("rejects empty tokens the same way the runtime provider does", async () => {
@@ -199,6 +222,35 @@ describe("scripts/migrate.mjs — migrator UAMI binding (#75)", () => {
     expect(migrateScript.shouldUseAzureAdAuth(PASSWORDLESS_URL)).toBe(true);
     process.env.PG_AZURE_AD_AUTH = "0";
     expect(migrateScript.shouldUseAzureAdAuth(PASSWORDLESS_URL)).toBe(false);
+  });
+
+  it("refuses production startup when sslmode is disable, no-verify, or missing", () => {
+    const prod = { NODE_ENV: "production" };
+    const remote = "postgresql://app-role@pg.example.com:5432/appdb";
+    expect(() =>
+      migrateScript.assertProductionDatabaseSslMode(remote, prod),
+    ).toThrow(/sslmode/);
+    expect(() =>
+      migrateScript.assertProductionDatabaseSslMode(`${remote}?sslmode=disable`, prod),
+    ).toThrow(/disable/);
+    expect(() =>
+      migrateScript.assertProductionDatabaseSslMode(`${remote}?sslmode=no-verify`, prod),
+    ).toThrow(/no-verify/);
+    expect(() =>
+      migrateScript.assertProductionDatabaseSslMode(`${remote}?sslmode=verify-full`, prod),
+    ).not.toThrow();
+    expect(() =>
+      migrateScript.assertProductionDatabaseSslMode(`${remote}?sslmode=require`, prod),
+    ).not.toThrow();
+    expect(() =>
+      migrateScript.assertProductionDatabaseSslMode(
+        "postgres://timely:timely@localhost:5432/timely",
+        prod,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      migrateScript.assertProductionDatabaseSslMode(remote, { NODE_ENV: "test" }),
+    ).not.toThrow();
   });
 });
 
@@ -253,18 +305,13 @@ describe("src/server/db/client — runtime stays on the system MI (#75)", () => 
     }
   });
 
-  it("runtime AAD pool keeps the URL user clockinoff-prod (never the migrator role)", () => {
-    // Ariel's oid-mismatch gate flips the migrate pool's `user` to the
-    // migrator UAMI role. The runtime pool must stay on the system MI
-    // mapping (`clockinoff-prod` from the URL) so DML queries continue
-    // to match the system MI's token OID. This test pins that split so
-    // a future refactor cannot accidentally regress both paths.
+  it("runtime AAD pool keeps the URL user and not the migrator role", () => {
     const provider = async () => "tok";
     const cfg = buildPgPoolConfig(PASSWORDLESS_URL, {
       azureAdAuth: true,
       passwordProvider: provider,
     });
-    expect(cfg.user).toBe("clockinoff-prod");
-    expect(cfg.user).not.toBe("uami-clockinoff-migrator");
+    expect(cfg.user).toBe("app-role");
+    expect(cfg.user).not.toBe(migrateScript.DEFAULT_MIGRATOR_PG_USER);
   });
 });
