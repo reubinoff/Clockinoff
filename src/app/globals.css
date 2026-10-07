@@ -223,8 +223,11 @@
   }
   /* Confirm-dialog Delete. Outline danger sits too close to Cancel;
      a filled control is the danger action. Light danger (#b91c1c) takes
-     a white label (~6.5:1). Dark danger (#f87171) is a light red, so the
-     label uses canvas (~7:1) instead of white. */
+     a white label (~6.5:1). Dark keeps that same fill and white label
+     (#b91c1c is ~6.5:1 with white). The shared --color-danger token
+     stays #f87171 so error text and status pills keep their contrast;
+     outline danger text is deepened only as far as ~4.5:1 on the dark
+     surface allows. */
   .btn.btn-danger-fill {
     background-color: var(--color-danger);
     border-color: var(--color-danger);
@@ -235,9 +238,18 @@
     border-color: color-mix(in srgb, var(--color-danger) 86%, black);
     color: var(--color-accent-fg);
   }
-  html[data-theme="dark"] .btn.btn-danger-fill,
+  html[data-theme="dark"] .btn-danger {
+    color: #ee5555;
+  }
+  html[data-theme="dark"] .btn.btn-danger-fill {
+    background-color: #b91c1c;
+    border-color: #b91c1c;
+    color: var(--color-accent-fg);
+  }
   html[data-theme="dark"] .btn.btn-danger-fill:hover {
-    color: var(--color-canvas);
+    background-color: #991b1b;
+    border-color: #991b1b;
+    color: var(--color-accent-fg);
   }
   /* Admin promote / unblock. Same accent fill as primary, at the dialog's
      44px button height (primary itself is 48px). */

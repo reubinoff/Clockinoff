@@ -38,7 +38,10 @@ counter in the header, or on the **Timer** tab on a phone.
 If your account is an admin, the same cluster shows an **Admin** link
 (after **Docs**, before **Appearance** on a wide desktop, and inside
 the account menu on a phone or tablet). It opens **Overview** and
-**Users** for this instance. The link is not shown for anyone else.
+**Users** for this instance. A user page returns with **Back to Users**.
+The link is not shown for anyone else. Removing the only admin is
+refused with “You can’t remove the last admin.” Demoting that same
+person is refused with “You can’t demote the last admin.”
 Opening `/admin` without that role sends you back to the timer. The
 operator of a self-hosted instance designates the first admin outside
 the app (an environment list or an ops script) — there is no invite

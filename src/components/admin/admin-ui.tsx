@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ADMIN_GUARD, adminActionErrorMessage } from "@/lib/admin-copy";
+import { lockBodyScroll } from "@/lib/body-scroll-lock";
 import { emitToast } from "@/lib/events";
 
 export interface AdminUser {
@@ -94,7 +95,7 @@ export function AdminPageHeader({
           href={backHref}
           className="inline-flex text-body-sm text-muted hover:text-ink"
         >
-          ← Users
+          Back to Users
         </Link>
       ) : null}
       <div>
@@ -192,11 +193,10 @@ export function AdminConfirmDialog({
       onCancelRef.current();
     }
     document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlock = lockBodyScroll();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
+      unlock();
     };
   }, []);
 
@@ -291,7 +291,7 @@ export function guardTitle(
     if (self) return ADMIN_GUARD.selfRemove;
   }
   if (kind === "demote") {
-    if (sole) return ADMIN_GUARD.lastAdmin;
+    if (sole) return ADMIN_GUARD.lastAdminDemote;
     if (self) return ADMIN_GUARD.selfDemote;
   }
   if (kind === "block" && self) return ADMIN_GUARD.selfBlock;

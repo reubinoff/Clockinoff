@@ -283,8 +283,11 @@ async function mutate(
     if (!target) throw errors.notFound("User not found");
 
     const soleAdmin = target.role === "admin" && adminRows.length <= 1;
-    if ((action === "remove" || action === "demote") && soleAdmin) {
+    if (action === "remove" && soleAdmin) {
       throw errors.conflict(ADMIN_GUARD.lastAdmin);
+    }
+    if (action === "demote" && soleAdmin) {
+      throw errors.conflict(ADMIN_GUARD.lastAdminDemote);
     }
     if (action === "remove" && actorId === targetId) {
       throw errors.conflict(ADMIN_GUARD.selfRemove);

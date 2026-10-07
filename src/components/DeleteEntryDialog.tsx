@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { lockBodyScroll } from "@/lib/body-scroll-lock";
 import { formatDate, formatDurationHours, formatTime } from "@/lib/tz";
 
 export interface DeleteEntryPreview {
@@ -76,11 +77,10 @@ export default function DeleteEntryDialog({
       onCancelRef.current();
     }
     document.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlock = lockBodyScroll();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
+      unlock();
     };
   }, []);
 

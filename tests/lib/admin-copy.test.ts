@@ -7,6 +7,9 @@ describe("admin guard copy", () => {
     expect(adminActionErrorMessage(ADMIN_GUARD.selfBlock)).toBe(ADMIN_GUARD.selfBlock);
     expect(adminActionErrorMessage(ADMIN_GUARD.selfDemote)).toBe(ADMIN_GUARD.selfDemote);
     expect(adminActionErrorMessage(ADMIN_GUARD.lastAdmin)).toBe(ADMIN_GUARD.lastAdmin);
+    expect(adminActionErrorMessage(ADMIN_GUARD.lastAdminDemote)).toBe(
+      ADMIN_GUARD.lastAdminDemote,
+    );
     expect(adminActionErrorMessage("nope")).toBe(ADMIN_GUARD.generic);
     expect(adminActionErrorMessage(null)).toBe(ADMIN_GUARD.generic);
   });

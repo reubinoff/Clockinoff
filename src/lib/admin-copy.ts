@@ -7,6 +7,7 @@ export const ADMIN_GUARD = {
   selfBlock: "You can’t block yourself.",
   selfDemote: "You can’t demote yourself.",
   lastAdmin: "You can’t remove the last admin.",
+  lastAdminDemote: "You can’t demote the last admin.",
   generic: "Couldn’t complete that action. Try again.",
 } as const;
 
@@ -15,6 +16,7 @@ const KNOWN: ReadonlySet<string> = new Set([
   ADMIN_GUARD.selfBlock,
   ADMIN_GUARD.selfDemote,
   ADMIN_GUARD.lastAdmin,
+  ADMIN_GUARD.lastAdminDemote,
 ]);
 
 export function adminActionErrorMessage(message: string | undefined | null): string {

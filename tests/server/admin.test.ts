@@ -152,7 +152,7 @@ describe("admin service", () => {
     });
 
     await expect(demoteAdminUser(actor.user.id, actor.user.id)).rejects.toMatchObject({
-      message: ADMIN_GUARD.lastAdmin,
+      message: ADMIN_GUARD.lastAdminDemote,
     });
   });
 
