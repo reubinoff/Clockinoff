@@ -12,4 +12,5 @@ tsconfig.tsbuildinfo
 .idea
 playwright-report
 test-results
+eslint-results.sarif
 .pgdata

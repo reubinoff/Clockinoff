@@ -8,6 +8,14 @@ on:
 env:
   NODE_VERSION: "24"
 
+# Least privilege (CodeQL actions/missing-workflow-permissions, #196).
+# contents: read covers checkout. actions: write is the cache scope:
+# setup-node's npm cache and the build job's actions/cache both save
+# entries. Artifact upload uses the runtime token, not contents: write.
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   # Fast "linters check" (issue #58): runs ESLint (and the cheap TypeScript
   # typecheck) with no Postgres service, so a lint-only regression fails in

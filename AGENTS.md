@@ -529,6 +529,13 @@ and UI render in the user's TZ. All day-boundary math goes through
   regression (register → timer → entries refresh → CSV/PDF export) runs on
   cron (02:15 UTC) and `workflow_dispatch`. It is additive to CI — nothing
   here deploys.
+- **[`eslint.yml`](./.github/workflows/eslint.yml)** — publishes the
+  repo ESLint (lockfile + `eslint.config.mjs`) as SARIF to Security →
+  Code scanning. `npm ci` runs the TypeScript 6 link so
+  typescript-eslint can lint while root `tsc` stays on TypeScript 7.
+  Paths are rewritten to repo-relative URIs before upload. Lint
+  failures still fail the `ci.yml` lint job; this workflow does not
+  gate deploy.
 - **[`grype.yml`](./.github/workflows/grype.yml)** — Anchore Grype scan
   against the production dependency tree (`npm ci --omit=dev`). Fails
   CI only on **Critical** or **High**; known accepted findings are

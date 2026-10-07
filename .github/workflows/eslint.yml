@@ -1,44 +1,72 @@
-
 name: ESLint
+
+# Code scanning companion to the lint job in ci.yml (#199, #201).
+# ci.yml fails the build on lint errors. This workflow publishes the
+# same repo ESLint (package-lock + eslint.config.mjs) as SARIF under
+# Security → Code scanning. It does not gate deploy.
+#
+# Versions come from the lockfile. Do not `npm install` a second ESLint
+# in this job — the GitHub starter pinned eslint@8.10.0 (later edited
+# on main to eslint@10) and a legacy .eslintrc.js that this repo does
+# not have. `npm ci` also runs postinstall, which links
+# @typescript/typescript6 for typescript-eslint. Root `tsc` stays on
+# TypeScript 7.
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
   pull_request:
-    # The branches below must be a subset of the branches above
-    branches: [ "main" ]
+    branches: [main]
   schedule:
-    - cron: '43 4 * * 4'
+    - cron: "43 6 * * 4"
+
+concurrency:
+  group: eslint-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
 
 jobs:
   eslint:
     name: Run eslint scanning
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       security-events: write
-      actions: read # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status
+      # upload-sarif reads the Action run status on private repositories.
+      actions: read
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install ESLint
-        run: |
-          npm install eslint@10.12.0
-          npm install @microsoft/eslint-formatter-sarif@3.1.0
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Run ESLint
+      - name: Install dependencies
+        run: npm ci
+
+      # Lint findings are already a hard failure in ci.yml. Keep going
+      # here so a non-zero ESLint exit still produces SARIF for upload.
+      # A crash before the file is written fails the normalize step.
+      - name: Run ESLint (SARIF)
         env:
           SARIF_ESLINT_IGNORE_SUPPRESSED: "true"
-        run: npx eslint .
-          --config eslint.config.mjs
-          --ext .js,.jsx,.ts,.tsx
+        run: >
+          npx eslint .
           --format @microsoft/eslint-formatter-sarif
           --output-file eslint-results.sarif
         continue-on-error: true
 
-      - name: Upload analysis results to GitHub
-        uses: github/codeql-action/upload-sarif@v4
+      - name: Normalize SARIF paths
+        run: node scripts/normalize-eslint-sarif.mjs eslint-results.sarif
+
+      - name: Upload ESLint SARIF
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: eslint-results.sarif
+          category: eslint
           wait-for-processing: true

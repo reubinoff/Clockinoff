@@ -20,6 +20,14 @@ concurrency:
 env:
   NODE_VERSION: "24"
 
+# Least privilege (CodeQL actions/missing-workflow-permissions, #196).
+# contents: read covers checkout. actions: write is the cache scope:
+# setup-node's npm cache, the Next.js compiler cache, and the
+# Playwright browser cache all save entries.
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   regression:
     name: Regression (unit + e2e)
