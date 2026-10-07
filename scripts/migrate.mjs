@@ -38,6 +38,13 @@
 // and fall back to `DEFAULT_MIGRATOR_PG_USER`. The runtime pool
 // (`src/server/db/client.ts`) keeps the URL user and DefaultAzureCredential.
 //
+// TABLE OWNERSHIP (#187): in AAD / migrator mode, before any pending
+// migration SQL, the connected role must be able to alter existing
+// Clockinoff tables (owner, inheriting member, or superuser). A shared
+// Postgres server where guide-me's role owns `users` fails this check
+// with exit 1 instead of dying mid-statement while CD stays green.
+// Ownership transfer stays out of band — no ALTER OWNER here.
+//
 // Production also refuses `DATABASE_URL` sslmodes `disable`, `no-verify`,
 // and missing (loopback exempt). Prod should use `sslmode=verify-full`.
 // Mirror of `src/server/db/pg-ssl.ts`.
@@ -68,6 +75,41 @@ const REFRESH_BUFFER_MS = 5 * 60_000;
 const PG_MIGRATOR_CLIENT_ID_ENV = "PG_MIGRATOR_CLIENT_ID";
 const PG_MIGRATOR_PG_USER_ENV = "PG_MIGRATOR_PG_USER";
 const DEFAULT_MIGRATOR_PG_USER = "uami-clockinoff-migrator";
+
+// Clockinoff app tables (schema.ts) plus the migrate bookkeeping table.
+// Keep this list in sync when a new app table is added. #187: in AAD /
+// migrator mode we refuse to apply pending SQL unless the connected role
+// can alter every one of these that already exists. Fresh databases have
+// none of them yet, so the check passes and CREATE runs as the migrator.
+// This script never runs ALTER ... OWNER TO — ownership transfer is ops.
+const CLOCKINOFF_APP_TABLES = [
+  "__migrations",
+  "users",
+  "sessions",
+  "clients",
+  "projects",
+  "tags",
+  "time_entries",
+  "time_entry_tags",
+];
+
+// pg_has_role(..., 'USAGE') is true when current_user is the owner, inherits
+// the owner's privileges, or is a superuser — the cases that can ALTER TABLE.
+// There is no GRANT ALTER on tables; a foreign owner (for example guide-me's
+// guideme role on a shared server) makes DDL fail.
+const OWNERSHIP_CHECK_SQL = `
+SELECT current_user AS role,
+       c.relname AS table_name,
+       r.rolname AS owner,
+       pg_catalog.pg_has_role(current_user, c.relowner, 'USAGE') AS can_alter
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_catalog.pg_roles r ON r.oid = c.relowner
+WHERE n.nspname = 'public'
+  AND c.relkind = 'r'
+  AND c.relname = ANY($1::text[])
+ORDER BY c.relname
+`;
 
 function resolveMigrationsDir() {
   if (process.env.MIGRATIONS_DIR) {
@@ -334,6 +376,52 @@ async function buildPoolConfig(url, options = {}) {
   return config;
 }
 
+function shouldAssertTableOwnership(useAzureAd, pendingCount) {
+  return useAzureAd === true && pendingCount > 0;
+}
+
+function formatOwnershipFailure(blocked) {
+  const role =
+    blocked.length > 0 && blocked[0].role ? String(blocked[0].role) : "(unknown)";
+  const detail = blocked
+    .map((row) => `${row.table_name} (owner ${row.owner ?? "(unknown)"})`)
+    .join(", ");
+  return (
+    `[migrate] refusing to apply migrations: connected role "${role}"` +
+    ` cannot alter Clockinoff table(s): ${detail}.` +
+    ` The Clockinoff migrator role must own these tables.` +
+    ` Another database on the same server (for example guide-me / guideme)` +
+    ` must not. Transfer ownership to the migrator out of band;` +
+    ` this script does not run ALTER OWNER.`
+  );
+}
+
+// Read-only. Throws when an existing Clockinoff table is not alterable by
+// the connected role. Missing tables are skipped (not created yet).
+async function assertMigratorOwnsAppTables(client, tables = CLOCKINOFF_APP_TABLES) {
+  const { rows } = await client.query(OWNERSHIP_CHECK_SQL, [tables]);
+  const blocked = rows.filter((row) => row.can_alter !== true);
+  if (blocked.length > 0) {
+    throw new Error(formatOwnershipFailure(blocked));
+  }
+  if (rows.length === 0) {
+    console.log(
+      "[migrate] ownership check: no existing Clockinoff tables in public; continuing",
+    );
+    return;
+  }
+  console.log(
+    "[migrate] ownership check passed for %d Clockinoff table(s) as %s",
+    rows.length,
+    rows[0].role,
+  );
+}
+
+async function gatePendingMigrations(client, { useAzureAd, pendingCount }) {
+  if (!shouldAssertTableOwnership(useAzureAd, pendingCount)) return;
+  await assertMigratorOwnsAppTables(client);
+}
+
 async function runMigrations() {
   const dir = resolveMigrationsDir();
   const url = resolveDatabaseUrl();
@@ -346,12 +434,21 @@ async function runMigrations() {
     const files = (await readdir(dir))
       .filter((f) => f.endsWith(".sql"))
       .sort();
+    const pending = [];
     for (const file of files) {
       const { rows } = await client.query(
         'SELECT name FROM "__migrations" WHERE name = $1',
         [file],
       );
-      if (rows.length > 0) continue;
+      if (rows.length === 0) pending.push(file);
+    }
+    // AAD/migrator mode only, and only when SQL is about to run. Password
+    // mode (local Docker, PG_AZURE_AD_AUTH=0) is unchanged. #187.
+    await gatePendingMigrations(client, {
+      useAzureAd: shouldUseAzureAdAuth(url),
+      pendingCount: pending.length,
+    });
+    for (const file of pending) {
       const sql = await readFile(path.join(dir, file), "utf8");
       await client.query("BEGIN");
       try {
@@ -395,16 +492,22 @@ async function main() {
 // bottom-of-file entry point below.
 export {
   AZURE_POSTGRES_SCOPE,
+  CLOCKINOFF_APP_TABLES,
   DEFAULT_MIGRATOR_PG_USER,
+  OWNERSHIP_CHECK_SQL,
   PG_MIGRATOR_CLIENT_ID_ENV,
   PG_MIGRATOR_PG_USER_ENV,
+  assertMigratorOwnsAppTables,
   assertProductionDatabaseSslMode,
   buildPoolConfig,
   createAzurePasswordProvider,
+  formatOwnershipFailure,
+  gatePendingMigrations,
   isPasswordlessPostgresUrl,
   parsePostgresUrl,
   resolveMigratorClientId,
   resolveMigratorPgUser,
+  shouldAssertTableOwnership,
   shouldUseAzureAdAuth,
 };
 

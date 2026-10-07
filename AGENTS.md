@@ -548,7 +548,10 @@ and UI render in the user's TZ. All day-boundary math goes through
 - **[`cd.yml`](./.github/workflows/cd.yml)** — pushes to `main` build the
   Next.js standalone bundle, run two pre-deploy smoke tests (argon2 native
   load + a tiny PDF render), and deploy to the production Azure Web App
-  (`<webapp>`) via OIDC.
+  (`<webapp>`) via OIDC. After deploy the job polls
+  `https://clockinoff.reubinoff.com/api/health` (azurewebsites.net
+  fallback) for about four minutes and fails unless the body is
+  `{ ok: true }` (#187).
 
 ---
 
@@ -612,6 +615,19 @@ connections.
   The passwordless URL's `<runtime-role>` is only correct for the
   runtime pool. The Entra principal in the token must match the
   Postgres role — do not send the migrator token as the runtime user.
+
+**Shared Postgres with guide-me (#187).** Clockinoff and guide-me may
+share one Azure Postgres server. The Clockinoff migrator role
+(`PG_MIGRATOR_PG_USER`) must own Clockinoff's tables (`users`,
+`sessions`, `clients`, `projects`, `tags`, `time_entries`,
+`time_entry_tags`, and `__migrations`). guide-me's role (guideme) must
+not own them. In AAD / migrator mode, `scripts/migrate.mjs` checks that
+the connected role can alter those tables before it applies pending SQL
+  and exits 1 if it cannot (the error names the connected role and the
+  current owner). The script does not run `ALTER ... OWNER TO`. Transfer
+ownership in Azure / Postgres out of band, then redeploy. CD fails the
+job if `/api/health` does not return `{ ok: true }` after deploy, so a
+startup migrate failure is not reported as success.
 
 **TLS (`sslmode`, #139).** Production `DATABASE_URL` must use
 `sslmode=verify-full`. Boot (`src/instrumentation.ts`) and

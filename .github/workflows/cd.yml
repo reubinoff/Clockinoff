@@ -210,6 +210,59 @@ jobs:
           clean: true
           restart: true
 
+      # #187: webapps-deploy reports success once the package is uploaded.
+      # Startup is `node scripts/migrate.mjs && node server.js`, so a migrate
+      # failure (for example the migrator role does not own Clockinoff tables)
+      # leaves the site on 503 while this job would otherwise stay green.
+      # Poll the public health route until it returns {"ok":true}, or fail
+      # within about four minutes. The custom domain is preferred; the
+      # azurewebsites hostname is the fallback.
+      - name: Wait for production /api/health
+        run: |
+          set -euo pipefail
+          primary="https://clockinoff.reubinoff.com/api/health"
+          urls=("$primary")
+          if [ -n "${AZURE_WEBAPP_NAME:-}" ]; then
+            urls+=("https://${AZURE_WEBAPP_NAME}.azurewebsites.net/api/health")
+          fi
+          deadline=$((SECONDS + 240))
+          attempt=0
+          last=""
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            attempt=$((attempt + 1))
+            for url in "${urls[@]}"; do
+              body="$(mktemp)"
+              code="000"
+              if code="$(curl -sS -o "$body" -w '%{http_code}' --max-time 15 "$url")"; then
+                :
+              else
+                code="000"
+              fi
+              echo "health attempt ${attempt} ${url} -> ${code}"
+              if [ "$code" = "200" ] && jq -e '.ok == true' "$body" >/dev/null 2>&1; then
+                echo "Production health OK via ${url}"
+                jq -c . "$body" || true
+                rm -f "$body"
+                exit 0
+              fi
+              last="$(cat "$body" 2>/dev/null || true)"
+              rm -f "$body"
+            done
+            remaining=$((deadline - SECONDS))
+            if [ "$remaining" -le 0 ]; then
+              break
+            fi
+            sleep_for=10
+            if [ "$remaining" -lt "$sleep_for" ]; then
+              sleep_for=$remaining
+            fi
+            sleep "$sleep_for"
+          done
+          echo "Production /api/health did not return HTTP 200 {\"ok\":true} within 240s."
+          echo "Last body:"
+          printf '%s\n' "$last"
+          exit 1
+
       - name: Azure logout
         if: always()
         run: az logout || true
