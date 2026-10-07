@@ -366,13 +366,15 @@ export function UserActions({
     <div ref={ref} className="relative flex justify-end">
       <button
         type="button"
-        className="btn btn-ghost !min-h-[32px] !px-2 text-xs"
+        className="btn btn-ghost !h-8 !min-h-[32px] !w-8 !min-w-[32px] !px-0"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Actions for ${user.email}`}
+        aria-label="Actions"
         onClick={() => setOpen((v) => !v)}
       >
-        Actions
+        <span aria-hidden className="text-lg leading-none">
+          ⋯
+        </span>
       </button>
       {open ? (
         <div
