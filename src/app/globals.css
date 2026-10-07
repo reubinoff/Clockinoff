@@ -239,6 +239,29 @@
   html[data-theme="dark"] .btn.btn-danger-fill:hover {
     color: var(--color-canvas);
   }
+  /* Admin promote / unblock. Same accent fill as primary, at the dialog's
+     44px button height (primary itself is 48px). */
+  .btn.btn-accent-fill {
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+  .btn.btn-accent-fill:hover {
+    background-color: var(--color-accent-hover);
+    border-color: var(--color-accent-hover);
+    color: var(--color-accent-fg);
+  }
+  /* Admin demote. Solid secondary — canvas-2 fill, ink label. Not danger
+     and not the accent promote fill. */
+  .btn.btn-secondary-solid {
+    background-color: var(--color-canvas-2);
+    border-color: var(--color-border-strong);
+    color: var(--color-ink);
+  }
+  .btn.btn-secondary-solid:hover {
+    background-color: var(--color-border);
+    color: var(--color-ink);
+  }
   .btn-ghost {
     @apply border-transparent bg-transparent text-muted hover:text-ink hover:bg-canvas-2;
   }

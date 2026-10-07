@@ -22,6 +22,9 @@ export const users = pgTable(
     passwordHash: text("password_hash"),
     googleSub: text("google_sub"),
     timezone: text("timezone").notNull().default("Asia/Jerusalem"),
+    // 'user' | 'admin'. Check constraint lives in 0005_admin_role.sql.
+    role: text("role").notNull().default("user"),
+    blockedAt: timestamp("blocked_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),

@@ -91,8 +91,9 @@ tests/
 - **All queries scoped by `user_id`** — every service verifies ownership. A new
   service without an ownership check is a bug.
 - **Errors** — always shape as `{ error: { code, message } }` using
-  `src/lib/errors.ts` codes: `VALIDATION`, `UNAUTHORIZED`, `NOT_FOUND`,
-  `TIMER_ALREADY_RUNNING`, `TIMER_NOT_RUNNING`, `CONFLICT`, `INTERNAL`.
+  `src/lib/errors.ts` codes: `VALIDATION`, `UNAUTHORIZED`, `FORBIDDEN`,
+  `NOT_FOUND`, `TIMER_ALREADY_RUNNING`, `TIMER_NOT_RUNNING`, `CONFLICT`,
+  `INTERNAL`. `FORBIDDEN` is the non-admin response from `/api/admin/*`.
 - **Timezone** — timestamps stored as UTC `timestamptz`; render in the user's
   TZ (default `Asia/Jerusalem`) via `src/lib/tz.ts`. Do not compute day
   boundaries in JS `Date` local time.
@@ -153,6 +154,7 @@ shorter than 32 bytes). Never reuse `NEXTAUTH_SECRET` for it.
 | Production build | `npm run build` |
 | Production start | `npm start` (`next start`) |
 | Purge users by email | `npm run ops:delete-users` (see [§15](#15-ops-scripts)) |
+| Promote admins by email | `npm run ops:promote-admins` (see [§15](#15-ops-scripts)) |
 
 **Before pushing anything to `main`**, run at minimum:
 
@@ -409,8 +411,8 @@ no-op because no application code changed.
 Route handlers live under `src/app/api/**` and delegate to owner-scoped
 services in `src/server/services/*`. Every error is shaped as
 `{ error: { code, message } }` with codes `VALIDATION`, `UNAUTHORIZED`,
-`NOT_FOUND`, `TIMER_ALREADY_RUNNING`, `TIMER_NOT_RUNNING`, `CONFLICT`,
-`INTERNAL`.
+`FORBIDDEN`, `NOT_FOUND`, `TIMER_ALREADY_RUNNING`, `TIMER_NOT_RUNNING`,
+`CONFLICT`, `INTERNAL`.
 
 | Method | Path | Notes |
 |---|---|---|
@@ -430,6 +432,13 @@ services in `src/server/services/*`. Every error is shaped as
 | `PATCH` / `DELETE` | `/api/entries/:id` | closed entries only (running → use `/api/timer`) |
 | `GET` | `/api/export/csv?from&to` | **from/to required**; empty → header row only, 200 |
 | `GET` | `/api/export/pdf?from&to` | **from/to required**; empty → "No entries" page, 200 |
+| `GET` | `/api/admin/users` | admin only; `?q` email search, `?page` (~25) |
+| `GET` / `DELETE` | `/api/admin/users/:id` | detail + hard-delete; no self-delete, no last admin |
+| `POST` | `/api/admin/users/:id/block` | deny login, delete sessions; no self-block |
+| `POST` | `/api/admin/users/:id/unblock` | clear block |
+| `POST` | `/api/admin/users/:id/promote` | role → admin |
+| `POST` | `/api/admin/users/:id/demote` | no self-demote, no last admin |
+| `GET` | `/api/admin/stats?from&to` | instance KPIs + signup / active / hours series |
 
 User-facing walkthroughs live under [`/docs`](./docs). Do not dump this
 table into the public README.
@@ -437,6 +446,14 @@ table into the public README.
 ---
 
 ## 12. Authentication
+
+Users carry `role` (`user` | `admin`, default `user`) and an optional
+`blocked_at`. Admins reach `/admin` and `/api/admin/*`. Everyone else
+is redirected from `/admin` to `/app`; the API returns `403 FORBIDDEN`.
+A blocked user cannot sign in (same `401` body as a bad password) and
+any live session is ignored. Blocking also deletes that user's session
+rows. Bootstrap the first admin with `ADMIN_EMAILS` and/or
+`npm run ops:promote-admins` — see [§15](#15-ops-scripts).
 
 Clockinoff has two sign-in paths that share one user table:
 
@@ -707,6 +724,14 @@ One-shot maintenance helpers live under [`scripts/`](./scripts/) and
 speak directly to Postgres via `DATABASE_URL`. They never take a
 password on the command line. Read the script `--help` / source for
 invocation — do not copy account-name patterns or emails into docs.
+
+**Promote admins** (`npm run ops:promote-admins`,
+[`scripts/promote-admins.mjs`](./scripts/promote-admins.mjs)): sets
+`users.role` to `admin` for the given emails (or `ADMIN_EMAILS` /
+`EMAILS`). Dry-run unless `--yes`. Does not demote anyone left off the
+list. The running app also treats `ADMIN_EMAILS` as a one-way promote:
+matching addresses are created as admin, and an existing user is
+promoted on their next successful sign-in.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

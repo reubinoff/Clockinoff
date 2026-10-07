@@ -17,7 +17,8 @@ nav_order: 10
 ---
 
 Clockinoff keeps account management deliberately thin. There is one user
-per account, no roles, no invitations, no billing.
+per account, no invitations, and no billing. Instance operators can
+hold an **admin** role; everyone else is a regular user.
 
 ---
 
@@ -33,6 +34,15 @@ Open **Account** from the header (wide desktop) or the account menu
 (tablet and phone) to see your sign-in methods. The timer dock is
 hidden on this page. A running timer still shows as a small elapsed
 counter in the header, or on the **Timer** tab on a phone.
+
+If your account is an admin, the same cluster shows an **Admin** link
+(after **Docs**, before **Appearance** on a wide desktop, and inside
+the account menu on a phone or tablet). It opens **Overview** and
+**Users** for this instance. The link is not shown for anyone else.
+Opening `/admin` without that role sends you back to the timer. The
+operator of a self-hosted instance designates the first admin outside
+the app (an environment list or an ops script) — there is no invite
+screen.
 
 The v1 UI does not include a "change email" flow. Support for that is a
 future improvement.

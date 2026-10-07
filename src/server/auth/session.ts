@@ -3,6 +3,7 @@ import { and, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { sessions, users } from "@/server/db/schema";
 import { tokenId } from "@/lib/id";
+import { asUserRole, type UserRole, type UserStatus } from "@/lib/admin-role";
 
 export const SESSION_COOKIE = "timely_session";
 export const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -12,6 +13,24 @@ export interface SessionUser {
   id: string;
   email: string;
   timezone: string;
+  role: UserRole;
+  status: UserStatus;
+}
+
+export function sessionUserFromRow(row: {
+  id: string;
+  email: string;
+  timezone: string;
+  role: string;
+  blockedAt: Date | null;
+}): SessionUser {
+  return {
+    id: row.id,
+    email: row.email,
+    timezone: row.timezone,
+    role: asUserRole(row.role),
+    status: row.blockedAt ? "blocked" : "active",
+  };
 }
 
 export interface CreatedSession {
@@ -66,6 +85,8 @@ export async function getSessionUser(
       id: users.id,
       email: users.email,
       timezone: users.timezone,
+      role: users.role,
+      blockedAt: users.blockedAt,
       expiresAt: sessions.expiresAt,
     })
     .from(sessions)
@@ -73,8 +94,8 @@ export async function getSessionUser(
     .where(and(eq(sessions.id, tokenHash), gt(sessions.expiresAt, now)))
     .limit(1);
   const row = rows[0];
-  if (!row) return null;
-  return { id: row.id, email: row.email, timezone: row.timezone };
+  if (!row || row.blockedAt) return null;
+  return sessionUserFromRow(row);
 }
 
 export async function deleteSession(sessionId: string | null | undefined): Promise<void> {

@@ -4,6 +4,7 @@ import {
   donutArcs,
   enumerateDayKeys,
   hoursFromSeconds,
+  niceAxisTopCount,
   niceAxisTopHours,
   summarize,
   type ProjectGroup,
@@ -70,6 +71,16 @@ describe("hoursFromSeconds", () => {
     expect(hoursFromSeconds(-30)).toBe(0);
     expect(hoursFromSeconds(Number.NaN)).toBe(0);
     expect(hoursFromSeconds(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+});
+
+describe("niceAxisTopCount", () => {
+  it("keeps an empty series readable and rounds up", () => {
+    expect(niceAxisTopCount(0)).toBe(1);
+    expect(niceAxisTopCount(1)).toBe(1);
+    expect(niceAxisTopCount(3)).toBe(4);
+    expect(niceAxisTopCount(12)).toBe(20);
+    expect(niceAxisTopCount(5000)).toBe(5000);
   });
 });
 

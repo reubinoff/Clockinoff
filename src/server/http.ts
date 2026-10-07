@@ -30,6 +30,12 @@ export async function requireUser(): Promise<SessionUser> {
   return user;
 }
 
+export async function requireAdmin(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (user.role !== "admin") throw errors.forbidden();
+  return user;
+}
+
 // Clockinoff has no uploads. 64 KiB is well above any legitimate JSON
 // payload (login, register, entry writes) and far below Next's 10 MB
 // proxy buffer default (#151).

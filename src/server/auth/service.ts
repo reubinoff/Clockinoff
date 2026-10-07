@@ -5,8 +5,9 @@ import { users } from "@/server/db/schema";
 import { errors } from "@/lib/errors";
 import { validatePassword } from "@/lib/password";
 import { REGISTER_FAILURE_COPY } from "@/lib/register-copy";
+import { applyBootstrapRole, initialRoleForEmail } from "./admin-bootstrap";
 import { dummyPasswordHash, hashPassword, verifyPassword } from "./passwords";
-import { createSession, type CreatedSession, type SessionUser } from "./session";
+import { createSession, sessionUserFromRow, type CreatedSession, type SessionUser } from "./session";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -62,10 +63,16 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
   try {
     const [row] = await db
       .insert(users)
-      .values({ email, passwordHash, timezone })
-      .returning({ id: users.id, email: users.email, timezone: users.timezone });
+      .values({ email, passwordHash, timezone, role: initialRoleForEmail(email) })
+      .returning({
+        id: users.id,
+        email: users.email,
+        timezone: users.timezone,
+        role: users.role,
+        blockedAt: users.blockedAt,
+      });
     const session = await createSession(row.id);
-    return { user: row, session };
+    return { user: sessionUserFromRow(row), session };
   } catch (err) {
     const code = pgErrorCode(err);
     if (code === "23505") {
@@ -85,6 +92,8 @@ export async function login(input: LoginInput): Promise<AuthResult> {
       id: users.id,
       email: users.email,
       timezone: users.timezone,
+      role: users.role,
+      blockedAt: users.blockedAt,
       passwordHash: users.passwordHash,
     })
     .from(users)
@@ -99,9 +108,13 @@ export async function login(input: LoginInput): Promise<AuthResult> {
   const hash = storedHash ?? (await dummyPasswordHash());
   const ok = await verifyPassword(hash, input.password);
   if (!row || !storedHash || !ok) throw errors.unauthorized("Invalid email or password");
+  // Same body as a bad password so a blocked account is not an oracle.
+  // The verify above already ran, so this branch is not cheaper.
+  if (row.blockedAt) throw errors.unauthorized("Invalid email or password");
+  const role = await applyBootstrapRole(row.id, row.email, row.role);
   const session = await createSession(row.id);
   return {
-    user: { id: row.id, email: row.email, timezone: row.timezone },
+    user: sessionUserFromRow({ ...row, role, blockedAt: null }),
     session,
   };
 }
@@ -113,7 +126,13 @@ export async function updateTimezone(userId: string, timezone: string): Promise<
     .update(users)
     .set({ timezone })
     .where(eq(users.id, userId))
-    .returning({ id: users.id, email: users.email, timezone: users.timezone });
+    .returning({
+      id: users.id,
+      email: users.email,
+      timezone: users.timezone,
+      role: users.role,
+      blockedAt: users.blockedAt,
+    });
   if (!row) throw errors.notFound("User not found");
-  return row;
+  return sessionUserFromRow(row);
 }

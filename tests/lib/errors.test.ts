@@ -9,6 +9,8 @@ describe("errors", () => {
     expect(v.details).toEqual({ foo: 1 });
 
     expect(errors.unauthorized().status).toBe(401);
+    expect(errors.forbidden().status).toBe(403);
+    expect(errors.forbidden().code).toBe("FORBIDDEN");
     expect(errors.notFound().status).toBe(404);
     expect(errors.conflict().status).toBe(409);
     expect(errors.internal().status).toBe(500);

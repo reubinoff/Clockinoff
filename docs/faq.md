@@ -166,7 +166,10 @@ synced across devices in v1.
 By design, Clockinoff does not include:
 
 - Calendar view or Gantt-style planning.
-- Team, workspace, or shared entries.
+- Team, workspace, or shared entries. An instance **admin** (see
+  [Account]({{ '/account' | relative_url }}#your-email)) can manage
+  users and see instance usage. That is not a shared workspace: your
+  projects, clients, and entries stay yours.
 - Clockify / Toggl / Harvest sync.
 - A control for linking a Google account whose email **differs** from
   the signed-in user's email, or for **unlinking** Google after you

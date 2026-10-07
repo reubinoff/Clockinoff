@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hoursFromSeconds, summarize, type ReportEntry, type ReportSummary } from "@/lib/report";
+import { rangeForPreset, type RangePresetKey } from "@/lib/range-presets";
 import { IconAlert, IconExport } from "@/components/icons";
 import RangeBarChart from "@/components/reports/RangeBarChart";
 import ProjectDonut from "@/components/reports/ProjectDonut";
@@ -11,7 +12,7 @@ interface ReportsSummaryProps {
   timezone: string;
 }
 
-type PresetKey = "today" | "this-week" | "last-week" | "this-month" | "last-month" | "custom";
+type PresetKey = RangePresetKey;
 
 interface Range {
   from: string;
@@ -26,54 +27,6 @@ function pad(n: number): string {
 
 function fmtDate(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function todayDate(): Date {
-  return new Date();
-}
-
-function startOfWeek(d: Date): Date {
-  const copy = new Date(d);
-  const day = copy.getDay();
-  const diff = (day + 6) % 7; // Monday-first, matches the rest of the app
-  copy.setDate(copy.getDate() - diff);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-}
-
-function startOfMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
-
-function endOfMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0);
-}
-
-export function rangeForPreset(key: Exclude<PresetKey, "custom">, now: Date = todayDate()): Range {
-  if (key === "today") {
-    const k = fmtDate(now);
-    return { from: k, to: k };
-  }
-  if (key === "this-week") {
-    return { from: fmtDate(startOfWeek(now)), to: fmtDate(now) };
-  }
-  if (key === "last-week") {
-    const thisStart = startOfWeek(now);
-    const lastStart = new Date(thisStart);
-    lastStart.setDate(thisStart.getDate() - 7);
-    const lastEnd = new Date(thisStart);
-    lastEnd.setDate(thisStart.getDate() - 1);
-    return { from: fmtDate(lastStart), to: fmtDate(lastEnd) };
-  }
-  if (key === "this-month") {
-    return { from: fmtDate(startOfMonth(now)), to: fmtDate(now) };
-  }
-  // last-month
-  const thisMonthStart = startOfMonth(now);
-  const lastMonthEnd = new Date(thisMonthStart);
-  lastMonthEnd.setDate(0);
-  const lastMonthStart = startOfMonth(lastMonthEnd);
-  return { from: fmtDate(lastMonthStart), to: fmtDate(endOfMonth(lastMonthStart)) };
 }
 
 const QUICK_RANGES: readonly { key: PresetKey; label: string }[] = [

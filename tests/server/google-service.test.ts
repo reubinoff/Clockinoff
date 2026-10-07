@@ -233,6 +233,24 @@ describe("connectGoogleToUser / getSignInMethods", () => {
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
+  it("refuses Google sign-in for a blocked user", async () => {
+    const created = await signInWithGoogle({ sub: "google|blocked", email: "blocked-g@example.com" });
+    await getDb()
+      .update(users)
+      .set({ blockedAt: new Date() })
+      .where(eq(users.id, created.user.id));
+    await expect(
+      signInWithGoogle({ sub: "google|blocked", email: "blocked-g@example.com" }),
+    ).rejects.toBeInstanceOf(GoogleAuthError);
+    expect(await getSessionUser(created.session.id)).toBeNull();
+  });
+
+  it("creates a Google user as admin when ADMIN_EMAILS matches", async () => {
+    process.env.ADMIN_EMAILS = "gadmin@example.com";
+    const created = await signInWithGoogle({ sub: "google|admin", email: "gadmin@example.com" });
+    expect(created.user.role).toBe("admin");
+  });
+
   it("reports Google-only accounts as password off / Google connected", async () => {
     const created = await signInWithGoogle({ sub: "google|only", email: "only@example.com" });
     expect(await getSignInMethods(created.user.id)).toEqual({

@@ -14,7 +14,7 @@ import {
   SESSION_COOKIE,
 } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
-import { sessions } from "@/server/db/schema";
+import { sessions, users } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
 import { ApiError } from "@/lib/errors";
 import { PASSWORD_COPY } from "@/lib/password";
@@ -214,6 +214,31 @@ describe("auth", () => {
     expect(rows).toHaveLength(MAX_SESSIONS_PER_USER);
     expect(rows.map((r) => r.id)).not.toContain(hashSessionToken(first.id));
     expect(rows.map((r) => r.id).sort()).toEqual(kept.map(hashSessionToken).sort());
+  });
+
+  it("registers a bootstrap admin when ADMIN_EMAILS matches", async () => {
+    process.env.ADMIN_EMAILS = "Boss@Example.com";
+    const { user } = await register({ email: "boss@example.com", password: PW });
+    expect(user.role).toBe("admin");
+    expect(user.status).toBe("active");
+  });
+
+  it("promotes an existing user on login when their email is in ADMIN_EMAILS", async () => {
+    const { user } = await register({ email: "later@example.com", password: PW });
+    expect(user.role).toBe("user");
+    process.env.ADMIN_EMAILS = "later@example.com";
+    const again = await login({ email: "later@example.com", password: PW });
+    expect(again.user.role).toBe("admin");
+  });
+
+  it("denies login for a blocked user and drops an existing session", async () => {
+    const { user, session } = await register({ email: "blocked@example.com", password: PW });
+    await getDb().update(users).set({ blockedAt: new Date() }).where(eq(users.id, user.id));
+    expect(await getSessionUser(session.id)).toBeNull();
+    await expect(login({ email: "blocked@example.com", password: PW })).rejects.toMatchObject({
+      status: 401,
+      message: "Invalid email or password",
+    });
   });
 
   it("sessionCookieOptions describes cookie shape", () => {

@@ -28,8 +28,9 @@ You get:
   in the account cluster; System tracks your device.
 
 That's the whole product. There is intentionally no calendar view, no team
-management, no Clockify sync, and no dashboards beyond the entry list and
-the exports. Sign in with an email + password or, if the deployer has
+workspace, no Clockify sync, and no shared entries. Instance admins have
+a separate Admin area for users and usage; everyone else does not see it.
+Sign in with an email + password or, if the deployer has
 wired it up, the **Continue with Google** button on `/login` and
 `/register` — see [Getting started]({{ '/getting-started' | relative_url }}#or-continue-with-google).
 

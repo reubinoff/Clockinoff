@@ -10,6 +10,7 @@ import { DOCS_URL } from "@/lib/docs";
 interface Props {
   email: string;
   variant: "mobile" | "compact";
+  isAdmin?: boolean;
 }
 
 function initialFromEmail(email: string): string {
@@ -21,6 +22,7 @@ function initialFromEmail(email: string): string {
 export default function HeaderUserMenu({
   email,
   variant,
+  isAdmin = false,
 }: Props): JSX.Element {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -127,6 +129,18 @@ export default function HeaderUserMenu({
               >
                 Docs
               </a>
+            </div>
+          ) : null}
+          {isAdmin ? (
+            <div role="none" className="border-t border-border mt-1 pt-1">
+              <Link
+                href="/admin"
+                role="menuitem"
+                className="account-menu-item"
+                onClick={close}
+              >
+                Admin
+              </Link>
             </div>
           ) : null}
           {/* Same AppearanceSelect as the desktop cluster. Both commit

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/errors";
-import { MAX_JSON_BODY_BYTES, jsonError, noContent, ok, readJson, requireUser } from "@/server/http";
+import { MAX_JSON_BODY_BYTES, jsonError, noContent, ok, readJson, requireAdmin, requireUser } from "@/server/http";
 import { truncateAll } from "../setup";
 import { makeUser } from "../helpers";
 
@@ -113,6 +113,31 @@ describe("server/http", () => {
       const found = await requireUser();
       expect(found.id).toBe(user.id);
       expect(found.email).toBe("http-user@example.com");
+      cookieValue = undefined;
+    });
+  });
+
+  describe("requireAdmin", () => {
+    beforeEach(async () => {
+      await truncateAll();
+    });
+
+    it("rejects a signed-in non-admin", async () => {
+      const { session } = await makeUser("member@example.com");
+      cookieValue = session.id;
+      await expect(requireAdmin()).rejects.toMatchObject({ code: "FORBIDDEN", status: 403 });
+      cookieValue = undefined;
+    });
+
+    it("returns the admin", async () => {
+      const { session, user } = await makeUser("boss@example.com");
+      const { getDb } = await import("@/server/db/client");
+      const { users } = await import("@/server/db/schema");
+      const { eq } = await import("drizzle-orm");
+      await getDb().update(users).set({ role: "admin" }).where(eq(users.id, user.id));
+      cookieValue = session.id;
+      const found = await requireAdmin();
+      expect(found.role).toBe("admin");
       cookieValue = undefined;
     });
   });

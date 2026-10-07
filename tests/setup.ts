@@ -1,4 +1,4 @@
-import { afterAll, beforeAll } from "vitest";
+import { afterAll, beforeAll, beforeEach } from "vitest";
 import { runMigrations } from "@/server/db/migrate";
 import { closeDb, getPool } from "@/server/db/client";
 
@@ -15,6 +15,10 @@ if (!process.env.OAUTH_STATE_SECRET) {
 
 beforeAll(async () => {
   await runMigrations();
+});
+
+beforeEach(() => {
+  delete process.env.ADMIN_EMAILS;
 });
 
 afterAll(async () => {

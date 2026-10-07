@@ -5,6 +5,7 @@ export type ErrorCode =
   | "TIMER_ALREADY_RUNNING"
   | "TIMER_NOT_RUNNING"
   | "CONFLICT"
+  | "FORBIDDEN"
   | "RATE_LIMITED"
   | "INTERNAL";
 
@@ -56,6 +57,7 @@ export const errors = {
   payloadTooLarge: (message = "Request body too large") =>
     new ApiError(413, "VALIDATION", message),
   unauthorized: (message = "Unauthorized") => new ApiError(401, "UNAUTHORIZED", message),
+  forbidden: (message = "Forbidden") => new ApiError(403, "FORBIDDEN", message),
   notFound: (message = "Not found") => new ApiError(404, "NOT_FOUND", message),
   conflict: (message = "Conflict") => new ApiError(409, "CONFLICT", message),
   timerAlreadyRunning: (entryId: string) =>

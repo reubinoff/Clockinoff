@@ -154,6 +154,19 @@ export function hoursFromSeconds(seconds: number): number {
 // so an empty-day baseline doesn't visually dominate when any single day
 // is above zero. 1h minimum keeps the baseline readable at the start of a
 // range when no entries exist yet.
+// Integer axis for admin count charts (signups, active users). Same
+// "never a zero-height scale" idea as the hours axis: an empty range
+// still has a readable top of 1.
+export function niceAxisTopCount(peak: number): number {
+  const n = Number.isFinite(peak) && peak > 0 ? peak : 0;
+  if (n <= 1) return 1;
+  const steps = [2, 4, 5, 10, 20, 50, 100, 200, 500, 1000];
+  for (const s of steps) {
+    if (n <= s) return s;
+  }
+  return Math.ceil(n / 100) * 100;
+}
+
 export function niceAxisTopHours(peakSeconds: number): number {
   const peakHours = hoursFromSeconds(peakSeconds);
   if (peakHours <= 1) return 1;

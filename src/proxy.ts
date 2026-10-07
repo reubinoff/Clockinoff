@@ -14,7 +14,9 @@ const PROTECTED_API_PREFIXES = [
 
 function isProtected(pathname: string): boolean {
   if (pathname === "/app" || pathname.startsWith(`${PROTECTED_APP_PREFIX}/`)) return true;
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return true;
   if (pathname === "/api/auth/me") return true;
+  if (pathname === "/api/admin" || pathname.startsWith("/api/admin/")) return true;
   return PROTECTED_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
@@ -46,5 +48,5 @@ export function proxy(req: NextRequest): NextResponse {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/api/:path*"],
+  matcher: ["/app/:path*", "/admin", "/admin/:path*", "/api/:path*"],
 };

@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   hoursFromSeconds,
+  niceAxisTopCount,
   niceAxisTopHours,
   type DayBucket,
 } from "@/lib/report";
@@ -17,6 +18,9 @@ import {
 export interface RangeBarChartProps {
   days: readonly DayBucket[];
   timezone: string;
+  /** Hours treats `seconds` as a duration. Count treats it as an integer. */
+  unit?: "hours" | "count";
+  ariaLabel?: string;
 }
 
 const CHART_HEIGHT = 220;
@@ -59,6 +63,16 @@ function keyToUtc(key: string): Date {
 // Pick a tick cadence that keeps labels readable at any range length
 // without overlapping. Weekly ranges show every day; monthly ranges thin to
 // every 2 / 3 / 4 / 5 days so a desktop-width chart never crowds.
+// Count axes are integers. A 0–1 scale with three evenly spaced ticks
+// rounds 0.5 and 1 to the same label, so small ranges list each integer.
+function countTicks(top: number): number[] {
+  const peak = Math.max(1, Math.round(top));
+  if (peak <= 4) return Array.from({ length: peak + 1 }, (_, i) => i);
+  const ticks = new Set<number>();
+  for (let i = 0; i <= 4; i += 1) ticks.add(Math.round((peak / 4) * i));
+  return [...ticks].sort((a, b) => a - b);
+}
+
 function tickStride(count: number): number {
   if (count <= 10) return 1;
   if (count <= 16) return 2;
@@ -77,6 +91,8 @@ const useIsoLayoutEffect =
 export default function RangeBarChart({
   days,
   timezone: _timezone,
+  unit = "hours",
+  ariaLabel,
 }: RangeBarChartProps): JSX.Element {
   // Keep the timezone prop in the signature so the Reports page can pass
   // the user's tz once; day keys arrive pre-zoned from `summarize`, so a
@@ -124,10 +140,13 @@ export default function RangeBarChart({
   }, [days]);
 
   const peakSeconds = data.reduce((m, d) => (d.seconds > m ? d.seconds : m), 0);
-  const axisTopHours = niceAxisTopHours(peakSeconds);
+  const axisTop = unit === "count" ? niceAxisTopCount(peakSeconds) : niceAxisTopHours(peakSeconds);
   const describeTotal = data.reduce((s, d) => s + d.seconds, 0);
   const describeHours = (describeTotal / 3600).toFixed(2);
+  const describeCount = String(Math.round(describeTotal));
   const descId = `${chartId}-desc`;
+  const figureLabel =
+    ariaLabel ?? (unit === "count" ? "Count by day" : "Hours by day");
 
   // Pre-measure render: reserve the chart's height so the surrounding
   // card has the same box both before and after we know the width.
@@ -141,9 +160,9 @@ export default function RangeBarChart({
         style={{ minHeight: CHART_HEIGHT }}
       >
         <figcaption id={descId} className="sr-only">
-          Bar chart of hours per day over the selected range. Range total:
-          {" "}
-          {describeHours} hours. Peak day: {axisTopHours.toFixed(1)} hours maximum.
+          {unit === "count"
+            ? `Bar chart of counts per day. Range total: ${describeCount}. Peak day: ${axisTop}.`
+            : `Bar chart of hours per day over the selected range. Range total: ${describeHours} hours. Peak day: ${axisTop.toFixed(1)} hours maximum.`}
         </figcaption>
       </figure>
     );
@@ -169,11 +188,11 @@ export default function RangeBarChart({
   );
   // Fewer grid lines on short ranges so a 2h-top chart doesn't read as
   // a stack of ladder rungs.
-  const gridLines = axisTopHours <= 2 ? 2 : 4;
-  const gridValues = Array.from(
-    { length: gridLines + 1 },
-    (_, i) => (axisTopHours / gridLines) * i,
-  );
+  const gridLines = axisTop <= 2 ? 2 : 4;
+  const gridValues =
+    unit === "count"
+      ? countTicks(axisTop)
+      : Array.from({ length: gridLines + 1 }, (_, i) => (axisTop / gridLines) * i);
   const stride = tickStride(data.length);
 
   return (
@@ -183,13 +202,13 @@ export default function RangeBarChart({
       aria-describedby={descId}
     >
       <figcaption id={descId} className="sr-only">
-        Bar chart of hours per day over the selected range. Range total:
-        {" "}
-        {describeHours} hours. Peak day: {axisTopHours.toFixed(1)} hours maximum.
+        {unit === "count"
+          ? `Bar chart of counts per day. Range total: ${describeCount}. Peak day: ${axisTop}.`
+          : `Bar chart of hours per day over the selected range. Range total: ${describeHours} hours. Peak day: ${axisTop.toFixed(1)} hours maximum.`}
       </figcaption>
       <svg
         role="img"
-        aria-label="Hours by day"
+        aria-label={figureLabel}
         viewBox={`0 0 ${virtualWidth} ${CHART_HEIGHT}`}
         className="block w-full h-[220px] overflow-visible"
       >
@@ -197,7 +216,7 @@ export default function RangeBarChart({
             the Quiet Pulse border + muted tokens via the Tailwind class, so
             the chart stays readable in both light + dark. */}
         {gridValues.map((hours, i) => {
-          const y = plotBottom - (hours / axisTopHours) * plotHeight;
+          const y = plotBottom - (hours / axisTop) * plotHeight;
           return (
             <g key={`grid-${i}`}>
               <line
@@ -216,7 +235,9 @@ export default function RangeBarChart({
                 textAnchor="end"
                 className="fill-muted text-[10px] tabular-nums"
               >
-                {hours.toFixed(hours >= 10 ? 0 : 1)}h
+                {unit === "count"
+                  ? String(hours)
+                  : `${hours.toFixed(hours >= 10 ? 0 : 1)}h`}
               </text>
             </g>
           );
@@ -228,14 +249,17 @@ export default function RangeBarChart({
           const slotX = plotLeft + i * slotWidth;
           const centerX = slotX + slotWidth / 2;
           const x = centerX - barWidth / 2;
-          const height = (d.hours / axisTopHours) * plotHeight;
+          const magnitude = unit === "count" ? d.seconds : d.hours;
+          const height = (magnitude / axisTop) * plotHeight;
           const drawnHeight = d.seconds > 0 ? Math.max(2, height) : 1;
           const y = plotBottom - drawnHeight;
           const titleId = `${chartId}-bar-${i}`;
           return (
             <g key={d.key}>
               <title id={titleId}>
-                {d.label}: {d.hours.toFixed(2)}h
+                {unit === "count"
+                  ? `${d.label}: ${Math.round(d.seconds)}`
+                  : `${d.label}: ${d.hours.toFixed(2)}h`}
               </title>
               <rect
                 x={x}

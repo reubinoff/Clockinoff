@@ -49,6 +49,18 @@ describe("middleware /app guard", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 
+  it("redirects an unauthenticated /admin visit to login", () => {
+    const res = middleware(nextRequest("http://localhost:3000/admin/users"));
+    const parsed = new URL(res.headers.get("location") ?? "");
+    expect(parsed.pathname).toBe("/login");
+    expect(parsed.searchParams.get("next")).toBe("/admin/users");
+  });
+
+  it("returns 401 JSON for an unauthenticated admin API", () => {
+    const res = middleware(nextRequest("http://localhost:3000/api/admin/users"));
+    expect(res.status).toBe(401);
+  });
+
   it("lets public paths through without a redirect", () => {
     const res = middleware(nextRequest("http://e0a475862be8:3000/login"));
     expect(res.headers.get("location")).toBeNull();

@@ -8,6 +8,8 @@ describe("isConfigRoute", () => {
     expect(isConfigRoute("/app/clients")).toBe(true);
     expect(isConfigRoute("/app/tags")).toBe(true);
     expect(isConfigRoute("/app/account")).toBe(true);
+    expect(isConfigRoute("/admin")).toBe(true);
+    expect(isConfigRoute("/admin/users")).toBe(true);
   });
 
   it("keeps the timer dock on timer, reports, and export", () => {

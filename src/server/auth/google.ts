@@ -19,7 +19,8 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { pgErrorCode } from "@/server/db/errors";
 import { users } from "@/server/db/schema";
-import { createSession, type CreatedSession, type SessionUser } from "./session";
+import { applyBootstrapRole, initialRoleForEmail } from "./admin-bootstrap";
+import { createSession, sessionUserFromRow, type CreatedSession, type SessionUser } from "./session";
 import { tokenId } from "@/lib/id";
 import { errors } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -240,6 +241,25 @@ export interface GoogleSignInResult {
   isNewUser: boolean;
 }
 
+async function startGoogleSession(row: {
+  id: string;
+  email: string;
+  timezone: string;
+  role: string;
+  blockedAt: Date | null;
+}): Promise<{ user: SessionUser; session: CreatedSession }> {
+  if (row.blockedAt) {
+    logger.warn("[google] refusing sign-in for blocked user", { userId: row.id });
+    throw new GoogleAuthError("network", "Blocked user");
+  }
+  const role = await applyBootstrapRole(row.id, row.email, row.role);
+  const session = await createSession(row.id);
+  return {
+    user: sessionUserFromRow({ ...row, role, blockedAt: null }),
+    session,
+  };
+}
+
 export async function signInWithGoogle(
   input: { sub: string; email: string; timezone?: string },
   _retried = false,
@@ -258,13 +278,15 @@ export async function signInWithGoogle(
       id: users.id,
       email: users.email,
       timezone: users.timezone,
+      role: users.role,
+      blockedAt: users.blockedAt,
     })
     .from(users)
     .where(eq(users.googleSub, input.sub))
     .limit(1);
   if (bySub[0]) {
-    const session = await createSession(bySub[0].id);
-    return { user: bySub[0], session, isNewUser: false };
+    const started = await startGoogleSession(bySub[0]);
+    return { ...started, isNewUser: false };
   }
 
   // 2) Existing user with the SAME verified email. Case-insensitive
@@ -274,6 +296,8 @@ export async function signInWithGoogle(
       id: users.id,
       email: users.email,
       timezone: users.timezone,
+      role: users.role,
+      blockedAt: users.blockedAt,
       googleSub: users.googleSub,
       passwordHash: users.passwordHash,
     })
@@ -306,14 +330,16 @@ export async function signInWithGoogle(
       .update(users)
       .set({ googleSub: input.sub })
       .where(and(eq(users.id, existing.id), isNull(users.googleSub)))
-      .returning({ id: users.id, email: users.email, timezone: users.timezone });
-    const user = updated ?? {
-      id: existing.id,
-      email: existing.email,
-      timezone: existing.timezone,
-    };
-    const session = await createSession(user.id);
-    return { user, session, isNewUser: false };
+      .returning({
+        id: users.id,
+        email: users.email,
+        timezone: users.timezone,
+        role: users.role,
+        blockedAt: users.blockedAt,
+      });
+    const user = updated ?? existing;
+    const started = await startGoogleSession(user);
+    return { ...started, isNewUser: false };
   }
 
   // 3) No user at all → create a Google-only user. No password_hash yet;
@@ -322,10 +348,21 @@ export async function signInWithGoogle(
     const timezone = input.timezone?.trim() || "Asia/Jerusalem";
     const [row] = await db
       .insert(users)
-      .values({ email: normalisedEmail, googleSub: input.sub, timezone })
-      .returning({ id: users.id, email: users.email, timezone: users.timezone });
-    const session = await createSession(row.id);
-    return { user: row, session, isNewUser: true };
+      .values({
+        email: normalisedEmail,
+        googleSub: input.sub,
+        timezone,
+        role: initialRoleForEmail(normalisedEmail),
+      })
+      .returning({
+        id: users.id,
+        email: users.email,
+        timezone: users.timezone,
+        role: users.role,
+        blockedAt: users.blockedAt,
+      });
+    const started = await startGoogleSession(row);
+    return { ...started, isNewUser: true };
   } catch (err) {
     const code = pgErrorCode(err);
     if (code === "23505" && !_retried) {
