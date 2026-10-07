@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { GET as listUsers } from "@/app/api/admin/users/route";
+import { POST as bulkUsers } from "@/app/api/admin/users/bulk/route";
 import { DELETE as deleteUser, GET as getUser } from "@/app/api/admin/users/[id]/route";
 import { POST as blockUser } from "@/app/api/admin/users/[id]/block/route";
 import { POST as unblockUser } from "@/app/api/admin/users/[id]/unblock/route";
@@ -34,6 +35,14 @@ describe("admin routes", () => {
   it("returns 401 without a session and 403 for a non-admin on every admin route", async () => {
     const anon = await listUsers(new Request("http://test/api/admin/users"));
     expect(anon.status).toBe(401);
+    const anonBulk = await bulkUsers(
+      new Request("http://test/api/admin/users/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "block", ids: ["00000000-0000-4000-8000-000000000001"] }),
+      }),
+    );
+    expect(anonBulk.status).toBe(401);
 
     const { session, user } = await makeUser("member@ex.com");
     cookieValue = session.id;
@@ -47,6 +56,13 @@ describe("admin routes", () => {
       promoteUser(new Request("http://test/api/admin/users/" + id + "/promote"), ctx(id)),
       demoteUser(new Request("http://test/api/admin/users/" + id + "/demote"), ctx(id)),
       stats(new Request("http://test/api/admin/stats?from=2026-10-01&to=2026-10-07")),
+      bulkUsers(
+        new Request("http://test/api/admin/users/bulk", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "block", ids: [id] }),
+        }),
+      ),
     ];
     const results = await Promise.all(routes);
     for (const res of results) {
@@ -74,5 +90,50 @@ describe("admin routes", () => {
 
     const missingStats = await stats(new Request("http://test/api/admin/stats"));
     expect(missingStats.status).toBe(400);
+  });
+
+  it("bulk-blocks eligible users and rejects a bad body", async () => {
+    const { session, user } = await makeUser("boss-bulk@ex.com");
+    const member = await makeUser("member-bulk@ex.com");
+    await getDb().update(users).set({ role: "admin" }).where(eq(users.id, user.id));
+    cookieValue = session.id;
+
+    const ok = await bulkUsers(
+      new Request("http://test/api/admin/users/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "block", ids: [member.user.id, user.id] }),
+      }),
+    );
+    expect(ok.status).toBe(200);
+    const body = (await ok.json()) as { applied: number; skipped: number };
+    expect(body).toEqual({ applied: 1, skipped: 1 });
+
+    const badAction = await bulkUsers(
+      new Request("http://test/api/admin/users/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "nope", ids: [member.user.id] }),
+      }),
+    );
+    expect(badAction.status).toBe(400);
+
+    const badId = await bulkUsers(
+      new Request("http://test/api/admin/users/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "promote", ids: ["nope"] }),
+      }),
+    );
+    expect(badId.status).toBe(400);
+
+    const empty = await bulkUsers(
+      new Request("http://test/api/admin/users/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "promote", ids: [] }),
+      }),
+    );
+    expect(empty.status).toBe(400);
   });
 });

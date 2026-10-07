@@ -6,6 +6,7 @@ import {
   AdminPageHeader,
   RolePill,
   StatusPill,
+  adminActionButtonClass,
   formatCreated,
   guardTitle,
   useAdminConfirm,
@@ -145,17 +146,11 @@ function DetailActions({
     <div className="flex flex-wrap gap-2">
       {items.map((item) => {
         const title = guardTitle(item.kind, user, actorId, adminsCount);
-        const tone =
-          item.kind === "remove" || item.kind === "block"
-            ? "btn btn-danger-fill"
-            : item.kind === "demote"
-              ? "btn btn-secondary-solid"
-              : "btn btn-accent-fill";
         return (
           <span key={item.kind} title={title}>
             <button
               type="button"
-              className={tone}
+              className={adminActionButtonClass(item.kind)}
               disabled={Boolean(title)}
               onClick={() => onAsk(item.kind, user)}
             >

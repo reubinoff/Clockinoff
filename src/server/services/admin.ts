@@ -10,9 +10,10 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
+import type { AdminActionKind } from "@/lib/admin-bulk";
 import { ADMIN_GUARD } from "@/lib/admin-copy";
 import { asUserRole, type UserRole, type UserStatus } from "@/lib/admin-role";
-import { errors } from "@/lib/errors";
+import { ApiError, errors } from "@/lib/errors";
 import { computeAmount } from "@/lib/money";
 import { enumerateDayKeys } from "@/lib/report";
 import { endOfDayExclusiveInZone, formatDate, startOfDayInZone } from "@/lib/tz";
@@ -349,6 +350,61 @@ export async function promoteAdminUser(actorId: string, targetId: string): Promi
 export async function demoteAdminUser(actorId: string, targetId: string): Promise<AdminUserView> {
   await mutate(actorId, targetId, "demote");
   return loadView(targetId);
+}
+
+export interface BulkAdminResult {
+  applied: number;
+  skipped: number;
+}
+
+function isBulkSkip(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    (err.code === "CONFLICT" || err.code === "VALIDATION" || err.code === "NOT_FOUND")
+  );
+}
+
+// Applies one existing single-user mutator per id. Remove goes through
+// `removeAdminUser` (`DELETE FROM users`) so sessions, clients, projects,
+// tags, and time_entries → time_entry_tags leave with the FK cascade.
+// Ineligible ids (self, last admin, wrong state, missing) are skipped;
+// they do not abort the rest of the page.
+export async function bulkAdminUsers(
+  actorId: string,
+  action: AdminActionKind,
+  ids: string[],
+): Promise<BulkAdminResult> {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw errors.validation("ids must not be empty");
+  }
+  if (ids.length > ADMIN_PAGE_SIZE) {
+    throw errors.validation(`Too many ids (max ${ADMIN_PAGE_SIZE})`);
+  }
+  const unique = [...new Set(ids)];
+  unique.sort((a, b) => {
+    if (a === actorId) return 1;
+    if (b === actorId) return -1;
+    return 0;
+  });
+  let applied = 0;
+  let skipped = 0;
+  for (const id of unique) {
+    try {
+      if (action === "remove") await removeAdminUser(actorId, id);
+      else if (action === "block") await blockAdminUser(actorId, id);
+      else if (action === "unblock") await unblockAdminUser(actorId, id);
+      else if (action === "promote") await promoteAdminUser(actorId, id);
+      else await demoteAdminUser(actorId, id);
+      applied += 1;
+    } catch (err) {
+      if (isBulkSkip(err)) {
+        skipped += 1;
+        continue;
+      }
+      throw err;
+    }
+  }
+  return { applied, skipped };
 }
 
 function assertRange(fromKey: string, toKey: string, timezone: string): { from: Date; to: Date; days: string[] } {

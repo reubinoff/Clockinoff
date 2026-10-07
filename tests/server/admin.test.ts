@@ -4,10 +4,19 @@ import { ADMIN_GUARD } from "@/lib/admin-copy";
 import { login, register } from "@/server/auth/service";
 import { getSessionUser } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
-import { projects, sessions, timeEntries, users } from "@/server/db/schema";
+import {
+  clients,
+  projects,
+  sessions,
+  tags,
+  timeEntries,
+  timeEntryTags,
+  users,
+} from "@/server/db/schema";
 import {
   ADMIN_PAGE_SIZE,
   blockAdminUser,
+  bulkAdminUsers,
   demoteAdminUser,
   getAdminStats,
   getAdminUser,
@@ -153,6 +162,98 @@ describe("admin service", () => {
 
     await expect(demoteAdminUser(actor.user.id, actor.user.id)).rejects.toMatchObject({
       message: ADMIN_GUARD.lastAdminDemote,
+    });
+  });
+
+  it("bulk-removes through the single-user delete so owned rows cascade", async () => {
+    const actor = await makeUser("actor-bulk@ex.com");
+    await setRole(actor.user.id, "admin");
+    const victim = await insertUser("gone@ex.com");
+    const keep = await insertUser("keep@ex.com");
+    const db = getDb();
+    const [client] = await db
+      .insert(clients)
+      .values({ userId: victim.id, name: "C" })
+      .returning();
+    const [project] = await db
+      .insert(projects)
+      .values({ userId: victim.id, clientId: client.id, name: "P" })
+      .returning();
+    const [tag] = await db.insert(tags).values({ userId: victim.id, name: "T" }).returning();
+    const [entry] = await db
+      .insert(timeEntries)
+      .values({
+        userId: victim.id,
+        projectId: project.id,
+        description: "x",
+        startAt: new Date("2026-10-06T10:00:00Z"),
+        endAt: new Date("2026-10-06T11:00:00Z"),
+      })
+      .returning();
+    await db.insert(timeEntryTags).values({ entryId: entry.id, tagId: tag.id });
+    await db.insert(sessions).values({
+      id: "sess-victim-bulk",
+      userId: victim.id,
+      expiresAt: new Date("2027-01-01T00:00:00Z"),
+    });
+
+    const result = await bulkAdminUsers(actor.user.id, "remove", [
+      victim.id,
+      actor.user.id,
+      keep.id,
+      victim.id,
+    ]);
+    expect(result).toEqual({ applied: 2, skipped: 1 });
+
+    const remaining = await db.select({ id: users.id }).from(users);
+    expect(remaining.map((row) => row.id)).toEqual([actor.user.id]);
+    expect(await db.select().from(clients)).toEqual([]);
+    expect(await db.select().from(projects)).toEqual([]);
+    expect(await db.select().from(tags)).toEqual([]);
+    expect(await db.select().from(timeEntries)).toEqual([]);
+    expect(await db.select().from(timeEntryTags)).toEqual([]);
+    expect(await db.select().from(sessions).where(eq(sessions.userId, victim.id))).toEqual([]);
+  });
+
+  it("bulk-applies eligible ids and skips guardrails, missing users, and bad batches", async () => {
+    const actor = await makeUser("actor-mix@ex.com");
+    const other = await makeUser("other-mix@ex.com");
+    const member = await insertUser("member-mix@ex.com");
+    await setRole(actor.user.id, "admin");
+    await setRole(other.user.id, "admin");
+
+    const blocked = await bulkAdminUsers(actor.user.id, "block", [
+      actor.user.id,
+      member.id,
+      "00000000-0000-4000-8000-000000000099",
+    ]);
+    expect(blocked).toEqual({ applied: 1, skipped: 2 });
+    expect((await getAdminUser(member.id)).user.status).toBe("blocked");
+
+    const opened = await bulkAdminUsers(actor.user.id, "unblock", [member.id]);
+    expect(opened).toEqual({ applied: 1, skipped: 0 });
+    expect((await getAdminUser(member.id)).user.status).toBe("active");
+
+    const promoted = await bulkAdminUsers(actor.user.id, "promote", [member.id, other.user.id]);
+    expect(promoted).toEqual({ applied: 2, skipped: 0 });
+    expect((await getAdminUser(member.id)).user.role).toBe("admin");
+
+    const demoted = await bulkAdminUsers(actor.user.id, "demote", [
+      member.id,
+      other.user.id,
+      actor.user.id,
+    ]);
+    expect(demoted).toEqual({ applied: 2, skipped: 1 });
+    expect((await getAdminUser(actor.user.id)).user.role).toBe("admin");
+    expect((await getAdminUser(member.id)).user.role).toBe("user");
+    expect((await getAdminUser(other.user.id)).user.role).toBe("user");
+
+    await expect(bulkAdminUsers(actor.user.id, "remove", [])).rejects.toMatchObject({
+      code: "VALIDATION",
+    });
+    const tooMany = Array.from({ length: ADMIN_PAGE_SIZE + 1 }, () => actor.user.id);
+    await expect(bulkAdminUsers(actor.user.id, "block", tooMany)).rejects.toMatchObject({
+      code: "VALIDATION",
     });
   });
 

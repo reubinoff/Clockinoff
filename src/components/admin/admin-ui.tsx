@@ -3,9 +3,17 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import {
+  bulkConfirmTitle,
+  bulkSampleEmails,
+  bulkWillSkipLine,
+  type AdminActionKind,
+} from "@/lib/admin-bulk";
 import { ADMIN_GUARD, adminActionErrorMessage } from "@/lib/admin-copy";
 import { lockBodyScroll } from "@/lib/body-scroll-lock";
 import { emitToast } from "@/lib/events";
+
+export type { AdminActionKind };
 
 export interface AdminUser {
   id: string;
@@ -16,8 +24,6 @@ export interface AdminUser {
   blocked_at: string | null;
   entries_count: number;
 }
-
-export type AdminActionKind = "remove" | "block" | "unblock" | "promote" | "demote";
 
 export function formatCreated(iso: string, timeZone: string): string {
   const d = new Date(iso);
@@ -218,12 +224,7 @@ export function AdminConfirmDialog({
     }
   }
 
-  const confirmClass =
-    copy.tone === "danger"
-      ? "btn btn-danger-fill"
-      : copy.tone === "accent"
-        ? "btn btn-accent-fill"
-        : "btn btn-secondary-solid";
+  const confirmClass = adminActionButtonClass(kind);
 
   const created = formatCreated(user.created_at, timeZone);
 
@@ -261,6 +262,122 @@ export function AdminConfirmDialog({
             Cancel
           </button>
           <button type="button" className={confirmClass} onClick={onConfirm} disabled={pending}>
+            {copy.confirm}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function adminActionButtonClass(kind: AdminActionKind): string {
+  if (kind === "remove" || kind === "block") return "btn btn-danger-fill";
+  if (kind === "demote") return "btn btn-secondary-solid";
+  return "btn btn-accent-fill";
+}
+
+export function AdminBulkConfirmDialog({
+  kind,
+  emails,
+  skipped,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  kind: AdminActionKind;
+  emails: string[];
+  skipped: number;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}): JSX.Element {
+  const copy = DIALOG[kind];
+  const title = bulkConfirmTitle(kind, emails.length);
+  const sample = bulkSampleEmails(emails);
+  const skipLine = bulkWillSkipLine(skipped);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const onCancelRef = useRef(onCancel);
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
+  useEffect(() => {
+    cancelRef.current?.focus();
+    function onKey(e: KeyboardEvent): void {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onCancelRef.current();
+    }
+    document.addEventListener("keydown", onKey);
+    const unlock = lockBodyScroll();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      unlock();
+    };
+  }, []);
+
+  function onPanelKeyDown(e: React.KeyboardEvent<HTMLDivElement>): void {
+    if (e.key !== "Tab" || !panelRef.current) return;
+    const nodes = [
+      ...panelRef.current.querySelectorAll<HTMLElement>("button:not([disabled])"),
+    ];
+    if (nodes.length === 0) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && active === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 sheet-backdrop-enter"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+      role="presentation"
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-bulk-confirm-title"
+        className="w-full max-w-md rounded-2xl bg-surface shadow-card-lg sheet-panel-enter"
+        onKeyDown={onPanelKeyDown}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 pt-5 pb-4">
+          <h2 id="admin-bulk-confirm-title" className="text-title-sm text-ink">
+            {title}
+          </h2>
+          <p className="mt-2 text-body-sm text-ink-2">{copy.body}</p>
+          <ul className="mt-4 space-y-1">
+            {sample.shown.map((email) => (
+              <li key={email} className="truncate text-body-sm text-ink">
+                {email}
+              </li>
+            ))}
+          </ul>
+          {sample.more > 0 ? (
+            <p className="mt-1 text-body-sm text-muted">and {sample.more} more</p>
+          ) : null}
+          {skipLine ? <p className="mt-3 text-body-sm text-muted">{skipLine}</p> : null}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+          <button ref={cancelRef} type="button" className="btn" onClick={onCancel} disabled={pending}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={adminActionButtonClass(kind)}
+            onClick={onConfirm}
+            disabled={pending}
+          >
             {copy.confirm}
           </button>
         </div>

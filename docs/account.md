@@ -40,6 +40,15 @@ If your account is an admin, the same menu shows **Admin** after
 The item is not shown for anyone else. Removing the only admin is
 refused with “You can’t remove the last admin.” Demoting that same
 person is refused with “You can’t demote the last admin.”
+On **Users**, each person has a checkbox — a column on a wide screen,
+and on the card on a phone. **Select all** covers the current page
+only (about 25 people). With anyone selected, a bar shows how many
+are selected, **Clear**, and **Remove**, **Block**, **Unblock**,
+**Promote**, or **Demote** when at least one selected person can take
+that action. One confirmation lists the count and a few email
+addresses. The action runs only for those people. You can’t remove,
+block, or demote yourself, and you can’t remove or demote the last
+admin — they stay as they are, and a toast says how many were skipped.
 Opening `/admin` without that role sends you back to the timer. The
 operator of a self-hosted instance designates the first admin outside
 the app (an environment list or an ops script) — there is no invite

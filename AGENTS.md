@@ -434,6 +434,7 @@ services in `src/server/services/*`. Every error is shaped as
 | `GET` | `/api/export/pdf?from&to` | **from/to required**; empty → "No entries" page, 200 |
 | `GET` | `/api/admin/users` | admin only; `?q` email search, `?page` (~25) |
 | `GET` / `DELETE` | `/api/admin/users/:id` | detail + hard-delete; no self-delete, no last admin |
+| `POST` | `/api/admin/users/bulk` | `{ action, ids }` for the current page (max 25); each id uses the single-user mutator (`remove` → `removeAdminUser`); ineligible ids are skipped |
 | `POST` | `/api/admin/users/:id/block` | deny login, delete sessions; no self-block |
 | `POST` | `/api/admin/users/:id/unblock` | clear block |
 | `POST` | `/api/admin/users/:id/promote` | role → admin |
