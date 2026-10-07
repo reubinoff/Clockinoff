@@ -188,6 +188,9 @@ silently skip and claim green.
 - **Tailwind** for styling; no CSS-in-JS.
 - **Comments**: explain *why*, not *what*. Do not narrate the diff in code
   comments.
+- **Directory guides**: [`src/AGENTS.md`](./src/AGENTS.md) (where code goes)
+  and [`tests/AGENTS.md`](./tests/AGENTS.md) (how tests are named and run).
+  This file still wins if they disagree.
 
 ---
 
@@ -337,7 +340,8 @@ is done.
 Cursor loads this file automatically as agent context. Additional
 project-wide rules can live under `.cursor/rules/*.mdc`; if you add any,
 keep them **short, factual, and non-overlapping** with this file — this
-document remains the source of truth.
+document remains the source of truth. Tree-local guides live at
+[`src/AGENTS.md`](./src/AGENTS.md) and [`tests/AGENTS.md`](./tests/AGENTS.md).
 
 For higher-level onboarding aimed at humans, see
 [`CONTRIBUTING.md`](./CONTRIBUTING.md), which is a thin pointer to this file.
