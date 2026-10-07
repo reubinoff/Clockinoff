@@ -115,6 +115,9 @@ control:
 - On mobile, inside the account menu (`⋯` button in the header) above
   **Log out**.
 
+Open **Appearance** and choose one. The choices are listed on the page
+(including inside the account menu), and the choice applies immediately.
+
 The options are:
 
 - **System** — follows your device's colour scheme and switches
