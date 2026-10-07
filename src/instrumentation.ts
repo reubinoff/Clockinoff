@@ -15,6 +15,10 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
   const { assertOAuthStateSecretInProduction } = await import("./lib/oauth-state");
   assertOAuthStateSecretInProduction();
+  // Refuse a production boot whose DATABASE_URL sslmode is disable,
+  // no-verify, or missing (#139). Skipped for next build and loopback.
+  const { assertProductionDatabaseSslMode } = await import("./server/db/pg-ssl");
+  assertProductionDatabaseSslMode(process.env.DATABASE_URL);
   // Hourly expired-session purge (#150). Lives here — not in
   // `instrumentation.node.ts` — because that file only loads when
   // Application Insights is configured. Azure Web App Node always

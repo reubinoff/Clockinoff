@@ -8,7 +8,7 @@
 //     component, or `PG_AZURE_AD_AUTH` is explicitly `0`/`false`. The pool
 //     is built from the connection string as before.
 //   - Token mode: `DATABASE_URL` is passwordless (e.g.
-//     `postgresql://clockinoff-prod@host:5432/db?sslmode=require`), or
+//     `postgresql://<runtime-role>@<pg-host>:5432/<db>?sslmode=verify-full`), or
 //     `PG_AZURE_AD_AUTH` is `1`/`true`. We mint a short-lived access token
 //     for the `https://ossrdbms-aad.database.windows.net/.default` scope
 //     via `DefaultAzureCredential` and feed it to `pg` as the password.
@@ -157,13 +157,9 @@ export function createTokenPasswordProvider(
   };
 }
 
-// Runtime (app pool / DML) credential. On Azure App Service with no
-// `AZURE_CLIENT_ID` override, DefaultAzureCredential's managed-identity
-// probe picks the system-assigned MI — in prod that is role
-// `clockinoff-prod`, which is DML-only. The runtime pool must stay on this
-// path so steady-state queries authenticate as the app identity, not the
-// migrator UAMI (Clockinoff #75). The migrate step uses
-// `createMigratorAzurePasswordProvider` instead.
+// Runtime (app pool / DML) credential. DefaultAzureCredential binds to the
+// app identity. The runtime pool stays on this path; startup migrations use
+// `createMigratorAzurePasswordProvider` (Clockinoff #75).
 export function createDefaultAzurePasswordProvider(
   options: TokenProviderOptions = {},
 ): PasswordProvider {
@@ -179,15 +175,11 @@ export interface MigratorProviderOptions extends TokenProviderOptions {
   credentialFactory?: (clientId: string) => TokenCredential;
 }
 
-// Migrator (DDL) credential. In prod the migrator UAMI
-// (`uami-clockinoff-migrator`) is co-assigned to the App Service and holds
-// the only Entra role on database `clockinoff` with `CREATE` on schema
-// public. Startup migrations therefore MUST bind to that UAMI's clientId —
-// using `DefaultAzureCredential` alone when both system + UAMI are
-// assigned is ambiguous and historically falls back to the system MI,
-// which is DML-only (Clockinoff #75: `42501 permission denied for schema
-// public`). We fail fast when the clientId env is missing so the operator
-// sees the real contract violation rather than a confusing Postgres error.
+// Migrator (DDL) credential. When AAD mode is on, pin
+// ManagedIdentityCredential to `PG_MIGRATOR_CLIENT_ID` so migrations do
+// not fall through to the app identity (DML-only). Missing clientId fails
+// fast (Clockinoff #75). The Postgres role name is `PG_MIGRATOR_PG_USER`,
+// required in production — see `scripts/migrate.mjs`.
 export function createMigratorAzurePasswordProvider(
   options: MigratorProviderOptions = {},
 ): PasswordProvider {

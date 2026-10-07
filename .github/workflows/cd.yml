@@ -10,8 +10,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AZURE_WEBAPP_NAME: clockinoff-prod
-  AZURE_RESOURCE_GROUP: rg-clockinoff-prod
+  # Repo Actions variables (repo scope). Do not move these onto
+  # `environment: production` — they are not environment-scoped.
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
   NODE_VERSION: "24"
 
 permissions:
