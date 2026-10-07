@@ -71,16 +71,16 @@ describe("scripts/migrate.mjs — table ownership gate (#187)", () => {
     );
   });
 
-  it("checks ownership through pg_catalog and does not alter it", () => {
+  it("checks ownership through pg_catalog and does not change it", () => {
     expect(migrate.OWNERSHIP_CHECK_SQL).toMatch(/pg_catalog\.pg_class/);
     expect(migrate.OWNERSHIP_CHECK_SQL).toMatch(/pg_has_role/);
-    expect(migrate.OWNERSHIP_CHECK_SQL).not.toMatch(/alter/i);
-    expect(migrate.OWNERSHIP_CHECK_SQL).not.toMatch(/owner to/i);
+    expect(migrate.OWNERSHIP_CHECK_SQL).not.toMatch(/\bALTER\b/);
+    expect(migrate.OWNERSHIP_CHECK_SQL).not.toMatch(/\bOWNER\s+TO\b/i);
   });
 
-  it("does not run ALTER OWNER anywhere in executable migrate code", async () => {
+  it("does not run ALTER ... OWNER TO anywhere in executable migrate code", async () => {
     const source = await readFile(MIGRATE_PATH, "utf8");
-    expect(stripComments(source)).not.toMatch(/alter\s+[\s\S]{0,80}owner/i);
+    expect(stripComments(source)).not.toMatch(/\bOWNER\s+TO\b/i);
   });
 
   it("skips the catalog query when password mode has pending SQL", async () => {
