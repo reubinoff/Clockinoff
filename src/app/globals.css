@@ -296,10 +296,12 @@
            focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:border-accent;
   }
   /* Native time controls reserve a clock icon and, in 12-hour locales,
-     an AM/PM field. `.input`'s px-3 plus a 7.25rem width clipped the
-     leading hour at the 768 and 1280 manual dock. */
+     an AM/PM field. Right padding stays tighter than `.input` so that
+     icon still fits the 11.5rem dock fields (#180). Left padding stays
+     on `.input`'s px-3 (0.75rem) so the hour's inset matches Description
+     and Date — the earlier 0.5rem left pad sat the glyphs ~9px in. */
   .input-time {
-    padding-left: 0.5rem;
+    padding-left: 0.75rem;
     padding-right: 0.25rem;
   }
   .input-time::-webkit-datetime-edit,

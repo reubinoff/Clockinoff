@@ -1,8 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import ManualEntryForm from "@/components/ManualEntryForm";
 import { IconX } from "@/components/icons";
+
+// Phone tab bar is min-h-14 (3.5rem) plus a 1px top border and the home
+// indicator. The sheet sits above that stack so Add is on screen without
+// a scroll; md+ has no tab bar.
+const SHEET_ABOVE_TAB =
+  "max-md:mb-[calc(3.5rem+1px+env(safe-area-inset-bottom))] " +
+  "max-md:max-h-[calc(100dvh-3.5rem-1px-env(safe-area-inset-bottom))]";
 
 interface Project {
   id: string;
@@ -77,7 +85,11 @@ export default function ManualEntrySheet({
     };
   }, [requestClose]);
 
-  return (
+  // Portaled to body so z-50 is the viewport stacking context. Inside the
+  // timer dock the sheet is trapped under the sticky chrome (z-20); the
+  // tab bar (z-40) then paints over the bottom of the card, and the title
+  // composites with the dock surface instead of an opaque sheet header.
+  const sheet = (
     <div
       className={
         "fixed inset-0 z-50 flex items-end md:items-center justify-center bg-ink/40 " +
@@ -93,13 +105,17 @@ export default function ManualEntrySheet({
     >
       <div
         className={
-          "w-full md:max-w-md bg-surface md:rounded-2xl rounded-t-2xl shadow-card-lg " +
-          "max-h-[92dvh] overflow-y-auto overflow-x-hidden " +
+          "flex w-full md:max-w-md flex-col bg-surface md:rounded-2xl rounded-t-2xl shadow-card-lg " +
+          "md:max-h-[92dvh] overflow-hidden " +
+          SHEET_ABOVE_TAB +
+          " " +
           (closing ? "sheet-panel-exit" : "sheet-panel-enter")
         }
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border">
+        <div
+          className="flex shrink-0 items-center justify-between bg-surface px-5 pt-5 pb-3 border-b border-border rounded-t-2xl"
+          data-manual-entry-header="true"
+        >
           <h2 id="manual-entry-title" className="text-title-sm text-ink">
             Add manual entry
           </h2>
@@ -112,7 +128,10 @@ export default function ManualEntrySheet({
             <IconX size={18} aria-hidden />
           </button>
         </div>
-        <div className="px-5 py-4">
+        <div
+          className="overflow-y-auto overflow-x-hidden px-5 py-4"
+          style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+        >
           <ManualEntryForm
             projects={projects}
             timezone={timezone}
@@ -124,4 +143,6 @@ export default function ManualEntrySheet({
       </div>
     </div>
   );
+
+  return createPortal(sheet, document.body);
 }
