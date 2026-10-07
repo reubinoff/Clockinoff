@@ -16,11 +16,9 @@ import {
 /**
  * V2-10 Dark #10 — Appearance control.
  *
- * Rendered twice per page (desktop cluster + mobile overflow) and both
- * instances read/write the same locked `localStorage['timely.appearance']`
- * key. `variant="menu"` renders a full-width menu row (used inside the
- * mobile HeaderUserMenu popover); `variant="inline"` renders a compact
- * label + control pair for the desktop account cluster.
+ * Reads and writes the locked `localStorage['timely.appearance']` key.
+ * `variant="menu"` is the row inside the account menu (the only shell
+ * control). `variant="inline"` is the compact label + control pair.
  *
  * The choices are an in-page listbox, not a native `<select>`. The account
  * menu closes on an outside mousedown, and a native popup is outside that

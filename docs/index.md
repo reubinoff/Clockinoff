@@ -25,7 +25,7 @@ You get:
 - **CSV and PDF export** over a date range of up to 366 days (and up
   to 10,000 closed entries per download).
 - **Light and dark theme** — an Appearance picker (System · Light · Dark)
-  in the account cluster; System tracks your device.
+  in the account menu; System tracks your device.
 
 That's the whole product. There is intentionally no calendar view, no team
 workspace, no Clockify sync, and no shared entries. Instance admins have

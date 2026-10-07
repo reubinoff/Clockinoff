@@ -181,10 +181,12 @@ At the top of every `/app/*` page you get a **thin header** with the
 Clockinoff mark, top nav (**Timer**, **Library**, **Reports**,
 **Export**), and the account cluster. **Library** is sentence case and
 groups **Projects**, **Clients**, and **Tags** in a menu — there is no
-left sidebar. On a wide desktop the account cluster is your email,
-**Account**, **Docs**, **Appearance**, and **Log out** on one line.
-Around tablet width that cluster collapses to your initial so the
-header stays full width and never scrolls sideways.
+left sidebar. The right side of that header is a single account
+control, not another nav item. On a wide desktop it shows your email
+(truncated when it is long). Around tablet width it shows your
+initial, so the row stays full width and never scrolls sideways.
+Either one opens the same menu: **Account**, **Docs**, **Appearance**,
+and **Log out**. Admins also see **Admin** in that menu.
 
 On the **Timer**, **Reports**, and **Export** pages a **timer dock**
 sits as a full-width band *under* the header (not inside it) with a
@@ -203,8 +205,9 @@ On phones the chrome stays a bottom tab bar — **Timer**, **Library**,
 **Reports**, and **Export** — where **Library** groups the projects,
 clients, and tags pages and defaults to projects. Inside Library, a
 **Projects / Clients / Tags** segment control at the top of the page
-lets you switch between the three. **Docs** stays in the top header;
-**Account** and **Log out** live in the overflow menu (`⋯`) there.
+lets you switch between the three. **Account**, **Docs**,
+**Appearance**, and **Log out** live in the overflow menu (`⋯`) in
+the top header. Admins also see **Admin** there.
 
 The main area shows recent time entries, which are populated once you start
 using the timer.

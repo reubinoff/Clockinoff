@@ -1,11 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import LogoutButton from "@/components/LogoutButton";
 import AppNav from "@/components/AppNav";
 import BottomTabBar from "@/components/BottomTabBar";
 import HeaderUserMenu from "@/components/HeaderUserMenu";
 import Toaster from "@/components/Toaster";
-import AppearanceSelect from "@/components/AppearanceSelect";
 import { AppMain, TimerDockSlot } from "@/components/AppShell";
 import {
   RunningTimerChip,
@@ -14,9 +12,6 @@ import {
 import { Mark } from "@/components/brand/Mark";
 import { DOCS_URL } from "@/lib/docs";
 import type { SessionUser } from "@/server/auth/session";
-
-const clusterLink =
-  "text-muted hover:text-ink underline underline-offset-2 whitespace-nowrap";
 
 export default function AuthenticatedShell({
   user,
@@ -49,55 +44,16 @@ export default function AuthenticatedShell({
             </Link>
             {/* Nav stays shrink-0. A shrunk nowrap nav paints outside its
                 flex item and widens the page (the #141 768 scroll). The
-                account side shrinks instead; below xl it is only the
+                account side shrinks instead; from md to xl it is only the
                 compact initial, so the row fits the tablet width. */}
             <div className="hidden shrink-0 md:block">
               <AppNav />
             </div>
             <div className="ml-auto flex min-w-0 shrink items-center gap-2 text-sm">
               <RunningTimerChip />
-              {/* xl+ account cluster: email · Account · Docs · Admin ·
-                  Appearance · Log out. Admin is a privileged account
-                  affordance (#142), never a peer of Timer · Library ·
-                  Reports · Export. */}
-              <div className="hidden min-w-0 xl:flex items-center gap-3">
-                <span
-                  className="text-muted min-w-0 max-w-[180px] truncate"
-                  title={user.email}
-                >
-                  {user.email}
-                </span>
-                <Link href="/app/account" className={clusterLink}>
-                  Account
-                </Link>
-                <a
-                  className={clusterLink}
-                  href={DOCS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Open user documentation in a new tab"
-                >
-                  Docs
-                </a>
-                {isAdmin ? (
-                  <Link href="/admin" className={clusterLink}>
-                    Admin
-                  </Link>
-                ) : null}
-                <AppearanceSelect />
-                <LogoutButton />
-              </div>
-              <HeaderUserMenu email={user.email} variant="compact" isAdmin={isAdmin} />
-              <a
-                className="text-muted hover:text-ink underline underline-offset-2 whitespace-nowrap md:hidden"
-                href={DOCS_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Open user documentation in a new tab"
-              >
-                Docs
-              </a>
-              <HeaderUserMenu email={user.email} variant="mobile" isAdmin={isAdmin} />
+              {/* One account trigger (#190). Not a peer of Timer · Library ·
+                  Reports · Export. Admin stays inside the menu (#142). */}
+              <HeaderUserMenu email={user.email} isAdmin={isAdmin} />
             </div>
           </div>
         </header>

@@ -25,21 +25,19 @@ hold an **admin** role; everyone else is a regular user.
 ## Your email
 
 The email you registered with is your login. On a wide desktop it
-appears in the top-right of every `/app/*` page next to **Account**,
-**Docs**, **Appearance**, and **Log out**. Around tablet width those
-controls collapse into an account menu (your initial) so the header
-does not overflow.
+is the account control in the top-right of every `/app/*` page
+(truncated when it is long). Around tablet width that control is your
+initial, and on a phone it is the overflow button (`⋯`). Opening it
+shows **Account**, **Docs**, **Appearance**, and **Log out**.
 
-Open **Account** from the header (wide desktop) or the account menu
-(tablet and phone) to see your sign-in methods. The timer dock is
+Open **Account** from that menu to see your sign-in methods. The timer dock is
 hidden on this page. A running timer still shows as a small elapsed
 counter in the header, or on the **Timer** tab on a phone.
 
-If your account is an admin, the same cluster shows an **Admin** link
-(after **Docs**, before **Appearance** on a wide desktop, and inside
-the account menu on a phone or tablet). It opens **Overview** and
+If your account is an admin, the same menu shows **Admin** after
+**Docs** and before **Appearance**. It opens **Overview** and
 **Users** for this instance. A user page returns with **Back to Users**.
-The link is not shown for anyone else. Removing the only admin is
+The item is not shown for anyone else. Removing the only admin is
 refused with “You can’t remove the last admin.” Demoting that same
 person is refused with “You can’t demote the last admin.”
 Opening `/admin` without that role sends you back to the timer. The
@@ -119,17 +117,13 @@ displayed.
 
 ## Appearance
 
-Clockinoff has a light and a dark theme. Pick one from the **Appearance**
-control:
+Clockinoff has a light and a dark theme. Pick one from **Appearance**
+inside the account menu (your email on a wide desktop, your initial
+on a tablet, or the `⋯` button on a phone). It sits between **Admin**
+(when you are an admin) and **Log out**.
 
-- On a wide desktop, next to your email in the top-right of every
-  `/app/*` page.
-- On tablet, inside the compact account menu (your initial).
-- On mobile, inside the account menu (`⋯` button in the header) above
-  **Log out**.
-
-Open **Appearance** and choose one. The choices are listed on the page
-(including inside the account menu), and the choice applies immediately.
+Open **Appearance** and choose one. The choices are listed in the menu,
+and the choice applies immediately.
 
 The options are:
 
@@ -140,19 +134,17 @@ The options are:
 - **Dark** — always the dark Quiet Pulse palette (deep violet accent).
 
 The pref is stored in your browser (`localStorage`) and applied on both
-the app and the sign-in / register screens. The desktop control and the
-one in the account menu share that setting: changing either one updates
-the other, and the timer dock (including the `00:00:00` digits) picks up
-the new colours immediately. Because it is browser-local there is no
-server profile field for it — each browser you sign in from keeps its
-own choice.
+the app and the sign-in / register screens. The account menu is the
+only Appearance control, and the timer dock (including the `00:00:00`
+digits) picks up the new colours immediately. Because it is
+browser-local there is no server profile field for it — each browser
+you sign in from keeps its own choice.
 
 ---
 
 ## Sign out
 
-Click **Log out** in the top-right of `/app/*` (or inside the account
-menu on tablet and phone). Clockinoff:
+Click **Log out** at the bottom of the account menu. Clockinoff:
 
 1. Deletes your session row in the database.
 2. Clears the `timely_session` cookie in your browser.

@@ -148,9 +148,8 @@ invalidates existing sessions, so everyone signs in once more.
 
 **Does Clockinoff have a dark mode?**
 
-Yes. The **Appearance** control in the account cluster (desktop) or
-account menu (tablet and mobile) offers *System*, *Light*, and *Dark*.
-Both controls stay in sync. *System* follows your device's colour
+Yes. **Appearance** in the account menu offers *System*, *Light*, and
+*Dark* on desktop, tablet, and phone. *System* follows your device's colour
 scheme; *Light* and *Dark* force one palette regardless of the OS. The
 timer dock updates as soon as you change the setting. See
 [Account & timezone]({{ '/account' | relative_url }}#appearance)
