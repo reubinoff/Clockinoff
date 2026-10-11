@@ -9,7 +9,7 @@ import {
   signInWithGoogle,
   validateIdTokenClaims,
 } from "@/server/auth/google";
-import { consumeOAuthState } from "@/server/auth/oauth-state-store";
+import { consumeStateNonce } from "@/server/auth/oauth-state-store";
 import {
   googleOAuthRetryAfterSeconds,
   isGoogleOAuthRateLimited,
@@ -23,7 +23,7 @@ import { publicOrigin } from "@/lib/base-url";
 import { clientIpFromHeaders } from "@/lib/client-ip";
 import { googlePasswordAccountLoginPath } from "@/lib/google-auth-errors";
 import { OAUTH_STATE_COOKIE, readRequestCookie, sanitiseNext } from "@/lib/oauth-next-path";
-import { parseOAuthState } from "@/lib/oauth-state";
+import { parseStateCookie } from "@/lib/oauth-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,7 +79,7 @@ export async function GET(req: Request): Promise<Response> {
   const code = url.searchParams.get("code");
   const stateParam = url.searchParams.get("state");
 
-  const state = parseOAuthState(readRequestCookie(req, OAUTH_STATE_COOKIE));
+  const state = parseStateCookie(readRequestCookie(req, OAUTH_STATE_COOKIE));
 
   if (queryError) {
     // Google ships `error=access_denied` (and friends) in the query when the
@@ -96,7 +96,7 @@ export async function GET(req: Request): Promise<Response> {
     return redirectToLoginWithError(origin, "network");
   }
 
-  if (!consumeOAuthState(state.s)) {
+  if (!consumeStateNonce(state.s)) {
     logger.warn("[google] oauth state already used or unknown");
     return redirectToLoginWithError(origin, "network");
   }

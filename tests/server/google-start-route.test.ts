@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET } from "@/app/api/auth/google/start/route";
 import { OAUTH_STATE_COOKIE, sanitiseNext } from "@/lib/oauth-next-path";
-import { parseOAuthState } from "@/lib/oauth-state";
-import { resetOAuthStateStore } from "@/server/auth/oauth-state-store";
+import { parseStateCookie } from "@/lib/oauth-state";
+import { resetStateNonceStore } from "@/server/auth/oauth-state-store";
 import {
   GOOGLE_OAUTH_RATE_LIMIT,
   resetGoogleOAuthRateLimit,
@@ -35,7 +35,11 @@ function configure(): void {
   process.env.GOOGLE_REDIRECT_URI = "http://test/api/auth/google/callback";
 }
 
-function parseStateCookie(setCookie: string | null): { name: string; value: string; attrs: string } {
+function extractStateSetCookie(setCookie: string | null): {
+  name: string;
+  value: string;
+  attrs: string;
+} {
   const raw = setCookie ?? "";
   // In Next's response the state cookie starts with "timely_oauth_state=".
   const chunk = raw
@@ -51,7 +55,7 @@ describe("GET /api/auth/google/start", () => {
   beforeEach(() => {
     configure();
     resetGoogleOAuthRateLimit();
-    resetOAuthStateStore();
+    resetStateNonceStore();
   });
   afterEach(() => {
     restoreEnv();
@@ -80,8 +84,8 @@ describe("GET /api/auth/google/start", () => {
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("state")).toBeTruthy();
 
-    const cookie = parseStateCookie(res.headers.get("set-cookie"));
-    const parsed = parseOAuthState(cookie.value);
+    const cookie = extractStateSetCookie(res.headers.get("set-cookie"));
+    const parsed = parseStateCookie(cookie.value);
     expect(parsed?.s).toBe(url.searchParams.get("state"));
     expect(parsed?.n).toBe("/app");
     expect(cookie.value.startsWith("{")).toBe(false);
@@ -92,8 +96,8 @@ describe("GET /api/auth/google/start", () => {
 
   it("preserves a safe next path in the state cookie", async () => {
     const res = await GET(new Request("http://test/api/auth/google/start?next=%2Fapp%2Fentries"));
-    const cookie = parseStateCookie(res.headers.get("set-cookie"));
-    const parsed = parseOAuthState(cookie.value);
+    const cookie = extractStateSetCookie(res.headers.get("set-cookie"));
+    const parsed = parseStateCookie(cookie.value);
     expect(parsed?.n).toBe("/app/entries");
   });
 
@@ -113,8 +117,8 @@ describe("GET /api/auth/google/start", () => {
       }),
     );
     expect(res.status).toBe(302);
-    const cookie = parseStateCookie(res.headers.get("set-cookie"));
-    const parsed = parseOAuthState(cookie.value);
+    const cookie = extractStateSetCookie(res.headers.get("set-cookie"));
+    const parsed = parseStateCookie(cookie.value);
     expect(parsed).toMatchObject({ i: "connect", n: "/app/account", uid: user.id });
   });
 
@@ -152,8 +156,8 @@ describe("GET /api/auth/google/start", () => {
     const res = await GET(
       new Request("http://test/api/auth/google/start?next=https%3A%2F%2Fevil.example%2F"),
     );
-    const cookie = parseStateCookie(res.headers.get("set-cookie"));
-    const parsed = parseOAuthState(cookie.value);
+    const cookie = extractStateSetCookie(res.headers.get("set-cookie"));
+    const parsed = parseStateCookie(cookie.value);
     expect(parsed?.n).toBe("/app");
   });
 
@@ -161,8 +165,8 @@ describe("GET /api/auth/google/start", () => {
     const res = await GET(
       new Request("http://test/api/auth/google/start?next=%2F%09%2Fevil.example"),
     );
-    const cookie = parseStateCookie(res.headers.get("set-cookie"));
-    const parsed = parseOAuthState(cookie.value);
+    const cookie = extractStateSetCookie(res.headers.get("set-cookie"));
+    const parsed = parseStateCookie(cookie.value);
     expect(parsed?.n).toBe("/app");
   });
 

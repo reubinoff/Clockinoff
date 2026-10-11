@@ -225,6 +225,7 @@ const nextConfig = {
         ...(config.resolve.alias ?? {}),
         "./instrumentation.node": false,
         "./lib/oauth-state": false,
+        "./lib/state-mac": false,
         // instrumentation.ts dynamically imports session-purge (node:crypto + DB); Edge must not resolve it.
         "./server/auth/session-purge": false,
       };

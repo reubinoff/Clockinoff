@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/auth/google/callback/route";
 import { publicOrigin } from "@/lib/base-url";
-import { serialiseOAuthState } from "@/lib/oauth-state";
-import { issueOAuthState, resetOAuthStateStore } from "@/server/auth/oauth-state-store";
+import { signStateCookie } from "@/lib/oauth-state";
+import { issueStateNonce, resetStateNonceStore } from "@/server/auth/oauth-state-store";
 import { resetGoogleOAuthRateLimit } from "@/server/auth/rate-limit";
 import { register } from "@/server/auth/service";
 import { getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
@@ -44,8 +44,8 @@ function stateCookie(
     extras?.intent === "connect"
       ? { s: state, n: next, i: "connect" as const, uid: extras.uid ?? "missing-uid" }
       : { s: state, n: next };
-  issueOAuthState(state);
-  return `timely_oauth_state=${encodeURIComponent(serialiseOAuthState(payload))}`;
+  issueStateNonce(state);
+  return `timely_oauth_state=${encodeURIComponent(signStateCookie(payload))}`;
 }
 
 function unsignedConnectCookie(state: string, uid: string, next = "/app/account"): string {
@@ -135,7 +135,7 @@ describe("GET /api/auth/google/callback", () => {
     await truncateAll();
     configure();
     resetGoogleOAuthRateLimit();
-    resetOAuthStateStore();
+    resetStateNonceStore();
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -617,7 +617,7 @@ describe("GET /api/auth/google/callback", () => {
       email: "a@example.com",
       password: "correct-horse-battery",
     });
-    const signed = serialiseOAuthState({
+    const signed = signStateCookie({
       s: "s1",
       n: "/app/account",
       i: "connect",

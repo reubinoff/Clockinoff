@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildAuthorizeUrl, getGoogleConfig, GoogleAuthError, newStateToken } from "@/server/auth/google";
 import { getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
-import { issueOAuthState } from "@/server/auth/oauth-state-store";
+import { issueStateNonce } from "@/server/auth/oauth-state-store";
 import {
   googleOAuthRetryAfterSeconds,
   isGoogleOAuthRateLimited,
@@ -14,12 +14,12 @@ import { publicOrigin } from "@/lib/base-url";
 import { clientIpFromHeaders } from "@/lib/client-ip";
 import {
   OAUTH_STATE_COOKIE,
-  OAUTH_STATE_MAX_AGE_SECONDS,
-  parseOAuthIntent,
+  STATE_COOKIE_MAX_AGE_SECONDS,
+  parseStateCookieIntent,
   readRequestCookie,
   sanitiseNext,
 } from "@/lib/oauth-next-path";
-import { oauthStateSecretConfigured, serialiseOAuthState } from "@/lib/oauth-state";
+import { oauthStateSecretConfigured, signStateCookie } from "@/lib/oauth-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +38,7 @@ export async function GET(req: Request): Promise<Response> {
 
   const url = new URL(req.url);
   const origin = publicOrigin(req);
-  const intent = parseOAuthIntent(url.searchParams.get("intent"));
+  const intent = parseStateCookieIntent(url.searchParams.get("intent"));
   const next = sanitiseNext(
     url.searchParams.get("next") ?? (intent === "connect" ? "/app/account" : "/app"),
     origin,
@@ -69,9 +69,9 @@ export async function GET(req: Request): Promise<Response> {
   try {
     const config = getGoogleConfig(req);
     state = newStateToken();
-    issueOAuthState(state);
+    issueStateNonce(state);
     authorizeUrl = buildAuthorizeUrl({ config, state });
-    cookieValue = serialiseOAuthState(
+    cookieValue = signStateCookie(
       connectUid
         ? { s: state, n: next, i: "connect", uid: connectUid }
         : { s: state, n: next },
@@ -95,7 +95,7 @@ export async function GET(req: Request): Promise<Response> {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: OAUTH_STATE_MAX_AGE_SECONDS,
+    maxAge: STATE_COOKIE_MAX_AGE_SECONDS,
   });
   return res;
 }

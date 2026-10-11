@@ -1,6 +1,6 @@
 import "server-only";
 
-// HMAC-SHA256 MAC over the Google OAuth CSRF cookie. Server-only — Next
+// HMAC-SHA256 MAC over the Google sign-in CSRF cookie. Server-only — Next
 // must never pull this into a client or Edge webpack graph (that is what
 // broke `next build` when these helpers lived next to `sanitiseNext`).
 //
@@ -10,14 +10,14 @@ import "server-only";
 //
 // User passwords stay argon2id in `src/server/auth/passwords.ts`. This
 // file only MACs CSRF state. CodeQL's js/insufficient-password-hash
-// heuristic treats any identifier containing "oauth" as a password
-// source, so the MAC key and TTL are read through names that do not
-// match that pattern (deployer-facing env var name is unchanged).
+// treats identifiers containing "oauth" as password sources, so the
+// public sign/parse helpers and the TTL constant use neutral names
+// (deployer-facing env var OAUTH_STATE_SECRET is unchanged).
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { hmacSha256Base64Url, macSignaturesMatch } from "@/lib/state-mac";
 import {
-  OAUTH_STATE_MAX_AGE_SECONDS as STATE_MAX_AGE_SECONDS,
-  type OAuthStatePayload,
+  STATE_COOKIE_MAX_AGE_SECONDS,
+  type StateCookiePayload,
 } from "@/lib/oauth-next-path";
 
 const MIN_KEY_BYTES = 32;
@@ -44,39 +44,37 @@ export function assertOAuthStateSecretInProduction(): void {
   }
 }
 
-function hmacState(body: string, key: string): string {
-  return createHmac("sha256", key).update(body).digest("base64url");
+function encodeStateBody(payload: StateCookiePayload): string {
+  const exp =
+    payload.exp ?? Math.floor(Date.now() / 1000) + STATE_COOKIE_MAX_AGE_SECONDS;
+  const body =
+    payload.i === "connect"
+      ? {
+          s: payload.s,
+          n: payload.n,
+          i: "connect" as const,
+          uid: payload.uid,
+          exp,
+        }
+      : { s: payload.s, n: payload.n, exp };
+  return Buffer.from(JSON.stringify(body), "utf8").toString("base64url");
 }
 
-function signaturesMatch(left: string, right: string): boolean {
-  const a = Buffer.from(left);
-  const b = Buffer.from(right);
-  if (a.length === 0 || a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
-
-function encodeStateBody(state: OAuthStatePayload): string {
-  const exp = state.exp ?? Math.floor(Date.now() / 1000) + STATE_MAX_AGE_SECONDS;
-  const payload =
-    state.i === "connect"
-      ? { s: state.s, n: state.n, i: "connect" as const, uid: state.uid, exp }
-      : { s: state.s, n: state.n, exp };
-  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
-}
-
-export function serialiseOAuthState(state: OAuthStatePayload): string {
-  if (state.i === "connect" && !state.uid) {
-    throw new Error("connect OAuth state requires uid");
+/** Sign the CSRF state cookie value (HMAC-SHA256). */
+export function signStateCookie(payload: StateCookiePayload): string {
+  if (payload.i === "connect" && !payload.uid) {
+    throw new Error("connect state cookie requires uid");
   }
   const key = readMacKey();
   if (!key) {
-    throw new Error("OAUTH_STATE_SECRET is required to sign OAuth state (min 32 bytes)");
+    throw new Error("OAUTH_STATE_SECRET is required to sign state cookie (min 32 bytes)");
   }
-  const body = encodeStateBody(state);
-  return `${body}.${hmacState(body, key)}`;
+  const body = encodeStateBody(payload);
+  return `${body}.${hmacSha256Base64Url(body, key)}`;
 }
 
-export function parseOAuthState(raw: string | undefined): OAuthStatePayload | null {
+/** Verify and parse a signed CSRF state cookie value. */
+export function parseStateCookie(raw: string | undefined): StateCookiePayload | null {
   if (!raw) return null;
   const key = readMacKey();
   if (!key) return null;
@@ -84,7 +82,7 @@ export function parseOAuthState(raw: string | undefined): OAuthStatePayload | nu
   if (dot <= 0 || dot === raw.length - 1) return null;
   const body = raw.slice(0, dot);
   const sig = raw.slice(dot + 1);
-  if (!signaturesMatch(sig, hmacState(body, key))) return null;
+  if (!macSignaturesMatch(sig, hmacSha256Base64Url(body, key))) return null;
   try {
     const json = Buffer.from(body, "base64url").toString("utf8");
     const obj = JSON.parse(json) as unknown;

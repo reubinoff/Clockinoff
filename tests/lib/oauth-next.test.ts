@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { parseOAuthIntent, readRequestCookie, sanitiseNext } from "@/lib/oauth-next-path";
+import { parseStateCookieIntent, readRequestCookie, sanitiseNext } from "@/lib/oauth-next-path";
 
 const PUBLIC_ORIGIN = "https://clockinoff.reubinoff.com";
 
 describe("oauth-next-path helpers", () => {
   it("parses intent=connect and defaults everything else to signin", () => {
-    expect(parseOAuthIntent("connect")).toBe("connect");
-    expect(parseOAuthIntent("signin")).toBe("signin");
-    expect(parseOAuthIntent(null)).toBe("signin");
-    expect(parseOAuthIntent("other")).toBe("signin");
+    expect(parseStateCookieIntent("connect")).toBe("connect");
+    expect(parseStateCookieIntent("signin")).toBe("signin");
+    expect(parseStateCookieIntent(null)).toBe("signin");
+    expect(parseStateCookieIntent("other")).toBe("signin");
   });
 
   it("reads a named cookie from the request header", () => {
