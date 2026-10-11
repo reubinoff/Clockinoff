@@ -57,7 +57,7 @@ describe("pdf helpers", () => {
   });
 
   it("formatDayHeader produces `Wed 30 Sep 2026`", () => {
-    expect(formatDayHeader("2026-09-30", "UTC")).toBe("Wed 30 Sep 2026");
+    expect(formatDayHeader("2026-09-30")).toBe("Wed 30 Sep 2026");
   });
 
   it("formatRateAmount omits missing rate/amount and never invents a currency", () => {

@@ -141,6 +141,32 @@ export function _resetAppearanceListenersForTests(): void {
   appearanceListeners.clear();
 }
 
+// JSON.stringify does not escape `<` / `>` / `/`, which can break out of a
+// surrounding `<script>` tag. Escape those (and the line/paragraph separators)
+// before interpolating into the pre-paint boot script.
+const INLINE_SCRIPT_UNSAFE = /[<>/\b\f\n\r\t\0\u2028\u2029]/g;
+const INLINE_SCRIPT_ESCAPE: Record<string, string> = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+  "\0": "\\0",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029",
+};
+
+/** Serialize a string for safe use inside an inline `<script>` literal. */
+export function jsonStringForInlineScript(value: string): string {
+  return JSON.stringify(value).replace(
+    INLINE_SCRIPT_UNSAFE,
+    (ch) => INLINE_SCRIPT_ESCAPE[ch] ?? ch,
+  );
+}
+
 /**
  * Inline pre-paint script that runs before React hydrates so the resolved
  * theme is on `<html>` before first paint (no flash). Kept as a static string
@@ -150,5 +176,6 @@ export function _resetAppearanceListenersForTests(): void {
  * stored value is validated against the locked enum before it is applied.
  */
 export function appearanceBootScript(): string {
-  return `(function(){try{var k=${JSON.stringify(APPEARANCE_STORAGE_KEY)};var a="system";try{var s=window.localStorage.getItem(k);if(s==="light"||s==="dark"||s==="system"){a=s;}}catch(e){}var t;if(a==="dark"){t="dark";}else if(a==="light"){t="light";}else{t=(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";}var h=document.documentElement;h.setAttribute("data-theme",t);h.style.colorScheme=t;}catch(e){try{document.documentElement.setAttribute("data-theme","light");document.documentElement.style.colorScheme="light";}catch(_){}}})();`;
+  const keyLiteral = jsonStringForInlineScript(APPEARANCE_STORAGE_KEY);
+  return `(function(){try{var k=${keyLiteral};var a="system";try{var s=window.localStorage.getItem(k);if(s==="light"||s==="dark"||s==="system"){a=s;}}catch(e){}var t;if(a==="dark"){t="dark";}else if(a==="light"){t="light";}else{t=(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";}var h=document.documentElement;h.setAttribute("data-theme",t);h.style.colorScheme=t;}catch(e){try{document.documentElement.setAttribute("data-theme","light");document.documentElement.style.colorScheme="light";}catch(_){}}})();`;
 }

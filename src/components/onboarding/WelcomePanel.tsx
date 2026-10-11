@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SpotEmptyTimer } from "@/components/illustrations";
 import { IconCheck, IconX } from "@/components/icons";
@@ -17,6 +17,9 @@ import { IconCheck, IconX } from "@/components/icons";
  * localStorage, no cookies. If the same user later lands on `/app` (no
  * query) with zero entries, the hero stays out of their way.
  */
+
+const subscribeNoop = (): (() => void) => () => {};
+
 export default function WelcomePanel({
   hasEntries,
 }: {
@@ -24,18 +27,19 @@ export default function WelcomePanel({
 }): JSX.Element | null {
   const router = useRouter();
   const params = useSearchParams();
-  const [mounted, setMounted] = useState(false);
+  // Client-only gate so SSR/hydration never flash the hero before the
+  // search params are authoritative on the client.
+  const mounted = useSyncExternalStore(subscribeNoop, () => true, () => false);
   const [dismissed, setDismissed] = useState(false);
 
   const welcomeParam = params.get("welcome") === "1";
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (welcomeParam) setDismissed(false);
-  }, [welcomeParam]);
+  // Re-show if the user lands on ?welcome=1 again after dismissing.
+  const [prevWelcomeParam, setPrevWelcomeParam] = useState(welcomeParam);
+  if (welcomeParam !== prevWelcomeParam) {
+    setPrevWelcomeParam(welcomeParam);
+    if (welcomeParam && dismissed) setDismissed(false);
+  }
 
   const shouldShow = useMemo(() => {
     if (!mounted) return false;
@@ -43,7 +47,6 @@ export default function WelcomePanel({
     if (dismissed) return false;
     return welcomeParam;
   }, [mounted, hasEntries, dismissed, welcomeParam]);
-
   function dismiss(): void {
     setDismissed(true);
     if (typeof window !== "undefined" && welcomeParam) {

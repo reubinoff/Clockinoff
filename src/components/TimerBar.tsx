@@ -171,6 +171,8 @@ export default function TimerBar({
   }, []);
 
   useEffect(() => {
+    // setState runs after await inside load; the rule still flags the call.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount
     void load();
   }, [load]);
 

@@ -39,6 +39,7 @@ export function assertOAuthStateSecretInProduction(): void {
 }
 
 function hmacState(body: string, secret: string): string {
+  // codeql[js/insufficient-password-hash] HMAC-SHA256 authenticates OAuth state; not a password hash.
   return createHmac("sha256", secret).update(body).digest("base64url");
 }
 

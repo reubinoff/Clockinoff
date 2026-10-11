@@ -59,6 +59,8 @@ export default function AdminDashboard({ timezone }: { timezone: string }): JSX.
 
   useEffect(() => {
     if (from > to) return;
+    // setState runs after await inside load; the rule still flags the call.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on range change
     void load({ from, to });
   }, [from, to, load]);
 

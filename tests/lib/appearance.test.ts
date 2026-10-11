@@ -9,6 +9,7 @@ import {
   commitAppearance,
   emitAppearance,
   isAppearance,
+  jsonStringForInlineScript,
   readAppearance,
   resolveTheme,
   subscribeAppearance,
@@ -244,6 +245,15 @@ describe("applyTheme", () => {
   });
 });
 
+describe("jsonStringForInlineScript", () => {
+  it("escapes angle brackets so a value cannot break out of a script tag", () => {
+    expect(jsonStringForInlineScript("a<script>")).toContain("\\u003C");
+    expect(jsonStringForInlineScript("a<script>")).toContain("\\u003E");
+    expect(jsonStringForInlineScript("a<script>")).not.toContain("<");
+    expect(jsonStringForInlineScript("</script>")).toBe('"\\u003C\\u002Fscript\\u003E"');
+  });
+});
+
 describe("appearanceBootScript", () => {
   const script = appearanceBootScript();
 
@@ -285,7 +295,6 @@ describe("appearanceBootScript", () => {
       },
     };
     const doc = { documentElement: html };
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
     new Function("window", "document", script)(win, doc);
     return { theme: attrs["data-theme"] ?? null, colorScheme: style.colorScheme };
   }

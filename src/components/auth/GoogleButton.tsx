@@ -1,10 +1,8 @@
 "use client";
 
-import type { MouseEvent } from "react";
-
 type Props = {
-  pending: boolean;
-  onStart: () => void;
+  href: string;
+  pending?: boolean;
 };
 
 // Official multicolor Google "G" mark — do NOT recolor to accent / purple.
@@ -40,17 +38,13 @@ function GoogleG({ size = 18 }: { size?: number }): JSX.Element {
   );
 }
 
-export function GoogleButton({ pending, onStart }: Props): JSX.Element {
-  function click(e: MouseEvent<HTMLButtonElement>): void {
-    e.preventDefault();
-    if (pending) return;
-    onStart();
-  }
+export function GoogleButton({ href, pending = false }: Props): JSX.Element {
+  // Real <a> navigation (not location.href / router.push): the OAuth start
+  // route returns a 302 to Google that the browser must follow as a full
+  // document navigation.
   return (
-    <button
-      type="button"
-      onClick={click}
-      disabled={pending}
+    <a
+      href={href}
       aria-busy={pending || undefined}
       className="btn w-full min-h-[48px] border-border-strong hover:bg-canvas-2"
       // Dana spec: outline on surface, ink text; never accent fill. Keep the
@@ -62,6 +56,6 @@ export function GoogleButton({ pending, onStart }: Props): JSX.Element {
       <span className="font-medium text-ink">
         {pending ? "Connecting…" : "Continue with Google"}
       </span>
-    </button>
+    </a>
   );
 }

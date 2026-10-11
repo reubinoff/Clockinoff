@@ -55,6 +55,8 @@ export default function AdminUserDetail({
   }, [userId]);
 
   useEffect(() => {
+    // setState runs after await inside load; the rule still flags the call.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount / id change
     void load();
   }, [load]);
 

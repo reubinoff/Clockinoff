@@ -129,7 +129,6 @@ describe("batchSetBilled service (Shaul-locked, 2026-10-01)", () => {
     const { user } = await makeUser();
     // The service checks shape before touching the DB; this covers the
     // narrow guard that catches null/empty strings slipping past the route.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await expect(
       batchSetBilled(user.id, ["", "x"] as unknown as string[], true),
     ).rejects.toMatchObject({ code: "VALIDATION" });

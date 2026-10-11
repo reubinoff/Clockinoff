@@ -41,9 +41,9 @@ function LoginForm(): JSX.Element {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(googleErrorFromQuery);
   const [pending, setPending] = useState(false);
-  const [googlePending, setGooglePending] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const googleHref = `/api/auth/google/start?next=${encodeURIComponent(next)}`;
 
   useEffect(() => {
     if (showPasswordAccountBanner) return;
@@ -80,17 +80,6 @@ function LoginForm(): JSX.Element {
     } finally {
       setPending(false);
     }
-  }
-
-  function startGoogle(): void {
-    // Google button handles its own "connecting" state; also disable the
-    // email/password form while we navigate away so no double-tap can race
-    // the OAuth round-trip.
-    setGooglePending(true);
-    setPending(true);
-    setError(null);
-    const target = `/api/auth/google/start?next=${encodeURIComponent(next)}`;
-    window.location.href = target;
   }
 
   return (
@@ -145,10 +134,10 @@ function LoginForm(): JSX.Element {
           className="btn btn-primary w-full"
           disabled={pending}
         >
-          {pending && !googlePending ? "Signing in…" : "Log in"}
+          {pending ? "Signing in…" : "Log in"}
         </button>
         <AuthDivider />
-        <GoogleButton pending={googlePending} onStart={startGoogle} />
+        <GoogleButton href={googleHref} />
         {error ? (
           <p
             id="auth-error"

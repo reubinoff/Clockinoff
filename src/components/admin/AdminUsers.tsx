@@ -55,9 +55,12 @@ export default function AdminUsers({
     return () => clearTimeout(t);
   }, [q]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [debounced]);
+  // Reset to page 1 when the debounced query changes (render-time adjust).
+  const [prevDebounced, setPrevDebounced] = useState(debounced);
+  if (debounced !== prevDebounced) {
+    setPrevDebounced(debounced);
+    if (page !== 1) setPage(1);
+  }
 
   const load = useCallback(async () => {
     const params = new URLSearchParams();
@@ -74,6 +77,8 @@ export default function AdminUsers({
   }, [debounced, page]);
 
   useEffect(() => {
+    // setState runs after await inside load; the rule still flags the call.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on query / page
     void load();
   }, [load]);
 

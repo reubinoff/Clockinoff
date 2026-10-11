@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDurationHms, formatDurationHours, formatTime } from "@/lib/tz";
 import {
   emitToast,
@@ -90,6 +90,17 @@ export default function EntryList({
   timezone: string;
 }): JSX.Element {
   const [entries, setEntries] = useState(initial);
+  // #54 Shaul lock: before dropping router.refresh() the server component
+  // used to re-run on every mutation and push a fresh `initial` prop into
+  // the list; we now rely on the local optimistic/response state as the
+  // source of truth. We still sync the prop so a real cross-tree refresh
+  // (e.g. navigation back to /app) still reconciles. Adjust during render
+  // (not in an effect) so react-hooks/set-state-in-effect stays quiet.
+  const [prevInitial, setPrevInitial] = useState(initial);
+  if (initial !== prevInitial) {
+    setPrevInitial(initial);
+    setEntries(initial);
+  }
   const [filterProject, setFilterProject] = useState("");
   // Dana lock: single "Unbilled" chip on the day-entries list — default off.
   // On = show only entries where billable && !billed. There is no explicit
@@ -136,15 +147,6 @@ export default function EntryList({
   // timer is live and the tab is visible — matches the dock's cadence so
   // the two surfaces can't disagree about elapsed by more than ~1s.
   const [tickNow, setTickNow] = useState(() => Date.now());
-
-  // #54 Shaul lock: before dropping router.refresh() the server component
-  // used to re-run on every mutation and push a fresh `initial` prop into
-  // the list; we now rely on the local optimistic/response state as the
-  // source of truth. We still sync the prop so a real cross-tree refresh
-  // (e.g. navigation back to /app) still reconciles.
-  useEffect(() => {
-    setEntries(initial);
-  }, [initial]);
 
   // #84 play-to-resume + #99a pinned running row: both need to know
   // whether a timer is already running. The probe (and the onTimerChanged
@@ -282,21 +284,16 @@ export default function EntryList({
     filterQ.length > 0 || filterProject !== "" || filterUnbilled;
 
   // Dana lock: changing filters clears selection + exits select mode so the
-  // sticky bar count can never reference a hidden row.
-  const prevFilterKeyRef = useRef<string>(`${filterProject}|${filterUnbilled}|${filterQ}`);
-  useEffect(() => {
-    const key = `${filterProject}|${filterUnbilled}|${filterQ}`;
-    if (key !== prevFilterKeyRef.current) {
-      prevFilterKeyRef.current = key;
-      if (selectedIds.size > 0) setSelectedIds(new Set());
-      if (selectMode) setSelectMode(false);
-    }
-  }, [filterProject, filterUnbilled, filterQ, selectedIds.size, selectMode]);
-
-  // Prune the selection if a row left the list (deleted / mutated out of
-  // scope between fetches) so the sticky bar count stays truthful.
-  useEffect(() => {
-    if (selectedIds.size === 0) return;
+  // sticky bar count can never reference a hidden row. Adjust during render.
+  const filterKey = `${filterProject}|${filterUnbilled}|${filterQ}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey);
+    if (selectedIds.size > 0) setSelectedIds(new Set());
+    if (selectMode) setSelectMode(false);
+  } else if (selectedIds.size > 0) {
+    // Prune the selection if a row left the list (deleted / mutated out of
+    // scope between fetches) so the sticky bar count stays truthful.
     const visible = new Set(filtered.map((e) => e.id));
     let pruned = false;
     const next = new Set<string>();
@@ -305,7 +302,7 @@ export default function EntryList({
       else pruned = true;
     }
     if (pruned) setSelectedIds(next);
-  }, [filtered, selectedIds]);
+  }
 
   // Recompute Today/Yesterday + "This week" labels on mount so a client
   // whose clock advances past midnight since SSR still sees the correct

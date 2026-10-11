@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { emitToast } from "@/lib/events";
 import {
@@ -20,10 +20,12 @@ type Props = {
   methods: Methods;
 };
 
+const CONNECT_GOOGLE_HREF =
+  "/api/auth/google/start?intent=connect&next=%2Fapp%2Faccount";
+
 export default function AccountSettings({ email, methods }: Props): JSX.Element {
   const router = useRouter();
   const params = useSearchParams();
-  const [pending, setPending] = useState(false);
   const connected = params.get("google") === "connected";
   const errorCode = params.get("error");
   const error =
@@ -38,11 +40,6 @@ export default function AccountSettings({ email, methods }: Props): JSX.Element 
     emitToast(GOOGLE_CONNECTED_TOAST);
     router.replace("/app/account");
   }, [connected, router]);
-
-  function connectGoogle(): void {
-    setPending(true);
-    window.location.assign("/api/auth/google/start?intent=connect&next=%2Fapp%2Faccount");
-  }
 
   return (
     <section className="space-y-4 max-w-xl">
@@ -62,14 +59,12 @@ export default function AccountSettings({ email, methods }: Props): JSX.Element 
             ) : (
               <>
                 <span className="text-ink">Google</span>
-                <button
-                  type="button"
+                <a
+                  href={CONNECT_GOOGLE_HREF}
                   className="btn btn-primary !min-h-[40px] !px-4"
-                  onClick={connectGoogle}
-                  disabled={pending}
                 >
-                  {pending ? "Connecting…" : "Connect Google"}
-                </button>
+                  Connect Google
+                </a>
               </>
             )}
           </div>

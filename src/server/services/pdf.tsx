@@ -252,7 +252,9 @@ function weekdayShortInZone(d: Date, tz: string): string {
   return WEEKDAYS_SHORT[anchor.getUTCDay()];
 }
 
-function formatDayHeader(dateIso: string, tz: string): string {
+function formatDayHeader(dateIso: string): string {
+  // `dateIso` is already the zoned calendar day (YYYY-MM-DD); weekday is
+  // taken from that Y-M-D anchored at UTC so the label matches the key.
   const { y, m, d } = parseIsoDate(dateIso);
   const anchor = new Date(Date.UTC(y, m - 1, d));
   const wd = weekdayShortInZone(anchor, "UTC");
@@ -323,7 +325,7 @@ function groupEntriesByDay(entries: readonly EntryView[], tz: string): DayGroup[
   const sortedKeys = Array.from(map.keys()).sort((a, b) => (a < b ? 1 : -1));
   return sortedKeys.map((iso) => ({
     dateIso: iso,
-    header: formatDayHeader(iso, tz),
+    header: formatDayHeader(iso),
     entries: (map.get(iso) ?? []).slice().sort((a, b) => {
       // Newest first within a day. Falls back to id-desc if timestamps tie.
       const at = new Date(a.start_at).getTime();

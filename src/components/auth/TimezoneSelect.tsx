@@ -33,9 +33,20 @@ export function TimezoneSelect({
     return zones.filter((z) => z.toLowerCase().includes(q));
   }, [zones, query]);
 
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [query, open]);
+  // Reset highlight when the open/query surface changes (render-time adjust).
+  const surfaceKey = `${open ? "1" : "0"}|${query}`;
+  const [prevSurfaceKey, setPrevSurfaceKey] = useState(surfaceKey);
+  if (surfaceKey !== prevSurfaceKey) {
+    setPrevSurfaceKey(surfaceKey);
+    if (activeIndex !== 0) setActiveIndex(0);
+  }
+
+  // Clear the search box when the menu closes (render-time adjust).
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (!open && query !== "") setQuery("");
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -55,11 +66,8 @@ export function TimezoneSelect({
   }, [open]);
 
   useEffect(() => {
-    if (open) {
-      requestAnimationFrame(() => searchRef.current?.focus());
-    } else {
-      setQuery("");
-    }
+    if (!open) return;
+    requestAnimationFrame(() => searchRef.current?.focus());
   }, [open]);
 
   useEffect(() => {

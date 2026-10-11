@@ -148,6 +148,9 @@ export default function ReportsSummary({ timezone }: ReportsSummaryProps): JSX.E
   }, [from, to]);
 
   useEffect(() => {
+    // setState runs inside loadRange (loading flag + after await); the rule
+    // still flags the call.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on range change
     loadRange(serverRangeForUi);
   }, [loadRange, serverRangeForUi]);
 

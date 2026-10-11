@@ -4,7 +4,7 @@
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import nextTypescript from "eslint-config-next/typescript";
 
-export default [
+const eslintConfig = [
   ...nextCoreWebVitals,
   ...nextTypescript,
   {
@@ -17,10 +17,20 @@ export default [
       // 16 upgrade does not require a parallel effect-refactor.
       "react-hooks/set-state-in-effect": "warn",
       // Introduced by `@next/eslint-plugin-next@16`. The GoogleButton
-      // uses `window.location.href` for a hard navigation to a server
-      // route that returns an OAuth 302 — `router.push()` would not
-      // trigger the browser redirect. Downgrade to a warning.
+      // uses a real <a href> for a hard navigation to a server route that
+      // returns an OAuth 302 — `router.push()` would not trigger the
+      // browser redirect. Downgrade to a warning.
       "@next/next/no-location-assign-relative-destination": "warn",
+      // Underscore-prefixed args/vars are intentional unused placeholders
+      // in test mocks and intentional no-ops.
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
     },
   },
   {
@@ -34,3 +44,5 @@ export default [
     ],
   },
 ];
+
+export default eslintConfig;

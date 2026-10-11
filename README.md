@@ -64,18 +64,7 @@ run a company, Clockinoff is the opposite of that.
   `/register` when the instance has Google sign-in enabled.
 - **MIT licensed** and small enough to read end-to-end.
 
-## Not in v1
 
-By design — these are not "coming soon", they are "not what this product is":
-
-- No teams, workspaces, or shared entries.
-- No calendar view or dashboards beyond the entry list + exports.
-- No Clockify / Toggl / third-party sync.
-- No OAuth providers beyond the optional **Continue with Google** button
-  on `/login` and `/register`. Email + password remains the primary path.
-
-See the [FAQ](https://clockinoff.reubinoff.com/docs/faq) for the longer
-version.
 
 ## Try it
 
@@ -128,16 +117,6 @@ User-guide pages: [Getting started](https://clockinoff.reubinoff.com/docs/gettin
 Contributor internals (API, auth rules, CI/CD, Azure deploy, ops) live in
 [`AGENTS.md`](./AGENTS.md) — not here.
 
-## Stack
-
-- **Next.js 16** (App Router) · **React 19** · **TypeScript** · **Tailwind CSS 3**
-- **Postgres 16** · **Drizzle ORM**
-- **Auth**: email + password (argon2id, database sessions) with optional
-  Continue with Google
-- **PDF / CSV**: `@react-pdf/renderer` + a small CSV writer
-- **Tests**: Vitest + Playwright
-- **CI**: GitHub Actions, ≥90 % coverage on `src/server` + `src/lib`
-- **Deploy**: Azure Web App (Node 24) + Azure Database for PostgreSQL
 
 ## Contributing
 

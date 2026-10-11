@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "@/components/auth/AuthShell";
@@ -10,6 +10,8 @@ import { AuthDivider } from "@/components/auth/AuthDivider";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { IconAlert } from "@/components/icons";
 import { DEFAULT_TIMEZONE, detectTimezone } from "@/lib/timezones";
+
+const subscribeNoop = (): (() => void) => () => {};
 import {
   PASSWORD_COPY,
   PASSWORD_MIN_LENGTH,
@@ -54,14 +56,19 @@ function RegisterForm(): JSX.Element {
   const googleErrorFromQuery = googleAuthErrorMessage(params.get("error"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
+  // Detect the browser TZ on the client; SSR stays on DEFAULT_TIMEZONE.
+  const detectedTimezone = useSyncExternalStore(
+    subscribeNoop,
+    detectTimezone,
+    () => DEFAULT_TIMEZONE,
+  );
+  const [timezoneOverride, setTimezoneOverride] = useState<string | null>(null);
+  const timezone = timezoneOverride ?? detectedTimezone;
   const [error, setError] = useState<string | null>(googleErrorFromQuery);
   const [pending, setPending] = useState(false);
-  const [googlePending, setGooglePending] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setTimezone(detectTimezone());
     emailRef.current?.focus();
   }, []);
 
@@ -94,13 +101,6 @@ function RegisterForm(): JSX.Element {
     } finally {
       setPending(false);
     }
-  }
-
-  function startGoogle(): void {
-    setGooglePending(true);
-    setPending(true);
-    setError(null);
-    window.location.href = "/api/auth/google/start?next=%2Fapp";
   }
 
   return (
@@ -150,7 +150,7 @@ function RegisterForm(): JSX.Element {
           id="timezone"
           label="Timezone"
           value={timezone}
-          onChange={setTimezone}
+          onChange={setTimezoneOverride}
           required
         />
         <button
@@ -158,10 +158,10 @@ function RegisterForm(): JSX.Element {
           className="btn btn-primary w-full"
           disabled={pending}
         >
-          {pending && !googlePending ? "Creating…" : "Create account"}
+          {pending ? "Creating…" : "Create account"}
         </button>
         <AuthDivider />
-        <GoogleButton pending={googlePending} onStart={startGoogle} />
+        <GoogleButton href="/api/auth/google/start?next=%2Fapp" />
         {error ? (
           <p
             id="auth-error"
