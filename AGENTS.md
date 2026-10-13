@@ -155,6 +155,7 @@ shorter than 32 bytes). Never reuse `NEXTAUTH_SECRET` for it.
 | Production start | `npm start` (`next start`) |
 | Purge users by email | `npm run ops:delete-users` (see [§15](#15-ops-scripts)) |
 | Promote admins by email | `npm run ops:promote-admins` (see [§15](#15-ops-scripts)) |
+| Demote a user by email | `npm run ops:demote-user` (see [§15](#15-ops-scripts)) |
 
 **Before pushing anything to `main`**, run at minimum:
 
@@ -433,8 +434,8 @@ services in `src/server/services/*`. Every error is shaped as
 | `GET` | `/api/export/csv?from&to` | **from/to required**; empty → header row only, 200 |
 | `GET` | `/api/export/pdf?from&to` | **from/to required**; empty → "No entries" page, 200 |
 | `GET` | `/api/admin/users` | admin only; `?q` email search, `?page` (~25), `?sort` (`email` \| `role` \| `status` \| `created` \| `activity`), `?dir` (`asc` \| `desc`). Invalid sort/dir fall back to created desc. Ties break on id. |
-| `GET` / `DELETE` | `/api/admin/users/:id` | detail + hard-delete; no self-delete, no last admin |
-| `POST` | `/api/admin/users/bulk` | `{ action, ids }` for the current page (max 25); each id uses the single-user mutator (`remove` → `removeAdminUser`); ineligible ids are skipped |
+| `GET` / `DELETE` | `/api/admin/users/:id` | detail + hard-delete; 400 when the target is an admin or the caller |
+| `POST` | `/api/admin/users/bulk` | `{ action, ids, confirmCount? }`. Remove skips admins and the caller; `confirmCount` must equal that effective count or the response is 400. More than 25 ids is 400 (the list is not truncated). Block returns 400 if any id is an admin or the caller. Other actions skip ineligible ids. Remove and block write an `audit_events` row |
 | `POST` | `/api/admin/users/:id/block` | deny login, delete sessions; no self-block |
 | `POST` | `/api/admin/users/:id/unblock` | clear block |
 | `POST` | `/api/admin/users/:id/promote` | role → admin |
@@ -639,7 +640,7 @@ connections.
 share one Azure Postgres server. The Clockinoff migrator role
 (`PG_MIGRATOR_PG_USER`) must own Clockinoff's tables (`users`,
 `sessions`, `clients`, `projects`, `tags`, `time_entries`,
-`time_entry_tags`, and `__migrations`). guide-me's role (guideme) must
+`time_entry_tags`, `audit_events`, and `__migrations`). guide-me's role (guideme) must
 not own them. In AAD / migrator mode, `scripts/migrate.mjs` checks that
 the connected role can alter those tables before it applies pending SQL
   and exits 1 if it cannot (the error names the connected role and the
@@ -767,6 +768,13 @@ invocation — do not copy account-name patterns or emails into docs.
 list. The running app also treats `ADMIN_EMAILS` as a one-way promote:
 matching addresses are created as admin, and an existing user is
 promoted on their next successful sign-in.
+
+**Demote a user** (`npm run ops:demote-user`,
+[`scripts/demote-user.mjs`](./scripts/demote-user.mjs)): sets
+`users.role` to `user` for the given emails. Dry-run unless `--yes`.
+QA admin accounts are short-lived: demote them after their gate
+passes. Do not write admin credentials to disk. The script does not
+take a password.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

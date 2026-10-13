@@ -35,11 +35,13 @@ export interface RegisterInput {
   email: string;
   password: string;
   timezone?: string;
+  clientIp?: string | null;
 }
 
 export interface LoginInput {
   email: string;
   password: string;
+  clientIp?: string | null;
 }
 
 export interface AuthResult {
@@ -78,7 +80,7 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
         role: users.role,
         blockedAt: users.blockedAt,
       });
-    const session = await createSession(row.id);
+    const session = await createSession(row.id, new Date(), input.clientIp ?? null);
     return { user: sessionUserFromRow(row), session };
   } catch (err) {
     const code = pgErrorCode(err);
@@ -119,7 +121,7 @@ export async function login(input: LoginInput): Promise<AuthResult> {
   // The verify above already ran, so this branch is not cheaper.
   if (row.blockedAt) throw errors.unauthorized("Invalid email or password");
   const role = await applyBootstrapRole(row.id, row.email, row.role);
-  const session = await createSession(row.id);
+  const session = await createSession(row.id, new Date(), input.clientIp ?? null);
   return {
     user: sessionUserFromRow({ ...row, role, blockedAt: null }),
     session,

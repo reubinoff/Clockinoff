@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { sessions, users } from "@/server/db/schema";
 import { tokenId } from "@/lib/id";
@@ -8,6 +8,7 @@ import { asUserRole, type UserRole, type UserStatus } from "@/lib/admin-role";
 export const SESSION_COOKIE = "timely_session";
 export const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 export const MAX_SESSIONS_PER_USER = 20;
+export const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
 
 export interface SessionUser {
   id: string;
@@ -43,7 +44,11 @@ export function hashSessionToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
-export async function createSession(userId: string, now: Date = new Date()): Promise<CreatedSession> {
+export async function createSession(
+  userId: string,
+  now: Date = new Date(),
+  clientIp: string | null = null,
+): Promise<CreatedSession> {
   const db = getDb();
   const rawToken = tokenId(32);
   const tokenHash = hashSessionToken(rawToken);
@@ -54,6 +59,8 @@ export async function createSession(userId: string, now: Date = new Date()): Pro
       userId,
       expiresAt,
       createdAt: now,
+      lastSeenAt: now,
+      clientIp,
     });
     const extras = await tx
       .select({ id: sessions.id })
@@ -95,7 +102,21 @@ export async function getSessionUser(
     .limit(1);
   const row = rows[0];
   if (!row || row.blockedAt) return null;
+  await touchSessionLastSeen(tokenHash, now);
   return sessionUserFromRow(row);
+}
+
+async function touchSessionLastSeen(tokenHash: string, now: Date): Promise<void> {
+  const cutoff = new Date(now.getTime() - LAST_SEEN_THROTTLE_MS);
+  await getDb()
+    .update(sessions)
+    .set({ lastSeenAt: now })
+    .where(
+      and(
+        eq(sessions.id, tokenHash),
+        or(isNull(sessions.lastSeenAt), lte(sessions.lastSeenAt, cutoff)),
+      ),
+    );
 }
 
 export async function deleteSession(sessionId: string | null | undefined): Promise<void> {

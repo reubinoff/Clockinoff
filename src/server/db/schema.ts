@@ -52,6 +52,10 @@ export const sessions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),
+    // Bumped on authenticated requests, at most once every 5 minutes.
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true, mode: "date" }),
+    // IP the app recorded when the session was created. Not a rate-limit key.
+    clientIp: text("client_ip"),
   },
   (t) => ({
     userIdx: index("sessions_user_idx").on(t.userId),
@@ -159,6 +163,18 @@ export const timeEntryTags = pgTable(
     tagIdx: index("time_entry_tags_tag_idx").on(t.tagId),
   }),
 );
+
+export const auditEvents = pgTable("audit_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  targetIds: uuid("target_ids").array().notNull(),
+  requestId: text("request_id").notNull(),
+  clientIp: text("client_ip"),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+    .notNull()
+    .defaultNow(),
+});
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;

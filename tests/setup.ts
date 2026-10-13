@@ -29,7 +29,7 @@ export async function truncateAll(): Promise<void> {
   const client = await getPool().connect();
   try {
     await client.query(
-      'TRUNCATE "time_entry_tags", "time_entries", "tags", "projects", "clients", "sessions", "users" RESTART IDENTITY CASCADE',
+      'TRUNCATE "audit_events", "time_entry_tags", "time_entries", "tags", "projects", "clients", "sessions", "users" RESTART IDENTITY CASCADE',
     );
   } finally {
     client.release();

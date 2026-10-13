@@ -8,7 +8,7 @@ import {
   recordRegisterAttempt,
   registerRetryAfterSeconds,
 } from "@/server/auth/rate-limit";
-import { clientIpFromHeaders } from "@/lib/client-ip";
+import { clientIpForRecord, clientIpFromHeaders, socketAddressFromRequest } from "@/lib/client-ip";
 import { errors } from "@/lib/errors";
 
 export const runtime = "nodejs";
@@ -32,7 +32,10 @@ export async function POST(req: Request): Promise<Response> {
     // outcomes just stops attackers from using cheap 400s as a free probe.
     recordRegisterAttempt(ip);
     const body = await readJson<{ email: string; password: string; timezone?: string }>(req);
-    const { user, session } = await register(body);
+    const { user, session } = await register({
+      ...body,
+      clientIp: clientIpForRecord(req.headers, socketAddressFromRequest(req)),
+    });
     const res = NextResponse.json(user, { status: 201 });
     res.cookies.set(SESSION_COOKIE, session.id, {
       httpOnly: true,

@@ -66,3 +66,32 @@ export function clientIpFromHeaders(headers: HeaderReader): string {
   if (real) return stripPort(real);
   return "unknown";
 }
+
+// IP stored on a new session and on a bulk-remove audit row (#219).
+// The first X-Forwarded-For hop is the address the header lists first.
+// Rate-limit keys stay on the right-most hop (`clientIpFromHeaders`, #30)
+// so a client-supplied prefix cannot reset those buckets. When the header
+// is missing, use the socket address the app itself accepted.
+export function clientIpForRecord(
+  headers: HeaderReader,
+  socketAddress?: string | null,
+): string | null {
+  const xff = headers.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return stripPort(first);
+  }
+  const socket = socketAddress?.trim();
+  if (socket) return stripPort(socket);
+  return null;
+}
+
+export function socketAddressFromRequest(req: Request): string | null {
+  const candidate = req as Request & {
+    socket?: { remoteAddress?: string | null };
+  };
+  const addr = candidate.socket?.remoteAddress;
+  if (typeof addr !== "string") return null;
+  const trimmed = addr.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}

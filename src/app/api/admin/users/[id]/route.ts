@@ -1,4 +1,4 @@
-import { jsonError, noContent, ok, requireAdmin } from "@/server/http";
+import { adminRequestMeta, jsonError, noContent, ok, requireAdmin } from "@/server/http";
 import { requireUuid } from "@/lib/uuid";
 import { getAdminUser, removeAdminUser } from "@/server/services/admin";
 
@@ -20,11 +20,13 @@ export async function GET(_req: Request, { params }: Params): Promise<Response> 
   }
 }
 
-export async function DELETE(_req: Request, { params }: Params): Promise<Response> {
+export async function DELETE(req: Request, { params }: Params): Promise<Response> {
   try {
     const actor = await requireAdmin();
     const { id: raw } = await params;
-    await removeAdminUser(actor.id, requireUuid(raw));
+    await removeAdminUser(actor.id, requireUuid(raw), {
+      requestId: adminRequestMeta(req).requestId,
+    });
     return noContent();
   } catch (err) {
     return jsonError(err);

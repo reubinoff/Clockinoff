@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_GUARD, adminActionErrorMessage } from "@/lib/admin-copy";
+import {
+  ADMIN_GUARD,
+  BULK_REMOVE_COPY,
+  adminActionErrorMessage,
+  bulkRemoveFailureMessage,
+} from "@/lib/admin-copy";
 
 describe("admin guard copy", () => {
   it("keeps the locked strings and falls back otherwise", () => {
@@ -12,5 +17,14 @@ describe("admin guard copy", () => {
     );
     expect(adminActionErrorMessage("nope")).toBe(ADMIN_GUARD.generic);
     expect(adminActionErrorMessage(null)).toBe(ADMIN_GUARD.generic);
+    expect(adminActionErrorMessage(ADMIN_GUARD.adminRemove)).toBe(ADMIN_GUARD.adminRemove);
+    expect(adminActionErrorMessage(ADMIN_GUARD.adminBlock)).toBe(ADMIN_GUARD.adminBlock);
+  });
+
+  it("maps bulk-remove failures to the locked copy and hides anything else", () => {
+    expect(bulkRemoveFailureMessage(BULK_REMOVE_COPY.mismatch)).toBe(BULK_REMOVE_COPY.mismatch);
+    expect(bulkRemoveFailureMessage(BULK_REMOVE_COPY.overCap)).toBe(BULK_REMOVE_COPY.overCap);
+    expect(bulkRemoveFailureMessage("password hash leaked")).toBe(BULK_REMOVE_COPY.generic);
+    expect(bulkRemoveFailureMessage(null)).toBe(BULK_REMOVE_COPY.generic);
   });
 });

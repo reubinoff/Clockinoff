@@ -131,6 +131,13 @@ sharpen docs are welcome. Read [`AGENTS.md`](./AGENTS.md) first.
 
 Bugs and feature requests → [GitHub Issues](https://github.com/reubinoff/Clockinoff/issues).
 
+## Ops
+
+QA admin accounts are short-lived. After a gate passes, demote them
+with `npm run ops:demote-user` (dry-run unless `--yes`). Do not write
+admin credentials to disk. Invocation details live in
+[`AGENTS.md`](./AGENTS.md).
+
 ## License
 
 [MIT](./LICENSE) © 2026 Moshe Reubinoff.

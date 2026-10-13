@@ -5,6 +5,7 @@ import { login, register } from "@/server/auth/service";
 import { getSessionUser } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
 import {
+  auditEvents,
   clients,
   projects,
   sessions,
@@ -93,26 +94,23 @@ describe("admin service", () => {
     await setRole(other.user.id, "admin");
 
     await expect(removeAdminUser(actor.user.id, actor.user.id)).rejects.toMatchObject({
-      status: 409,
+      status: 400,
       message: ADMIN_GUARD.selfRemove,
     });
-
-    await removeAdminUser(actor.user.id, other.user.id);
-    await expect(getAdminUser(other.user.id)).rejects.toMatchObject({ status: 404 });
-
-    await expect(removeAdminUser(actor.user.id, actor.user.id)).rejects.toMatchObject({
-      status: 409,
-      message: ADMIN_GUARD.lastAdmin,
+    await expect(removeAdminUser(actor.user.id, other.user.id)).rejects.toMatchObject({
+      status: 400,
+      message: ADMIN_GUARD.adminRemove,
     });
+    expect((await getAdminUser(other.user.id)).user.role).toBe("admin");
 
     const member = await insertUser("member@ex.com");
     await removeAdminUser(actor.user.id, member.id);
     await expect(getAdminUser(member.id)).rejects.toMatchObject({ status: 404 });
-    const sessionsLeft = await getDb()
-      .select()
-      .from(sessions)
-      .where(eq(sessions.userId, other.user.id));
-    expect(sessionsLeft).toHaveLength(0);
+    const audit = await getDb().select().from(auditEvents);
+    expect(audit).toHaveLength(1);
+    expect(audit[0]?.action).toBe("remove");
+    expect(audit[0]?.actorUserId).toBe(actor.user.id);
+    expect(audit[0]?.targetIds).toEqual([member.id]);
   });
 
   it("blocks and unblocks, denies self-block, and kills sessions plus login", async () => {
@@ -123,6 +121,12 @@ describe("admin service", () => {
     await expect(blockAdminUser(actor.user.id, actor.user.id)).rejects.toMatchObject({
       message: ADMIN_GUARD.selfBlock,
     });
+    await setRole(victim.user.id, "admin");
+    await expect(blockAdminUser(actor.user.id, victim.user.id)).rejects.toMatchObject({
+      status: 400,
+      message: ADMIN_GUARD.adminBlock,
+    });
+    await setRole(victim.user.id, "user");
 
     const blocked = await blockAdminUser(actor.user.id, victim.user.id);
     expect(blocked.status).toBe("blocked");
@@ -197,13 +201,22 @@ describe("admin service", () => {
       expiresAt: new Date("2027-01-01T00:00:00Z"),
     });
 
-    const result = await bulkAdminUsers(actor.user.id, "remove", [
-      victim.id,
+    const result = await bulkAdminUsers(
       actor.user.id,
-      keep.id,
-      victim.id,
-    ]);
+      "remove",
+      [victim.id, actor.user.id, keep.id, victim.id],
+      { confirmCount: 2, requestId: "bulk-cascade", clientIp: "203.0.113.9" },
+    );
     expect(result).toEqual({ applied: 2, skipped: 1 });
+    const audit = await db.select().from(auditEvents);
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({
+      actorUserId: actor.user.id,
+      action: "remove",
+      requestId: "bulk-cascade",
+      clientIp: "203.0.113.9",
+    });
+    expect(audit[0]?.targetIds?.slice().sort()).toEqual([keep.id, victim.id].sort());
 
     const remaining = await db.select({ id: users.id }).from(users);
     expect(remaining.map((row) => row.id)).toEqual([actor.user.id]);
@@ -222,13 +235,32 @@ describe("admin service", () => {
     await setRole(actor.user.id, "admin");
     await setRole(other.user.id, "admin");
 
+    await expect(
+      bulkAdminUsers(actor.user.id, "block", [
+        actor.user.id,
+        member.id,
+        "00000000-0000-4000-8000-000000000099",
+      ]),
+    ).rejects.toMatchObject({ status: 400, message: ADMIN_GUARD.selfBlock });
+    expect((await getAdminUser(member.id)).user.status).toBe("active");
+    await expect(bulkAdminUsers(actor.user.id, "block", [other.user.id])).rejects.toMatchObject({
+      status: 400,
+      message: ADMIN_GUARD.adminBlock,
+    });
+
     const blocked = await bulkAdminUsers(actor.user.id, "block", [
-      actor.user.id,
       member.id,
       "00000000-0000-4000-8000-000000000099",
     ]);
-    expect(blocked).toEqual({ applied: 1, skipped: 2 });
+    expect(blocked).toEqual({ applied: 1, skipped: 1 });
     expect((await getAdminUser(member.id)).user.status).toBe("blocked");
+    const blockAudit = await getDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "block"));
+    expect(blockAudit).toHaveLength(1);
+    expect(blockAudit[0]?.targetIds).toEqual([member.id]);
+    expect(blockAudit[0]?.actorUserId).toBe(actor.user.id);
 
     const opened = await bulkAdminUsers(actor.user.id, "unblock", [member.id]);
     expect(opened).toEqual({ applied: 1, skipped: 0 });
@@ -255,6 +287,40 @@ describe("admin service", () => {
     await expect(bulkAdminUsers(actor.user.id, "block", tooMany)).rejects.toMatchObject({
       code: "VALIDATION",
     });
+  });
+
+  it("rejects a bulk remove whose confirmCount or length does not match, and does not truncate", async () => {
+    const actor = await makeUser("actor-count@ex.com");
+    const member = await insertUser("member-count@ex.com");
+    const admin = await insertUser("admin-count@ex.com", "admin");
+    await setRole(actor.user.id, "admin");
+
+    await expect(
+      bulkAdminUsers(actor.user.id, "remove", [member.id, admin.id], { confirmCount: 2 }),
+    ).rejects.toMatchObject({ status: 400, message: "The number didn't match. Nothing was removed." });
+    await expect(
+      bulkAdminUsers(actor.user.id, "remove", [member.id]),
+    ).rejects.toMatchObject({ status: 400, message: "The number didn't match. Nothing was removed." });
+    await expect(
+      bulkAdminUsers(actor.user.id, "remove", [member.id], { confirmCount: 1.5 }),
+    ).rejects.toMatchObject({ status: 400, message: "The number didn't match. Nothing was removed." });
+
+    const over = Array.from({ length: 26 }, () => member.id);
+    await expect(
+      bulkAdminUsers(actor.user.id, "remove", over, { confirmCount: 1 }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "You can remove up to 25 users at a time. Nothing was removed.",
+    });
+    expect((await getAdminUser(member.id)).user.email).toBe("member-count@ex.com");
+    expect(await getDb().select().from(auditEvents)).toHaveLength(0);
+
+    const ok = await bulkAdminUsers(actor.user.id, "remove", [member.id, admin.id, actor.user.id], {
+      confirmCount: 1,
+    });
+    expect(ok).toEqual({ applied: 1, skipped: 2 });
+    await expect(getAdminUser(member.id)).rejects.toMatchObject({ status: 404 });
+    expect((await getAdminUser(admin.id)).user.role).toBe("admin");
   });
 
   it("returns per-user stats and instance stats over a range", async () => {

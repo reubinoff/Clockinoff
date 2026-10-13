@@ -18,7 +18,11 @@ import {
   type AdminUser,
 } from "@/components/admin/admin-ui";
 import { partitionBulk, bulkSkippedToast } from "@/lib/admin-bulk";
-import { adminActionErrorMessage } from "@/lib/admin-copy";
+import {
+  BULK_REMOVE_CAP,
+  adminActionErrorMessage,
+  bulkRemoveFailureMessage,
+} from "@/lib/admin-copy";
 import {
   adminUserAriaSort,
   nextAdminUserSort,
@@ -93,6 +97,7 @@ export default function AdminUsers({
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkKind, setBulkKind] = useState<AdminActionKind | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(q.trim()), 250);
@@ -184,8 +189,14 @@ export default function AdminUsers({
     ? partitionBulk(bulkKind, selectedUsers, actorId, adminsCount)
     : null;
 
+  function askBulk(kind: AdminActionKind): void {
+    setBulkError(null);
+    setBulkKind(kind);
+  }
+
   async function confirmBulk(): Promise<void> {
     if (!bulkKind || !bulkPlan || bulkPlan.eligible.length === 0 || bulkBusy) return;
+    if (bulkKind === "remove" && bulkPlan.eligible.length > BULK_REMOVE_CAP) return;
     const localSkipped = bulkPlan.skipped.length;
     setBulkBusy(true);
     try {
@@ -195,6 +206,7 @@ export default function AdminUsers({
         body: JSON.stringify({
           action: bulkKind,
           ids: bulkPlan.eligible.map((user) => user.id),
+          ...(bulkKind === "remove" ? { confirmCount: bulkPlan.eligible.length } : {}),
         }),
       });
       if (!res.ok) {
@@ -205,6 +217,10 @@ export default function AdminUsers({
         } catch {
           message = undefined;
         }
+        if (bulkKind === "remove") {
+          setBulkError(bulkRemoveFailureMessage(message));
+          return;
+        }
         emitToast(adminActionErrorMessage(message));
         return;
       }
@@ -212,6 +228,7 @@ export default function AdminUsers({
       const applied = Number(body.applied) || 0;
       const skipped = localSkipped + (Number(body.skipped) || 0);
       const toast = bulkSkippedToast(bulkKind, applied, skipped);
+      setBulkError(null);
       setBulkKind(null);
       if (toast) emitToast(toast);
       await load();
@@ -248,7 +265,7 @@ export default function AdminUsers({
           users={selectedUsers}
           pending={bulkBusy || confirm.busy}
           onClear={clearSelection}
-          onAsk={setBulkKind}
+          onAsk={askBulk}
         />
       ) : null}
       {trueEmpty ? (
@@ -438,8 +455,12 @@ export default function AdminUsers({
           emails={bulkPlan.eligible.map((user) => user.email)}
           skipped={bulkPlan.skipped.length}
           pending={bulkBusy}
+          error={bulkKind === "remove" ? bulkError : null}
           onCancel={() => {
-            if (!bulkBusy) setBulkKind(null);
+            if (!bulkBusy) {
+              setBulkKind(null);
+              setBulkError(null);
+            }
           }}
           onConfirm={() => void confirmBulk()}
         />

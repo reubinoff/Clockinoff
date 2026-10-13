@@ -66,6 +66,7 @@ describe("scripts/migrate.mjs — table ownership gate (#187)", () => {
         "tags",
         "time_entries",
         "time_entry_tags",
+        "audit_events",
         "users",
       ].sort(),
     );

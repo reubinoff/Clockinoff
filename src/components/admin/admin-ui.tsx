@@ -5,11 +5,18 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   bulkConfirmTitle,
+  bulkRemoveSkipLine,
   bulkSampleEmails,
   bulkWillSkipLine,
   type AdminActionKind,
 } from "@/lib/admin-bulk";
-import { ADMIN_GUARD, adminActionErrorMessage } from "@/lib/admin-copy";
+import {
+  ADMIN_GUARD,
+  BULK_REMOVE_CAP,
+  BULK_REMOVE_COPY,
+  adminActionErrorMessage,
+  bulkRemoveConfirmLabel,
+} from "@/lib/admin-copy";
 import { lockBodyScroll } from "@/lib/body-scroll-lock";
 import { emitToast } from "@/lib/events";
 
@@ -209,7 +216,9 @@ export function AdminConfirmDialog({
   function onPanelKeyDown(e: React.KeyboardEvent<HTMLDivElement>): void {
     if (e.key !== "Tab" || !panelRef.current) return;
     const nodes = [
-      ...panelRef.current.querySelectorAll<HTMLElement>("button:not([disabled])"),
+      ...panelRef.current.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled])",
+      ),
     ];
     if (nodes.length === 0) return;
     const first = nodes[0];
@@ -281,6 +290,7 @@ export function AdminBulkConfirmDialog({
   emails,
   skipped,
   pending,
+  error,
   onCancel,
   onConfirm,
 }: {
@@ -288,13 +298,20 @@ export function AdminBulkConfirmDialog({
   emails: string[];
   skipped: number;
   pending: boolean;
+  error?: string | null;
   onCancel: () => void;
   onConfirm: () => void;
 }): JSX.Element {
   const copy = DIALOG[kind];
-  const title = bulkConfirmTitle(kind, emails.length);
+  const count = emails.length;
+  const title = bulkConfirmTitle(kind, count);
   const sample = bulkSampleEmails(emails);
-  const skipLine = bulkWillSkipLine(skipped);
+  const isRemove = kind === "remove";
+  const skipLine = isRemove ? bulkRemoveSkipLine(skipped) : bulkWillSkipLine(skipped);
+  const overCap = isRemove && count > BULK_REMOVE_CAP;
+  const [typed, setTyped] = useState("");
+  const typedMatches = typed.trim() === String(count);
+  const confirmDisabled = pending || (isRemove && (overCap || !typedMatches));
   const cancelRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const onCancelRef = useRef(onCancel);
@@ -319,7 +336,9 @@ export function AdminBulkConfirmDialog({
   function onPanelKeyDown(e: React.KeyboardEvent<HTMLDivElement>): void {
     if (e.key !== "Tab" || !panelRef.current) return;
     const nodes = [
-      ...panelRef.current.querySelectorAll<HTMLElement>("button:not([disabled])"),
+      ...panelRef.current.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled])",
+      ),
     ];
     if (nodes.length === 0) return;
     const first = nodes[0];
@@ -355,7 +374,9 @@ export function AdminBulkConfirmDialog({
           <h2 id="admin-bulk-confirm-title" className="text-title-sm text-ink">
             {title}
           </h2>
-          <p className="mt-2 text-body-sm text-ink-2">{copy.body}</p>
+          <p className="mt-2 text-body-sm text-ink-2">
+            {isRemove ? BULK_REMOVE_COPY.body : copy.body}
+          </p>
           <ul className="mt-4 space-y-1">
             {sample.shown.map((email) => (
               <li key={email} className="truncate text-body-sm text-ink">
@@ -367,6 +388,32 @@ export function AdminBulkConfirmDialog({
             <p className="mt-1 text-body-sm text-muted">and {sample.more} more</p>
           ) : null}
           {skipLine ? <p className="mt-3 text-body-sm text-muted">{skipLine}</p> : null}
+          {isRemove ? (
+            <div className="mt-4">
+              <label htmlFor="admin-bulk-remove-count" className="block text-body-sm text-ink">
+                {bulkRemoveConfirmLabel(count)}
+              </label>
+              <input
+                id="admin-bulk-remove-count"
+                className="input mt-2"
+                inputMode="numeric"
+                autoComplete="off"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                disabled={pending}
+              />
+            </div>
+          ) : null}
+          {overCap ? (
+            <p className="mt-3 text-body-sm text-danger" role="status">
+              {BULK_REMOVE_COPY.overCapHint}
+            </p>
+          ) : null}
+          {error ? (
+            <p className="mt-3 text-body-sm text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
           <button ref={cancelRef} type="button" className="btn" onClick={onCancel} disabled={pending}>
@@ -376,7 +423,7 @@ export function AdminBulkConfirmDialog({
             type="button"
             className={adminActionButtonClass(kind)}
             onClick={onConfirm}
-            disabled={pending}
+            disabled={confirmDisabled}
           >
             {copy.confirm}
           </button>
@@ -404,9 +451,10 @@ export function guardTitle(
   const self = user.id === actorId;
   const sole = user.role === "admin" && adminsCount <= 1;
   if (kind === "remove") {
-    if (sole) return ADMIN_GUARD.lastAdmin;
     if (self) return ADMIN_GUARD.selfRemove;
+    if (user.role === "admin") return ADMIN_GUARD.adminRemove;
   }
+  if (kind === "block" && user.role === "admin" && !self) return ADMIN_GUARD.adminBlock;
   if (kind === "demote") {
     if (sole) return ADMIN_GUARD.lastAdminDemote;
     if (self) return ADMIN_GUARD.selfDemote;

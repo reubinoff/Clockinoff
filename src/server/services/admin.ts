@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   and,
   asc,
@@ -6,13 +7,14 @@ import {
   eq,
   gte,
   ilike,
+  inArray,
   lt,
   sql,
   type SQL,
   type SQLWrapper,
 } from "drizzle-orm";
 import type { AdminActionKind } from "@/lib/admin-bulk";
-import { ADMIN_GUARD } from "@/lib/admin-copy";
+import { ADMIN_GUARD, BULK_REMOVE_CAP, BULK_REMOVE_COPY } from "@/lib/admin-copy";
 import { asUserRole, type UserRole, type UserStatus } from "@/lib/admin-role";
 import {
   parseAdminUserSort,
@@ -23,7 +25,7 @@ import { computeAmount } from "@/lib/money";
 import { enumerateDayKeys } from "@/lib/report";
 import { endOfDayExclusiveInZone, formatDate, startOfDayInZone } from "@/lib/tz";
 import { getDb } from "@/server/db/client";
-import { projects, sessions, timeEntries, users } from "@/server/db/schema";
+import { auditEvents, projects, sessions, timeEntries, users } from "@/server/db/schema";
 
 export const ADMIN_PAGE_SIZE = 25;
 const MAX_STATS_DAYS = 366;
@@ -291,14 +293,26 @@ export async function getAdminUser(id: string): Promise<AdminUserDetail> {
 
 type GuardAction = "remove" | "block" | "unblock" | "promote" | "demote";
 
+interface MutateOptions {
+  requestId?: string;
+  recordAudit?: boolean;
+}
+
+function resolveRequestId(requestId: string | undefined): string {
+  return requestId && requestId.length > 0 ? requestId : randomUUID();
+}
+
 async function mutate(
   actorId: string,
   targetId: string,
   action: GuardAction,
+  opts?: MutateOptions,
 ): Promise<void> {
   const db = getDb();
+  const requestId = resolveRequestId(opts?.requestId);
+  const recordAudit = opts?.recordAudit !== false;
   await db.transaction(async (tx) => {
-    const lockAdmins = action === "remove" || action === "demote";
+    const lockAdmins = action === "demote";
     const adminRows = lockAdmins
       ? await tx
           .select({ id: users.id })
@@ -320,14 +334,14 @@ async function mutate(
     if (!target) throw errors.notFound("User not found");
 
     const soleAdmin = target.role === "admin" && adminRows.length <= 1;
-    if (action === "remove" && soleAdmin) {
-      throw errors.conflict(ADMIN_GUARD.lastAdmin);
-    }
     if (action === "demote" && soleAdmin) {
       throw errors.conflict(ADMIN_GUARD.lastAdminDemote);
     }
     if (action === "remove" && actorId === targetId) {
-      throw errors.conflict(ADMIN_GUARD.selfRemove);
+      throw errors.validation(ADMIN_GUARD.selfRemove);
+    }
+    if (action === "remove" && target.role === "admin") {
+      throw errors.validation(ADMIN_GUARD.adminRemove);
     }
     if (action === "demote" && actorId === targetId) {
       throw errors.conflict(ADMIN_GUARD.selfDemote);
@@ -335,12 +349,24 @@ async function mutate(
     if (action === "block" && actorId === targetId) {
       throw errors.conflict(ADMIN_GUARD.selfBlock);
     }
+    if (action === "block" && target.role === "admin") {
+      throw errors.validation(ADMIN_GUARD.adminBlock);
+    }
     if (action === "demote" && target.role !== "admin") {
       throw errors.validation("User is not an admin");
     }
 
     if (action === "remove") {
       await tx.delete(users).where(eq(users.id, targetId));
+      if (recordAudit) {
+        await tx.insert(auditEvents).values({
+          actorUserId: actorId,
+          action: "remove",
+          targetIds: [targetId],
+          requestId,
+          clientIp: null,
+        });
+      }
       return;
     }
     if (action === "block") {
@@ -348,6 +374,15 @@ async function mutate(
         await tx.update(users).set({ blockedAt: new Date() }).where(eq(users.id, targetId));
       }
       await tx.delete(sessions).where(eq(sessions.userId, targetId));
+      if (recordAudit) {
+        await tx.insert(auditEvents).values({
+          actorUserId: actorId,
+          action: "block",
+          targetIds: [targetId],
+          requestId,
+          clientIp: null,
+        });
+      }
       return;
     }
     if (action === "unblock") {
@@ -364,12 +399,20 @@ async function mutate(
   });
 }
 
-export async function removeAdminUser(actorId: string, targetId: string): Promise<void> {
-  await mutate(actorId, targetId, "remove");
+export async function removeAdminUser(
+  actorId: string,
+  targetId: string,
+  opts?: MutateOptions,
+): Promise<void> {
+  await mutate(actorId, targetId, "remove", opts);
 }
 
-export async function blockAdminUser(actorId: string, targetId: string): Promise<AdminUserView> {
-  await mutate(actorId, targetId, "block");
+export async function blockAdminUser(
+  actorId: string,
+  targetId: string,
+  opts?: MutateOptions,
+): Promise<AdminUserView> {
+  await mutate(actorId, targetId, "block", opts);
   return loadView(targetId);
 }
 
@@ -400,47 +443,129 @@ function isBulkSkip(err: unknown): boolean {
   );
 }
 
+export interface BulkAdminOptions {
+  confirmCount?: unknown;
+  requestId?: string;
+  clientIp?: string | null;
+}
+
+function confirmCountMatches(value: unknown, expected: number): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value === expected;
+}
+
+// Ids that bulk remove will try to delete: not the caller, not an admin.
+// Unknown ids stay in the set so confirmCount counts them; the delete
+// then no-ops them as not found.
+async function bulkRemovalTargets(
+  actorId: string,
+  ids: readonly string[],
+): Promise<string[]> {
+  const unique = [...new Set(ids)];
+  const db = getDb();
+  const rows = await db
+    .select({ id: users.id, role: users.role })
+    .from(users)
+    .where(inArray(users.id, unique));
+  const roleOf = new Map(rows.map((row) => [row.id, row.role]));
+  return unique.filter((id) => id !== actorId && roleOf.get(id) !== "admin");
+}
+
+async function assertBulkBlockAllowed(actorId: string, ids: readonly string[]): Promise<void> {
+  const unique = [...new Set(ids)];
+  if (unique.includes(actorId)) throw errors.validation(ADMIN_GUARD.selfBlock);
+  const db = getDb();
+  const rows = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(inArray(users.id, unique));
+  if (rows.some((row) => row.role === "admin")) {
+    throw errors.validation(ADMIN_GUARD.adminBlock);
+  }
+}
+
+async function writeBulkAudit(input: {
+  actorId: string;
+  action: "remove" | "block";
+  targetIds: string[];
+  requestId: string;
+  clientIp: string | null;
+}): Promise<void> {
+  await getDb().insert(auditEvents).values({
+    actorUserId: input.actorId,
+    action: input.action,
+    targetIds: input.targetIds,
+    requestId: input.requestId,
+    clientIp: input.clientIp,
+  });
+}
+
 // Applies one existing single-user mutator per id. Remove goes through
 // `removeAdminUser` (`DELETE FROM users`) so sessions, clients, projects,
 // tags, and time_entries → time_entry_tags leave with the FK cascade.
-// Ineligible ids (self, last admin, wrong state, missing) are skipped;
-// they do not abort the rest of the page.
+// Bulk remove skips admins and the caller, then requires confirmCount to
+// equal that effective length. More than BULK_REMOVE_CAP ids is a 400
+// and the list is not truncated. Bulk block refuses an admin or the
+// caller up front. Other actions still skip ineligible ids.
 export async function bulkAdminUsers(
   actorId: string,
   action: AdminActionKind,
   ids: string[],
+  options: BulkAdminOptions = {},
 ): Promise<BulkAdminResult> {
   if (!Array.isArray(ids) || ids.length === 0) {
     throw errors.validation("ids must not be empty");
   }
+  if (action === "remove" && ids.length > BULK_REMOVE_CAP) {
+    throw errors.validation(BULK_REMOVE_COPY.overCap);
+  }
   if (ids.length > ADMIN_PAGE_SIZE) {
     throw errors.validation(`Too many ids (max ${ADMIN_PAGE_SIZE})`);
   }
+  const requestId = resolveRequestId(options.requestId);
   const unique = [...new Set(ids)];
   unique.sort((a, b) => {
     if (a === actorId) return 1;
     if (b === actorId) return -1;
     return 0;
   });
+
+  let targets = unique;
+  if (action === "remove") {
+    targets = await bulkRemovalTargets(actorId, unique);
+    if (!confirmCountMatches(options.confirmCount, targets.length)) {
+      throw errors.validation(BULK_REMOVE_COPY.mismatch);
+    }
+  } else if (action === "block") {
+    await assertBulkBlockAllowed(actorId, unique);
+  }
+
+  const auditOpts = { requestId, recordAudit: false as const };
   let applied = 0;
-  let skipped = 0;
-  for (const id of unique) {
+  const appliedIds: string[] = [];
+  for (const id of targets) {
     try {
-      if (action === "remove") await removeAdminUser(actorId, id);
-      else if (action === "block") await blockAdminUser(actorId, id);
+      if (action === "remove") await removeAdminUser(actorId, id, auditOpts);
+      else if (action === "block") await blockAdminUser(actorId, id, auditOpts);
       else if (action === "unblock") await unblockAdminUser(actorId, id);
       else if (action === "promote") await promoteAdminUser(actorId, id);
       else await demoteAdminUser(actorId, id);
       applied += 1;
+      appliedIds.push(id);
     } catch (err) {
-      if (isBulkSkip(err)) {
-        skipped += 1;
-        continue;
-      }
+      if (isBulkSkip(err)) continue;
       throw err;
     }
   }
-  return { applied, skipped };
+  if (action === "remove" || action === "block") {
+    await writeBulkAudit({
+      actorId,
+      action,
+      targetIds: appliedIds,
+      requestId,
+      clientIp: action === "remove" ? (options.clientIp ?? null) : null,
+    });
+  }
+  return { applied, skipped: unique.length - applied };
 }
 
 function assertRange(fromKey: string, toKey: string, timezone: string): { from: Date; to: Date; days: string[] } {

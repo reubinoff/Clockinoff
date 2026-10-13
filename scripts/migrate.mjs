@@ -91,6 +91,7 @@ const CLOCKINOFF_APP_TABLES = [
   "tags",
   "time_entries",
   "time_entry_tags",
+  "audit_events",
 ];
 
 // pg_has_role(..., 'USAGE') is true when current_user is the owner, inherits

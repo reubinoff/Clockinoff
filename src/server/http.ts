@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { attachAdminActor } from "@/lib/admin-actor";
+import { clientIpForRecord, socketAddressFromRequest } from "@/lib/client-ip";
 import { ApiError, toErrorBody, errors } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { requestIdFrom } from "@/lib/request-id";
 import { SESSION_COOKIE, getSessionUser, type SessionUser } from "@/server/auth/session";
 
 export function jsonError(err: unknown): NextResponse {
@@ -33,7 +36,15 @@ export async function requireUser(): Promise<SessionUser> {
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUser();
   if (user.role !== "admin") throw errors.forbidden();
+  attachAdminActor(user.id);
   return user;
+}
+
+export function adminRequestMeta(req: Request): { requestId: string; clientIp: string | null } {
+  return {
+    requestId: requestIdFrom(req),
+    clientIp: clientIpForRecord(req.headers, socketAddressFromRequest(req)),
+  };
 }
 
 // Clockinoff has no uploads. 64 KiB is well above any legitimate JSON

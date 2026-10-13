@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientIpFromHeaders } from "@/lib/client-ip";
+import { clientIpForRecord, clientIpFromHeaders, socketAddressFromRequest } from "@/lib/client-ip";
 
 function headers(map: Record<string, string | undefined>): {
   get(name: string): string | null;
@@ -174,6 +174,41 @@ describe("clientIpFromHeaders", () => {
   it('returns "unknown" when X-Real-IP is only whitespace and XFF is missing', () => {
     expect(clientIpFromHeaders(headers({ "x-real-ip": "   " }))).toBe(
       "unknown",
+    );
+  });
+});
+
+describe("clientIpForRecord", () => {
+  it("uses the first X-Forwarded-For hop and ignores the rest", () => {
+    expect(
+      clientIpForRecord(headers({ "x-forwarded-for": "198.51.100.8, 203.0.113.50" })),
+    ).toBe("198.51.100.8");
+  });
+
+  it("strips a trailing port on that first hop", () => {
+    expect(
+      clientIpForRecord(headers({ "x-forwarded-for": "198.51.100.8:44321, 203.0.113.50" })),
+    ).toBe("198.51.100.8");
+  });
+
+  it("falls back to the socket address when the header is missing", () => {
+    expect(clientIpForRecord(headers({}), "192.0.2.10")).toBe("192.0.2.10");
+    expect(clientIpForRecord(headers({}), "192.0.2.10:4000")).toBe("192.0.2.10");
+    expect(clientIpForRecord(headers({}))).toBeNull();
+    expect(clientIpForRecord(headers({}), "   ")).toBeNull();
+    expect(
+      clientIpForRecord(headers({ "x-forwarded-for": " , 203.0.113.1" }), "192.0.2.1"),
+    ).toBe("192.0.2.1");
+  });
+
+  it("reads a socket address hung off the request", () => {
+    const req = new Request("http://test/");
+    expect(socketAddressFromRequest(req)).toBeNull();
+    const withSocket = req as Request & { socket: { remoteAddress: string } };
+    withSocket.socket = { remoteAddress: "192.0.2.15" };
+    expect(socketAddressFromRequest(withSocket)).toBe("192.0.2.15");
+    expect(clientIpForRecord(withSocket.headers, socketAddressFromRequest(withSocket))).toBe(
+      "192.0.2.15",
     );
   });
 });

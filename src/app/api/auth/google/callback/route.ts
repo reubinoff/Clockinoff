@@ -20,7 +20,7 @@ import { jsonError } from "@/server/http";
 import { errors } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { publicOrigin } from "@/lib/base-url";
-import { clientIpFromHeaders } from "@/lib/client-ip";
+import { clientIpForRecord, clientIpFromHeaders, socketAddressFromRequest } from "@/lib/client-ip";
 import { googlePasswordAccountLoginPath } from "@/lib/google-auth-errors";
 import { OAUTH_STATE_COOKIE, readRequestCookie, sanitiseNext } from "@/lib/oauth-next-path";
 import { parseStateCookie } from "@/lib/oauth-state";
@@ -129,7 +129,11 @@ export async function GET(req: Request): Promise<Response> {
       return redirectToAccount(origin, "google=connected");
     }
 
-    const result = await signInWithGoogle({ sub: payload.sub, email: payload.email });
+    const result = await signInWithGoogle({
+      sub: payload.sub,
+      email: payload.email,
+      clientIp: clientIpForRecord(req.headers, socketAddressFromRequest(req)),
+    });
 
     // Match the password-register landing: a brand-new account gets the
     // welcome=1 one-time hero on /app. Returning users land exactly where

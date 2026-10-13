@@ -3,6 +3,7 @@ import { ADMIN_GUARD } from "@/lib/admin-copy";
 import {
   bulkConfirmTitle,
   bulkIneligibleReason,
+  bulkRemoveSkipLine,
   bulkSampleEmails,
   bulkSkippedToast,
   bulkWillSkipLine,
@@ -18,16 +19,17 @@ const member: BulkSubject = { id: "member", role: "user", status: "active" };
 const blocked: BulkSubject = { id: "blocked", role: "user", status: "blocked" };
 
 describe("admin bulk eligibility", () => {
-  it("skips self and the last admin, and keeps everyone else removable", () => {
-    expect(bulkIneligibleReason("remove", self, actor, 1)).toBe(ADMIN_GUARD.lastAdmin);
+  it("skips every admin and the caller on remove", () => {
+    expect(bulkIneligibleReason("remove", self, actor, 1)).toBe(ADMIN_GUARD.selfRemove);
     expect(bulkIneligibleReason("remove", self, actor, 2)).toBe(ADMIN_GUARD.selfRemove);
+    expect(bulkIneligibleReason("remove", otherAdmin, actor, 2)).toBe(ADMIN_GUARD.adminRemove);
     expect(isBulkEligible("remove", member, actor, 1)).toBe(true);
-    expect(isBulkEligible("remove", otherAdmin, actor, 2)).toBe(true);
-    expect(isBulkEligible("remove", otherAdmin, actor, 1)).toBe(false);
+    expect(isBulkEligible("remove", otherAdmin, actor, 2)).toBe(false);
   });
 
-  it("shows block and unblock only for the matching status, never self-block", () => {
+  it("shows block and unblock only for the matching status, never self or an admin", () => {
     expect(bulkIneligibleReason("block", self, actor, 2)).toBe(ADMIN_GUARD.selfBlock);
+    expect(bulkIneligibleReason("block", otherAdmin, actor, 2)).toBe(ADMIN_GUARD.adminBlock);
     expect(bulkIneligibleReason("block", blocked, actor, 2)).toBe("Already blocked");
     expect(isBulkEligible("block", member, actor, 2)).toBe(true);
     expect(isBulkEligible("unblock", blocked, actor, 2)).toBe(true);
@@ -47,8 +49,8 @@ describe("admin bulk eligibility", () => {
   it("partitions a mixed selection and builds confirm copy", () => {
     const rows = [self, otherAdmin, member, blocked];
     const removed = partitionBulk("remove", rows, actor, 2);
-    expect(removed.eligible.map((u) => u.id)).toEqual(["other-admin", "member", "blocked"]);
-    expect(removed.skipped.map((u) => u.id)).toEqual([actor]);
+    expect(removed.eligible.map((u) => u.id)).toEqual(["member", "blocked"]);
+    expect(removed.skipped.map((u) => u.id)).toEqual([actor, "other-admin"]);
 
     expect(bulkConfirmTitle("remove", 1)).toBe("Remove 1 user?");
     expect(bulkConfirmTitle("block", 3)).toBe("Block 3 users?");
@@ -60,6 +62,8 @@ describe("admin bulk eligibility", () => {
     expect(bulkWillSkipLine(0)).toBeNull();
     expect(bulkWillSkipLine(1)).toBe("1 will be skipped.");
     expect(bulkWillSkipLine(2)).toBe("2 will be skipped.");
+    expect(bulkRemoveSkipLine(0)).toBeNull();
+    expect(bulkRemoveSkipLine(2)).toBe("2 will be skipped (admins or you).");
     expect(bulkSkippedToast("remove", 3, 1)).toBe("Removed 3. Skipped 1.");
     expect(bulkSkippedToast("block", 0, 2)).toBe("Skipped 2.");
     expect(bulkSkippedToast("promote", 2, 0)).toBeNull();

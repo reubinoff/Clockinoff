@@ -10,7 +10,7 @@ import {
   recordLoginFailure,
   recordLoginSuccess,
 } from "@/server/auth/rate-limit";
-import { clientIpFromHeaders } from "@/lib/client-ip";
+import { clientIpForRecord, clientIpFromHeaders, socketAddressFromRequest } from "@/lib/client-ip";
 import { ApiError, errors } from "@/lib/errors";
 
 export const runtime = "nodejs";
@@ -42,7 +42,10 @@ export async function POST(req: Request): Promise<Response> {
         loginRetryAfterSeconds(email, ip),
       );
     }
-    const { user, session } = await login(body);
+    const { user, session } = await login({
+      ...body,
+      clientIp: clientIpForRecord(req.headers, socketAddressFromRequest(req)),
+    });
     recordLoginSuccess(email, ip);
     const res = NextResponse.json(user, { status: 200 });
     res.cookies.set(SESSION_COOKIE, session.id, {

@@ -242,19 +242,22 @@ export interface GoogleSignInResult {
   isNewUser: boolean;
 }
 
-async function startGoogleSession(row: {
-  id: string;
-  email: string;
-  timezone: string;
-  role: string;
-  blockedAt: Date | null;
-}): Promise<{ user: SessionUser; session: CreatedSession }> {
+async function startGoogleSession(
+  row: {
+    id: string;
+    email: string;
+    timezone: string;
+    role: string;
+    blockedAt: Date | null;
+  },
+  clientIp: string | null,
+): Promise<{ user: SessionUser; session: CreatedSession }> {
   if (row.blockedAt) {
     logger.warn("[google] refusing sign-in for blocked user", { userId: row.id });
     throw new GoogleAuthError("network", "Blocked user");
   }
   const role = await applyBootstrapRole(row.id, row.email, row.role);
-  const session = await createSession(row.id);
+  const session = await createSession(row.id, new Date(), clientIp);
   return {
     user: sessionUserFromRow({ ...row, role, blockedAt: null }),
     session,
@@ -262,7 +265,7 @@ async function startGoogleSession(row: {
 }
 
 export async function signInWithGoogle(
-  input: { sub: string; email: string; timezone?: string },
+  input: { sub: string; email: string; timezone?: string; clientIp?: string | null },
   _retried = false,
 ): Promise<GoogleSignInResult> {
   const db = getDb();
@@ -286,7 +289,7 @@ export async function signInWithGoogle(
     .where(eq(users.googleSub, input.sub))
     .limit(1);
   if (bySub[0]) {
-    const started = await startGoogleSession(bySub[0]);
+    const started = await startGoogleSession(bySub[0], input.clientIp ?? null);
     return { ...started, isNewUser: false };
   }
 
@@ -339,7 +342,7 @@ export async function signInWithGoogle(
         blockedAt: users.blockedAt,
       });
     const user = updated ?? existing;
-    const started = await startGoogleSession(user);
+    const started = await startGoogleSession(user, input.clientIp ?? null);
     return { ...started, isNewUser: false };
   }
 
@@ -363,7 +366,7 @@ export async function signInWithGoogle(
         role: users.role,
         blockedAt: users.blockedAt,
       });
-    const started = await startGoogleSession(row);
+    const started = await startGoogleSession(row, input.clientIp ?? null);
     return { ...started, isNewUser: true };
   } catch (err) {
     const code = pgErrorCode(err);
