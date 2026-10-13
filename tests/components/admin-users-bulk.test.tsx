@@ -5,8 +5,9 @@ import AdminUsers from "@/components/admin/AdminUsers";
 import { emitToast } from "@/lib/events";
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
   usePathname: () => "/admin/users",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("@/lib/events", () => ({

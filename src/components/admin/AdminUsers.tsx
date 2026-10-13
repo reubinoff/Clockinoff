@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AdminBulkConfirmDialog,
@@ -19,8 +19,16 @@ import {
 } from "@/components/admin/admin-ui";
 import { partitionBulk, bulkSkippedToast } from "@/lib/admin-bulk";
 import { adminActionErrorMessage } from "@/lib/admin-copy";
+import {
+  adminUserAriaSort,
+  nextAdminUserSort,
+  parseAdminUserSort,
+  type AdminUserSort,
+  type AdminUserSortDir,
+  type AdminUserSortKey,
+} from "@/lib/admin-sort";
 import { emitToast } from "@/lib/events";
-import { IconCheck } from "@/components/icons";
+import { IconCheck, IconChevronDown } from "@/components/icons";
 
 interface ListResponse {
   users: AdminUser[];
@@ -33,6 +41,27 @@ interface ListResponse {
 const BULK_KINDS: AdminActionKind[] = ["remove", "block", "unblock", "promote", "demote"];
 const EMPTY_USERS: AdminUser[] = [];
 
+const SORT_COLUMNS: { key: AdminUserSortKey; label: string }[] = [
+  { key: "email", label: "Email" },
+  { key: "role", label: "Role" },
+  { key: "status", label: "Status" },
+  { key: "created", label: "Created" },
+  { key: "activity", label: "Activity" },
+];
+
+const SORT_OPTIONS: { sort: AdminUserSortKey; dir: AdminUserSortDir; label: string }[] = [
+  { sort: "email", dir: "asc", label: "Email A–Z" },
+  { sort: "email", dir: "desc", label: "Email Z–A" },
+  { sort: "role", dir: "asc", label: "Role, admin first" },
+  { sort: "role", dir: "desc", label: "Role, user first" },
+  { sort: "status", dir: "asc", label: "Status, active first" },
+  { sort: "status", dir: "desc", label: "Status, blocked first" },
+  { sort: "created", dir: "desc", label: "Created, newest" },
+  { sort: "created", dir: "asc", label: "Created, oldest" },
+  { sort: "activity", dir: "desc", label: "Activity, most entries" },
+  { sort: "activity", dir: "asc", label: "Activity, fewest entries" },
+];
+
 export default function AdminUsers({
   actorId,
   timezone,
@@ -41,9 +70,24 @@ export default function AdminUsers({
   timezone: string;
 }): JSX.Element {
   const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
   const [page, setPage] = useState(1);
+  const urlSort = parseAdminUserSort(params.get("sort"), params.get("dir"));
+  const urlSortKey = `${urlSort.sort}:${urlSort.dir}`;
+  const [sortState, setSortState] = useState<AdminUserSort>(urlSort);
+  // URL is the refresh/back source of truth. Clicks update state immediately
+  // so the list request does not wait on the history update, then this
+  // catches a later param change (including back/forward).
+  const [seenUrlSort, setSeenUrlSort] = useState(urlSortKey);
+  if (urlSortKey !== seenUrlSort) {
+    setSeenUrlSort(urlSortKey);
+    setSortState((current) =>
+      current.sort === urlSort.sort && current.dir === urlSort.dir ? current : urlSort,
+    );
+  }
   const [data, setData] = useState<ListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -63,10 +107,12 @@ export default function AdminUsers({
   }
 
   const load = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (debounced) params.set("q", debounced);
-    params.set("page", String(page));
-    const res = await fetch(`/api/admin/users?${params.toString()}`, { cache: "no-store" });
+    const query = new URLSearchParams();
+    if (debounced) query.set("q", debounced);
+    query.set("page", String(page));
+    query.set("sort", sortState.sort);
+    query.set("dir", sortState.dir);
+    const res = await fetch(`/api/admin/users?${query.toString()}`, { cache: "no-store" });
     if (!res.ok) {
       setError("Couldn’t load users. Try again.");
       return;
@@ -74,7 +120,17 @@ export default function AdminUsers({
     setError(null);
     setData((await res.json()) as ListResponse);
     setSelected(new Set());
-  }, [debounced, page]);
+  }, [debounced, page, sortState.sort, sortState.dir]);
+
+  function applySort(next: AdminUserSort): void {
+    setSortState(next);
+    if (page !== 1) setPage(1);
+    const nextParams = new URLSearchParams(params.toString());
+    nextParams.set("sort", next.sort);
+    nextParams.set("dir", next.dir);
+    const qs = nextParams.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
 
   useEffect(() => {
     // setState runs after await inside load; the rule still flags the call.
@@ -220,6 +276,24 @@ export default function AdminUsers({
             />
             <span className="text-body-sm text-muted">Select all</span>
           </div>
+          <label className="flex items-center gap-2 px-1 text-body-sm text-muted" htmlFor="admin-user-sort">
+            Sort by
+            <select
+              id="admin-user-sort"
+              className="input max-w-[16rem]"
+              value={`${sortState.sort}:${sortState.dir}`}
+              onChange={(e) => {
+                const [sort, dir] = e.target.value.split(":");
+                applySort(parseAdminUserSort(sort, dir));
+              }}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={`${option.sort}:${option.dir}`} value={`${option.sort}:${option.dir}`}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <ul className="divide-y divide-border rounded-2xl border border-border bg-surface">
             {users.map((user) => (
               <li key={user.id} className="flex items-start gap-1 px-2 py-3">
@@ -270,11 +344,15 @@ export default function AdminUsers({
                     compact
                   />
                 </th>
-                <th className="px-3 font-medium">Email</th>
-                <th className="px-3 font-medium">Role</th>
-                <th className="px-3 font-medium">Status</th>
-                <th className="px-3 font-medium">Created</th>
-                <th className="px-3 font-medium">Activity</th>
+                {SORT_COLUMNS.map((column) => (
+                  <SortHeader
+                    key={column.key}
+                    column={column.key}
+                    label={column.label}
+                    active={sortState}
+                    onSort={() => applySort(nextAdminUserSort(sortState, column.key))}
+                  />
+                ))}
                 <th className="px-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -367,6 +445,40 @@ export default function AdminUsers({
         />
       ) : null}
     </section>
+  );
+}
+
+function SortHeader({
+  column,
+  label,
+  active,
+  onSort,
+}: {
+  column: AdminUserSortKey;
+  label: string;
+  active: AdminUserSort;
+  onSort: () => void;
+}): JSX.Element {
+  const sorted = column === active.sort;
+  return (
+    <th aria-sort={adminUserAriaSort(column, active)} className="px-1 font-medium">
+      <button
+        type="button"
+        onClick={onSort}
+        className="inline-flex h-11 items-center gap-1 rounded-md px-2 font-medium text-muted hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+      >
+        {label}
+        {sorted ? (
+          <IconChevronDown
+            size={14}
+            className={active.dir === "asc" ? "rotate-180" : undefined}
+            aria-hidden
+          />
+        ) : (
+          <span className="inline-block w-3.5" aria-hidden />
+        )}
+      </button>
+    </th>
   );
 }
 

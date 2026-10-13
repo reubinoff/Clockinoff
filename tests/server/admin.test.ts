@@ -383,4 +383,121 @@ describe("admin service", () => {
     expect(detail.stats.entries).toBe(1);
     expect(detail.stats.hours).toBe(1);
   });
+
+  it("sorts allowlisted columns, defaults to created desc, and breaks ties on id", async () => {
+    const same = new Date("2026-06-01T00:00:00.000Z");
+    const older = new Date("2026-01-01T00:00:00.000Z");
+    const idA = "00000000-0000-4000-8000-00000000000a";
+    const idB = "00000000-0000-4000-8000-00000000000b";
+    const idC = "00000000-0000-4000-8000-00000000000c";
+    await getDb().insert(users).values([
+      {
+        id: idA,
+        email: "zed-sort@ex.com",
+        passwordHash: "x",
+        role: "user",
+        timezone: TZ,
+        isTest: true,
+        createdAt: same,
+      },
+      {
+        id: idB,
+        email: "amy-sort@ex.com",
+        passwordHash: "x",
+        role: "admin",
+        timezone: TZ,
+        blockedAt: new Date("2026-06-02T00:00:00.000Z"),
+        createdAt: same,
+      },
+      {
+        id: idC,
+        email: "mid-sort@ex.com",
+        passwordHash: "x",
+        role: "user",
+        timezone: TZ,
+        createdAt: older,
+      },
+    ]);
+    const start = new Date("2026-06-01T10:00:00.000Z");
+    const end = new Date("2026-06-01T11:00:00.000Z");
+    await getDb().insert(timeEntries).values([
+      { userId: idB, description: "b1", startAt: start, endAt: end },
+      { userId: idB, description: "b2", startAt: start, endAt: end },
+      { userId: idC, description: "c1", startAt: start, endAt: end },
+      { userId: idC, description: "c2", startAt: start, endAt: end },
+    ]);
+
+    const emails = async (sort?: "email" | "role" | "status" | "created" | "activity", dir?: "asc" | "desc") => {
+      const listed = await listAdminUsers({ sort, dir, q: "sort@" });
+      return listed.users.map((user) => user.email);
+    };
+
+    expect(await emails()).toEqual([
+      "amy-sort@ex.com",
+      "zed-sort@ex.com",
+      "mid-sort@ex.com",
+    ]);
+    expect(await emails("created", "desc")).toEqual([
+      "amy-sort@ex.com",
+      "zed-sort@ex.com",
+      "mid-sort@ex.com",
+    ]);
+    expect(await emails("created", "asc")).toEqual([
+      "mid-sort@ex.com",
+      "zed-sort@ex.com",
+      "amy-sort@ex.com",
+    ]);
+    expect(await emails("email", "asc")).toEqual([
+      "amy-sort@ex.com",
+      "mid-sort@ex.com",
+      "zed-sort@ex.com",
+    ]);
+    expect(await emails("email", "desc")).toEqual([
+      "zed-sort@ex.com",
+      "mid-sort@ex.com",
+      "amy-sort@ex.com",
+    ]);
+    expect(await emails("role", "asc")).toEqual([
+      "amy-sort@ex.com",
+      "zed-sort@ex.com",
+      "mid-sort@ex.com",
+    ]);
+    expect(await emails("role", "desc")).toEqual([
+      "mid-sort@ex.com",
+      "zed-sort@ex.com",
+      "amy-sort@ex.com",
+    ]);
+    expect(await emails("status", "asc")).toEqual([
+      "zed-sort@ex.com",
+      "mid-sort@ex.com",
+      "amy-sort@ex.com",
+    ]);
+    expect(await emails("status", "desc")).toEqual([
+      "amy-sort@ex.com",
+      "mid-sort@ex.com",
+      "zed-sort@ex.com",
+    ]);
+    expect(await emails("activity", "asc")).toEqual([
+      "zed-sort@ex.com",
+      "amy-sort@ex.com",
+      "mid-sort@ex.com",
+    ]);
+    expect(await emails("activity", "desc")).toEqual([
+      "mid-sort@ex.com",
+      "amy-sort@ex.com",
+      "zed-sort@ex.com",
+    ]);
+
+    const qa = await listAdminUsers({ q: "zed-sort" });
+    expect(qa.total).toBe(1);
+    expect(qa.users[0]?.email).toBe("zed-sort@ex.com");
+
+    for (let i = 0; i < ADMIN_PAGE_SIZE + 1; i += 1) {
+      await insertUser(`page-sort-${String(i).padStart(2, "0")}@ex.com`);
+    }
+    const tail = await listAdminUsers({ sort: "email", dir: "asc", q: "page-sort-", page: 2 });
+    expect(tail.users.map((user) => user.email)).toEqual(["page-sort-25@ex.com"]);
+    const head = await listAdminUsers({ sort: "email", dir: "desc", q: "page-sort-", page: 2 });
+    expect(head.users.map((user) => user.email)).toEqual(["page-sort-00@ex.com"]);
+  });
 });

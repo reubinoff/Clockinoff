@@ -85,6 +85,46 @@ describe("admin routes", () => {
     const bad = await listUsers(new Request("http://test/api/admin/users?page=0"));
     expect(bad.status).toBe(400);
 
+    const older = await makeUser("mmm-route-sort@ex.com");
+    const newer = await makeUser("aaa-route-sort@ex.com");
+    await getDb()
+      .update(users)
+      .set({ createdAt: new Date("2020-01-01T00:00:00.000Z") })
+      .where(eq(users.id, older.user.id));
+    await getDb()
+      .update(users)
+      .set({ createdAt: new Date("2024-01-01T00:00:00.000Z") })
+      .where(eq(users.id, newer.user.id));
+
+    const fallback = await listUsers(
+      new Request("http://test/api/admin/users?q=route-sort&sort=password&dir=sideways"),
+    );
+    expect(fallback.status).toBe(200);
+    const fallbackBody = (await fallback.json()) as { users: { email: string }[] };
+    expect(fallbackBody.users.map((row) => row.email)).toEqual([
+      "aaa-route-sort@ex.com",
+      "mmm-route-sort@ex.com",
+    ]);
+
+    const byEmail = await listUsers(
+      new Request("http://test/api/admin/users?q=route-sort&sort=email&dir=asc"),
+    );
+    expect(byEmail.status).toBe(200);
+    const emailBody = (await byEmail.json()) as { users: { email: string }[] };
+    expect(emailBody.users.map((row) => row.email)).toEqual([
+      "aaa-route-sort@ex.com",
+      "mmm-route-sort@ex.com",
+    ]);
+
+    const byEmailDesc = await listUsers(
+      new Request("http://test/api/admin/users?q=route-sort&sort=email&dir=desc"),
+    );
+    const emailDescBody = (await byEmailDesc.json()) as { users: { email: string }[] };
+    expect(emailDescBody.users.map((row) => row.email)).toEqual([
+      "mmm-route-sort@ex.com",
+      "aaa-route-sort@ex.com",
+    ]);
+
     const badId = await getUser(new Request("http://test/api/admin/users/nope"), ctx("nope"));
     expect(badId.status).toBe(400);
 

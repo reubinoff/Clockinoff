@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { errors } from "@/lib/errors";
+import { parseAdminUserSort } from "@/lib/admin-sort";
 import { jsonError, ok, requireAdmin } from "@/server/http";
 import { listAdminUsers } from "@/server/services/admin";
 
@@ -20,9 +21,17 @@ export async function GET(req: Request): Promise<Response> {
       page: url.searchParams.get("page") ?? undefined,
     });
     if (!parsed.success) throw errors.validation("Invalid query");
+    // Unknown sort/dir fall back inside parseAdminUserSort. They are
+    // not validation errors, so a stale link still returns the list.
+    const sort = parseAdminUserSort(
+      url.searchParams.get("sort"),
+      url.searchParams.get("dir"),
+    );
     const result = await listAdminUsers({
       q: parsed.data.q,
       page: parsed.data.page,
+      sort: sort.sort,
+      dir: sort.dir,
     });
     return ok(result);
   } catch (err) {
