@@ -70,6 +70,15 @@ describe("admin routes", () => {
       const body = (await res.json()) as { error: { code: string } };
       expect(body.error.code).toBe("FORBIDDEN");
     }
+
+    const sorted = await listUsers(
+      new Request(
+        "http://test/api/admin/users?sort=created%3Bdrop%20table%20users&dir=asc",
+      ),
+    );
+    expect(sorted.status).toBe(403);
+    const sortedBody = (await sorted.json()) as { error: { code: string } };
+    expect(sortedBody.error.code).toBe("FORBIDDEN");
   });
 
   it("lets an admin list users and rejects a bad query", async () => {
@@ -115,6 +124,28 @@ describe("admin routes", () => {
       "aaa-route-sort@ex.com",
       "mmm-route-sort@ex.com",
     ]);
+
+    const unsafeSorts = [
+      ["Email", "asc"],
+      ["email", "ASC"],
+      ["CREATED", "Desc"],
+      ["created); drop table users; --", "asc"],
+      ["email", "asc; delete from users"],
+      ["' OR 1=1 --", "desc, (select 1)"],
+    ];
+    for (const [sort, dir] of unsafeSorts) {
+      const res = await listUsers(
+        new Request(
+          `http://test/api/admin/users?q=route-sort&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}`,
+        ),
+      );
+      expect(res.status).toBe(200);
+      const unsafeBody = (await res.json()) as { users: { email: string }[] };
+      expect(unsafeBody.users.map((row) => row.email)).toEqual([
+        "aaa-route-sort@ex.com",
+        "mmm-route-sort@ex.com",
+      ]);
+    }
 
     const byEmailDesc = await listUsers(
       new Request("http://test/api/admin/users?q=route-sort&sort=email&dir=desc"),

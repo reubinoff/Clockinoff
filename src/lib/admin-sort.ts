@@ -26,10 +26,20 @@ export function parseAdminUserSort(
   sort: string | null | undefined,
   dir: string | null | undefined,
 ): AdminUserSort {
+  // Omitted params use the default for that field. A present value that
+  // is not an exact allowlist match (wrong case, unknown key, injection)
+  // drops the whole pair back to created desc so a bad dir cannot keep
+  // a chosen column.
+  const sortOmitted = sort == null;
+  const dirOmitted = dir == null;
+  const sortOk = typeof sort === "string" && SORT_KEYS.has(sort);
+  const dirOk = dir === "asc" || dir === "desc";
+  if ((!sortOmitted && !sortOk) || (!dirOmitted && !dirOk)) {
+    return { sort: DEFAULT_ADMIN_USER_SORT, dir: DEFAULT_ADMIN_USER_SORT_DIR };
+  }
   return {
-    sort:
-      sort && SORT_KEYS.has(sort) ? (sort as AdminUserSortKey) : DEFAULT_ADMIN_USER_SORT,
-    dir: dir === "asc" || dir === "desc" ? dir : DEFAULT_ADMIN_USER_SORT_DIR,
+    sort: sortOk ? (sort as AdminUserSortKey) : DEFAULT_ADMIN_USER_SORT,
+    dir: dirOk ? dir : DEFAULT_ADMIN_USER_SORT_DIR,
   };
 }
 

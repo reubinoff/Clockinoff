@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { errors } from "@/lib/errors";
-import { parseAdminUserSort } from "@/lib/admin-sort";
 import { jsonError, ok, requireAdmin } from "@/server/http";
 import { listAdminUsers } from "@/server/services/admin";
 
@@ -21,17 +20,14 @@ export async function GET(req: Request): Promise<Response> {
       page: url.searchParams.get("page") ?? undefined,
     });
     if (!parsed.success) throw errors.validation("Invalid query");
-    // Unknown sort/dir fall back inside parseAdminUserSort. They are
-    // not validation errors, so a stale link still returns the list.
-    const sort = parseAdminUserSort(
-      url.searchParams.get("sort"),
-      url.searchParams.get("dir"),
-    );
+    // Raw sort/dir go to the service, which allowlists them onto Drizzle
+    // columns. Unknown, wrong-case, and injection values become created
+    // desc and still return 200.
     const result = await listAdminUsers({
       q: parsed.data.q,
       page: parsed.data.page,
-      sort: sort.sort,
-      dir: sort.dir,
+      sort: url.searchParams.get("sort"),
+      dir: url.searchParams.get("dir"),
     });
     return ok(result);
   } catch (err) {

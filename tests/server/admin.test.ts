@@ -492,6 +492,21 @@ describe("admin service", () => {
     expect(qa.total).toBe(1);
     expect(qa.users[0]?.email).toBe("zed-sort@ex.com");
 
+    const baseline = await emails();
+    const unsafe: Array<[string, string]> = [
+      ["Email", "ASC"],
+      ["CREATED", "Desc"],
+      ["created); drop table users; --", "asc"],
+      ["email", "asc; delete from users"],
+      ["' OR 1=1 --", "desc, (select pg_sleep(1))"],
+    ];
+    for (const [sort, dir] of unsafe) {
+      const listed = await listAdminUsers({ q: "sort@", sort, dir });
+      expect(listed.users.map((user) => user.email)).toEqual(baseline);
+    }
+    const survived = await listAdminUsers({ q: "sort@" });
+    expect(survived.total).toBe(3);
+
     for (let i = 0; i < ADMIN_PAGE_SIZE + 1; i += 1) {
       await insertUser(`page-sort-${String(i).padStart(2, "0")}@ex.com`);
     }

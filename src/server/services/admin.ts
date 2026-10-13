@@ -9,14 +9,13 @@ import {
   lt,
   sql,
   type SQL,
+  type SQLWrapper,
 } from "drizzle-orm";
 import type { AdminActionKind } from "@/lib/admin-bulk";
 import { ADMIN_GUARD } from "@/lib/admin-copy";
 import { asUserRole, type UserRole, type UserStatus } from "@/lib/admin-role";
 import {
-  DEFAULT_ADMIN_USER_SORT,
-  DEFAULT_ADMIN_USER_SORT_DIR,
-  type AdminUserSortDir,
+  parseAdminUserSort,
   type AdminUserSortKey,
 } from "@/lib/admin-sort";
 import { ApiError, errors } from "@/lib/errors";
@@ -131,35 +130,43 @@ function escapeLike(q: string): string {
   return q.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
-function adminUserOrder(sort: AdminUserSortKey, dir: AdminUserSortDir): SQL[] {
-  // Status is derived from blocked_at. Postgres sorts nulls as larger
-  // than any timestamp, which would put blocked users first on ASC.
-  // Rank active as 0 so A–Z style "active then blocked" matches the column.
-  const primary: SQL =
-    sort === "email"
-      ? sql`lower(${users.email})`
-      : sort === "role"
-        ? sql`${users.role}`
-        : sort === "status"
-          ? sql`case when ${users.blockedAt} is null then 0 else 1 end`
-          : sort === "activity"
-            ? entriesCountSql
-            : sql`${users.createdAt}`;
+// Status is derived from blocked_at. Postgres sorts nulls as larger
+// than any timestamp, which would put blocked users first on ASC.
+// Rank active as 0 so A–Z style "active then blocked" matches the column.
+const statusRankSql = sql`case when ${users.blockedAt} is null then 0 else 1 end`;
+
+// Request strings are never concatenated into ORDER BY. parseAdminUserSort
+// allowlists the key, then this map yields a Drizzle column (or a fixed
+// expression built only from columns). Activity has no users column; the
+// count subquery is the same constant the SELECT list uses.
+const ADMIN_USER_SORT_COLUMNS = {
+  email: users.email,
+  role: users.role,
+  status: statusRankSql,
+  created: users.createdAt,
+  activity: entriesCountSql,
+} as const satisfies Record<AdminUserSortKey, SQLWrapper>;
+
+function adminUserOrder(sort: string | null | undefined, dir: string | null | undefined): SQL[] {
+  const parsed = parseAdminUserSort(sort, dir);
+  const primary = ADMIN_USER_SORT_COLUMNS[parsed.sort];
   // Same direction on id so equal keys stay a total order and a flip
-  // reverses the tie group as well.
-  return dir === "asc" ? [asc(primary), asc(users.id)] : [desc(primary), desc(users.id)];
+  // reverses the tie group as well. dir is only the allowlisted asc|desc,
+  // which selects asc() or desc() — it is not interpolated.
+  return parsed.dir === "asc"
+    ? [asc(primary), asc(users.id)]
+    : [desc(primary), desc(users.id)];
 }
 
 export async function listAdminUsers(input: {
   q?: string;
   page?: number;
-  sort?: AdminUserSortKey;
-  dir?: AdminUserSortDir;
+  sort?: string | null;
+  dir?: string | null;
 }): Promise<AdminUserList> {
   const page = input.page && input.page > 0 ? Math.floor(input.page) : 1;
   const q = input.q?.trim() ?? "";
-  const sort = input.sort ?? DEFAULT_ADMIN_USER_SORT;
-  const dir = input.dir ?? DEFAULT_ADMIN_USER_SORT_DIR;
+  const parsedSort = parseAdminUserSort(input.sort, input.dir);
   const db = getDb();
   const filter =
     q.length > 0
@@ -182,7 +189,7 @@ export async function listAdminUsers(input: {
     })
     .from(users)
     .where(filter)
-    .orderBy(...adminUserOrder(sort, dir))
+    .orderBy(...adminUserOrder(parsedSort.sort, parsedSort.dir))
     .limit(ADMIN_PAGE_SIZE)
     .offset((page - 1) * ADMIN_PAGE_SIZE);
 

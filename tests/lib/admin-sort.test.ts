@@ -23,7 +23,7 @@ describe("parseAdminUserSort", () => {
     });
   });
 
-  it("allowlists visible columns and asc|desc independently", () => {
+  it("allowlists exact column keys and asc|desc", () => {
     expect(parseAdminUserSort("email", "asc")).toEqual({ sort: "email", dir: "asc" });
     expect(parseAdminUserSort("role", "desc")).toEqual({ sort: "role", dir: "desc" });
     expect(parseAdminUserSort("status", "asc")).toEqual({ sort: "status", dir: "asc" });
@@ -31,8 +31,20 @@ describe("parseAdminUserSort", () => {
       sort: "activity",
       dir: "desc",
     });
-    expect(parseAdminUserSort("email", "nope")).toEqual({ sort: "email", dir: "desc" });
-    expect(parseAdminUserSort("nope", "asc")).toEqual({ sort: "created", dir: "asc" });
+    expect(parseAdminUserSort("email", undefined)).toEqual({ sort: "email", dir: "desc" });
+    expect(parseAdminUserSort(undefined, "asc")).toEqual({ sort: "created", dir: "asc" });
+  });
+
+  it("falls back to created desc for wrong case and injection payloads", () => {
+    const fallback = { sort: "created" as const, dir: "desc" as const };
+    expect(parseAdminUserSort("Email", "asc")).toEqual(fallback);
+    expect(parseAdminUserSort("CREATED", "Desc")).toEqual(fallback);
+    expect(parseAdminUserSort("email", "ASC")).toEqual(fallback);
+    expect(parseAdminUserSort("email", "nope")).toEqual(fallback);
+    expect(parseAdminUserSort("nope", "asc")).toEqual(fallback);
+    expect(parseAdminUserSort("created); drop table users; --", "asc")).toEqual(fallback);
+    expect(parseAdminUserSort("email", "asc; delete from users")).toEqual(fallback);
+    expect(parseAdminUserSort("' OR 1=1 --", "desc, (select 1)")).toEqual(fallback);
   });
 });
 
