@@ -21,11 +21,20 @@ import {
   type AdminUserSortKey,
 } from "@/lib/admin-sort";
 import { ApiError, errors } from "@/lib/errors";
+import { logger } from "@/lib/logger";
 import { computeAmount } from "@/lib/money";
 import { enumerateDayKeys } from "@/lib/report";
 import { endOfDayExclusiveInZone, formatDate, startOfDayInZone } from "@/lib/tz";
 import { getDb } from "@/server/db/client";
-import { auditEvents, projects, sessions, timeEntries, users } from "@/server/db/schema";
+import {
+  auditEvents,
+  projects,
+  sessions,
+  timeEntries,
+  users,
+  type AuditResultBody,
+  type AuditTarget,
+} from "@/server/db/schema";
 
 export const ADMIN_PAGE_SIZE = 25;
 const MAX_STATS_DAYS = 366;
@@ -296,10 +305,84 @@ type GuardAction = "remove" | "block" | "unblock" | "promote" | "demote";
 interface MutateOptions {
   requestId?: string;
   recordAudit?: boolean;
+  clientIp?: string | null;
+  forwardedFor?: string | null;
 }
 
 function resolveRequestId(requestId: string | undefined): string {
   return requestId && requestId.length > 0 ? requestId : randomUUID();
+}
+
+interface ClosedAuditInput {
+  actorId: string;
+  actorEmail: string;
+  action: "remove" | "block";
+  targets: AuditTarget[];
+  requestId: string;
+  clientIp: string | null;
+  forwardedFor: string | null;
+  result: AuditResultBody;
+}
+
+async function insertClosedAudit(
+  tx: Pick<ReturnType<typeof getDb>, "insert">,
+  input: ClosedAuditInput,
+): Promise<void> {
+  await tx.insert(auditEvents).values({
+    actorUserId: input.actorId,
+    actorEmail: input.actorEmail,
+    action: input.action,
+    targets: input.targets,
+    requestId: input.requestId,
+    clientIp: input.clientIp,
+    forwardedFor: input.forwardedFor,
+    status: "completed",
+    result: input.result,
+    completedAt: new Date(),
+  });
+}
+
+export interface PendingAuditRow {
+  actorUserId: string;
+  actorEmail: string;
+  action: "remove" | "block";
+  targets: AuditTarget[];
+  requestId: string;
+  clientIp: string | null;
+  forwardedFor: string | null;
+}
+
+async function insertPendingAudit(row: PendingAuditRow): Promise<string> {
+  const [inserted] = await getDb()
+    .insert(auditEvents)
+    .values({
+      actorUserId: row.actorUserId,
+      actorEmail: row.actorEmail,
+      action: row.action,
+      targets: row.targets,
+      requestId: row.requestId,
+      clientIp: row.clientIp,
+      forwardedFor: row.forwardedFor,
+      status: "pending",
+    })
+    .returning({ id: auditEvents.id });
+  if (!inserted) throw new Error("audit insert returned no row");
+  return inserted.id;
+}
+
+let insertPendingAuditFn = insertPendingAudit;
+let beforeBulkTarget: ((index: number, id: string) => void | Promise<void>) | null = null;
+
+export function setPendingAuditInsert(
+  fn: ((row: PendingAuditRow) => Promise<string>) | null,
+): void {
+  insertPendingAuditFn = fn ?? insertPendingAudit;
+}
+
+export function setBeforeBulkTarget(
+  fn: ((index: number, id: string) => void | Promise<void>) | null,
+): void {
+  beforeBulkTarget = fn;
 }
 
 async function mutate(
@@ -321,9 +404,15 @@ async function mutate(
           .orderBy(asc(users.id))
           .for("update")
       : [];
+    const [actor] = await tx
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, actorId))
+      .limit(1);
     const [target] = await tx
       .select({
         id: users.id,
+        email: users.email,
         role: users.role,
         blockedAt: users.blockedAt,
       })
@@ -359,12 +448,15 @@ async function mutate(
     if (action === "remove") {
       await tx.delete(users).where(eq(users.id, targetId));
       if (recordAudit) {
-        await tx.insert(auditEvents).values({
-          actorUserId: actorId,
+        await insertClosedAudit(tx, {
+          actorId,
+          actorEmail: actor?.email ?? "",
           action: "remove",
-          targetIds: [targetId],
+          targets: [{ id: targetId, email: target.email }],
           requestId,
-          clientIp: null,
+          clientIp: opts?.clientIp ?? null,
+          forwardedFor: opts?.forwardedFor ?? null,
+          result: { removed: [targetId], skipped: [], failed: [] },
         });
       }
       return;
@@ -375,12 +467,15 @@ async function mutate(
       }
       await tx.delete(sessions).where(eq(sessions.userId, targetId));
       if (recordAudit) {
-        await tx.insert(auditEvents).values({
-          actorUserId: actorId,
+        await insertClosedAudit(tx, {
+          actorId,
+          actorEmail: actor?.email ?? "",
           action: "block",
-          targetIds: [targetId],
+          targets: [{ id: targetId, email: target.email }],
           requestId,
-          clientIp: null,
+          clientIp: opts?.clientIp ?? null,
+          forwardedFor: opts?.forwardedFor ?? null,
+          result: { removed: [targetId], skipped: [], failed: [] },
         });
       }
       return;
@@ -447,6 +542,7 @@ export interface BulkAdminOptions {
   confirmCount?: unknown;
   requestId?: string;
   clientIp?: string | null;
+  forwardedFor?: string | null;
 }
 
 function confirmCountMatches(value: unknown, expected: number): boolean {
@@ -483,20 +579,34 @@ async function assertBulkBlockAllowed(actorId: string, ids: readonly string[]): 
   }
 }
 
-async function writeBulkAudit(input: {
-  actorId: string;
-  action: "remove" | "block";
-  targetIds: string[];
-  requestId: string;
-  clientIp: string | null;
-}): Promise<void> {
-  await getDb().insert(auditEvents).values({
-    actorUserId: input.actorId,
-    action: input.action,
-    targetIds: input.targetIds,
-    requestId: input.requestId,
-    clientIp: input.clientIp,
-  });
+async function actorEmailOf(actorId: string): Promise<string> {
+  const [row] = await getDb()
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, actorId))
+    .limit(1);
+  return row?.email ?? "";
+}
+
+async function targetsWithEmail(ids: readonly string[]): Promise<AuditTarget[]> {
+  if (ids.length === 0) return [];
+  const rows = await getDb()
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(inArray(users.id, [...ids]));
+  const emailOf = new Map(rows.map((row) => [row.id, row.email]));
+  return ids.map((id) => ({ id, email: emailOf.get(id) ?? null }));
+}
+
+async function finishAudit(
+  id: string,
+  status: "completed" | "failed",
+  result: AuditResultBody,
+): Promise<void> {
+  await getDb()
+    .update(auditEvents)
+    .set({ status, result, completedAt: new Date() })
+    .where(eq(auditEvents.id, id));
 }
 
 // Applies one existing single-user mutator per id. Remove goes through
@@ -539,31 +649,59 @@ export async function bulkAdminUsers(
     await assertBulkBlockAllowed(actorId, unique);
   }
 
+  const audited = action === "remove" || action === "block";
+  let auditId: string | null = null;
+  if (audited) {
+    try {
+      auditId = await insertPendingAuditFn({
+        actorUserId: actorId,
+        actorEmail: await actorEmailOf(actorId),
+        action,
+        targets: await targetsWithEmail(targets),
+        requestId,
+        clientIp: options.clientIp ?? null,
+        forwardedFor: options.forwardedFor ?? null,
+      });
+    } catch (err) {
+      logger.exception("[audit] pending insert failed", err);
+      throw err;
+    }
+  }
+
   const auditOpts = { requestId, recordAudit: false as const };
   let applied = 0;
-  const appliedIds: string[] = [];
-  for (const id of targets) {
+  const removed: string[] = [];
+  const skippedIds: string[] = [];
+  const failed: string[] = [];
+  for (let index = 0; index < targets.length; index += 1) {
+    const id = targets[index] ?? "";
     try {
+      if (beforeBulkTarget) await beforeBulkTarget(index, id);
       if (action === "remove") await removeAdminUser(actorId, id, auditOpts);
       else if (action === "block") await blockAdminUser(actorId, id, auditOpts);
       else if (action === "unblock") await unblockAdminUser(actorId, id);
       else if (action === "promote") await promoteAdminUser(actorId, id);
       else await demoteAdminUser(actorId, id);
       applied += 1;
-      appliedIds.push(id);
+      removed.push(id);
     } catch (err) {
-      if (isBulkSkip(err)) continue;
+      if (isBulkSkip(err)) {
+        skippedIds.push(id);
+        continue;
+      }
+      failed.push(id);
+      if (auditId) {
+        try {
+          await finishAudit(auditId, "failed", { removed, skipped: skippedIds, failed });
+        } catch (updateErr) {
+          logger.exception("[audit] result update failed", updateErr);
+        }
+      }
       throw err;
     }
   }
-  if (action === "remove" || action === "block") {
-    await writeBulkAudit({
-      actorId,
-      action,
-      targetIds: appliedIds,
-      requestId,
-      clientIp: action === "remove" ? (options.clientIp ?? null) : null,
-    });
+  if (auditId) {
+    await finishAudit(auditId, "completed", { removed, skipped: skippedIds, failed });
   }
   return { applied, skipped: unique.length - applied };
 }

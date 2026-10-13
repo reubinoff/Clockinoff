@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { clientIpForRecord, clientIpFromHeaders, socketAddressFromRequest } from "@/lib/client-ip";
+import {
+  clientIpForRecord,
+  clientIpFromHeaders,
+  forwardedForRaw,
+  socketAddressFromRequest,
+} from "@/lib/client-ip";
 
 function headers(map: Record<string, string | undefined>): {
   get(name: string): string | null;
@@ -179,26 +184,62 @@ describe("clientIpFromHeaders", () => {
 });
 
 describe("clientIpForRecord", () => {
-  it("uses the first X-Forwarded-For hop and ignores the rest", () => {
+  it("trusts X-Azure-ClientIP over X-Client-IP and X-Forwarded-For", () => {
     expect(
-      clientIpForRecord(headers({ "x-forwarded-for": "198.51.100.8, 203.0.113.50" })),
-    ).toBe("198.51.100.8");
+      clientIpForRecord(
+        headers({
+          "x-azure-clientip": "203.0.113.77:44321",
+          "x-client-ip": "203.0.113.66",
+          "x-forwarded-for": "1.2.3.4, 198.51.100.8",
+        }),
+      ),
+    ).toBe("203.0.113.77");
   });
 
-  it("strips a trailing port on that first hop", () => {
+  it("trusts X-Client-IP when X-Azure-ClientIP is absent", () => {
+    expect(
+      clientIpForRecord(
+        headers({
+          "x-client-ip": "203.0.113.66",
+          "x-forwarded-for": "1.2.3.4, 198.51.100.8",
+        }),
+      ),
+    ).toBe("203.0.113.66");
+    expect(
+      clientIpForRecord(
+        headers({
+          "x-azure-clientip": "   ",
+          "x-client-ip": "203.0.113.66",
+        }),
+      ),
+    ).toBe("203.0.113.66");
+  });
+
+  it("ignores a spoofed first X-Forwarded-For hop and uses the last hop", () => {
+    expect(
+      clientIpForRecord(headers({ "x-forwarded-for": "1.2.3.4, 203.0.113.50" })),
+    ).toBe("203.0.113.50");
     expect(
       clientIpForRecord(headers({ "x-forwarded-for": "198.51.100.8:44321, 203.0.113.50" })),
-    ).toBe("198.51.100.8");
+    ).toBe("203.0.113.50");
+    expect(forwardedForRaw(headers({ "x-forwarded-for": "  1.2.3.4, 203.0.113.50  " }))).toBe(
+      "1.2.3.4, 203.0.113.50",
+    );
+    expect(forwardedForRaw(headers({}))).toBeNull();
+    expect(forwardedForRaw(headers({ "x-forwarded-for": "   " }))).toBeNull();
   });
 
-  it("falls back to the socket address when the header is missing", () => {
+  it("falls back to the socket address when no trusted header is present", () => {
     expect(clientIpForRecord(headers({}), "192.0.2.10")).toBe("192.0.2.10");
     expect(clientIpForRecord(headers({}), "192.0.2.10:4000")).toBe("192.0.2.10");
     expect(clientIpForRecord(headers({}))).toBeNull();
     expect(clientIpForRecord(headers({}), "   ")).toBeNull();
     expect(
       clientIpForRecord(headers({ "x-forwarded-for": " , 203.0.113.1" }), "192.0.2.1"),
-    ).toBe("192.0.2.1");
+    ).toBe("203.0.113.1");
+    expect(clientIpForRecord(headers({ "x-forwarded-for": " , , " }), "192.0.2.1")).toBe(
+      "192.0.2.1",
+    );
   });
 
   it("reads a socket address hung off the request", () => {

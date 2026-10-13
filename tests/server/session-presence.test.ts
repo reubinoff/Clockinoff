@@ -1,6 +1,13 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { hashSessionToken, LAST_SEEN_THROTTLE_MS, createSession, getSessionUser } from "@/server/auth/session";
+import { logger } from "@/lib/logger";
+import {
+  hashSessionToken,
+  LAST_SEEN_THROTTLE_MS,
+  createSession,
+  getSessionUser,
+  setSessionSideEffects,
+} from "@/server/auth/session";
 import { login, register } from "@/server/auth/service";
 import { getDb } from "@/server/db/client";
 import { sessions, users } from "@/server/db/schema";
@@ -11,7 +18,13 @@ const PW = "correct-horse-battery";
 
 describe("session presence", () => {
   beforeEach(async () => {
+    setSessionSideEffects(null);
     await truncateAll();
+  });
+
+  afterEach(() => {
+    setSessionSideEffects(null);
+    vi.restoreAllMocks();
   });
 
   it("stores the client IP at creation and throttles last_seen_at to 5 minutes", async () => {
@@ -70,5 +83,47 @@ describe("session presence", () => {
       .where(eq(sessions.id, hashSessionToken(signedIn.session.id)));
     expect(loginRow[0]?.clientIp).toBe("192.0.2.9");
     expect(await getDb().select({ id: users.id }).from(users)).toHaveLength(1);
+  });
+
+  it("still signs in when the session client_ip write fails", async () => {
+    await register({ email: "ip-fail@ex.com", password: PW, clientIp: "192.0.2.20" });
+    const spy = vi.spyOn(logger, "exception").mockImplementation(() => {});
+    setSessionSideEffects({
+      persistClientIp: async () => {
+        throw new Error("client_ip write failed");
+      },
+    });
+    const signedIn = await login({
+      email: "ip-fail@ex.com",
+      password: PW,
+      clientIp: "192.0.2.21",
+    });
+    expect(signedIn.user.email).toBe("ip-fail@ex.com");
+    const row = await getDb()
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, hashSessionToken(signedIn.session.id)));
+    expect(row[0]?.clientIp).toBeNull();
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("still returns the user when the last_seen_at write fails", async () => {
+    const { user } = await makeUser("seen-fail@ex.com");
+    const createdAt = new Date("2026-10-11T12:00:00.000Z");
+    const session = await createSession(user.id, createdAt, "203.0.113.40");
+    const spy = vi.spyOn(logger, "exception").mockImplementation(() => {});
+    setSessionSideEffects({
+      touchLastSeen: async () => {
+        throw new Error("last_seen write failed");
+      },
+    });
+    const later = new Date(createdAt.getTime() + LAST_SEEN_THROTTLE_MS);
+    expect(await getSessionUser(session.id, later)).toMatchObject({ id: user.id });
+    const row = await getDb()
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, hashSessionToken(session.id)));
+    expect(row[0]?.lastSeenAt?.toISOString()).toBe(createdAt.toISOString());
+    expect(spy).toHaveBeenCalled();
   });
 });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { attachAdminActor } from "@/lib/admin-actor";
-import { clientIpForRecord, socketAddressFromRequest } from "@/lib/client-ip";
+import { clientIpForRecord, forwardedForRaw, socketAddressFromRequest } from "@/lib/client-ip";
 import { ApiError, toErrorBody, errors } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { requestIdFrom } from "@/lib/request-id";
@@ -40,10 +40,15 @@ export async function requireAdmin(): Promise<SessionUser> {
   return user;
 }
 
-export function adminRequestMeta(req: Request): { requestId: string; clientIp: string | null } {
+export function adminRequestMeta(req: Request): {
+  requestId: string;
+  clientIp: string | null;
+  forwardedFor: string | null;
+} {
   return {
     requestId: requestIdFrom(req),
     clientIp: clientIpForRecord(req.headers, socketAddressFromRequest(req)),
+    forwardedFor: forwardedForRaw(req.headers),
   };
 }
 

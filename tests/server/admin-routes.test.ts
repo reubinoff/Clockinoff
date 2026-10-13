@@ -11,6 +11,7 @@ import { GET as stats } from "@/app/api/admin/stats/route";
 import { ADMIN_GUARD, BULK_REMOVE_COPY } from "@/lib/admin-copy";
 import { getDb } from "@/server/db/client";
 import { auditEvents, users } from "@/server/db/schema";
+import { setPendingAuditInsert } from "@/server/services/admin";
 import { makeUser } from "../helpers";
 import { truncateAll } from "../setup";
 
@@ -29,6 +30,7 @@ function ctx(id: string): { params: Promise<{ id: string }> } {
 
 describe("admin routes", () => {
   beforeEach(async () => {
+    setPendingAuditInsert(null);
     await truncateAll();
     cookieValue = undefined;
   });
@@ -291,7 +293,8 @@ describe("admin routes", () => {
         headers: {
           "content-type": "application/json",
           "x-request-id": "req-ok",
-          "x-forwarded-for": "198.51.100.8, 203.0.113.50",
+          "x-azure-clientip": "203.0.113.77",
+          "x-forwarded-for": "1.2.3.4, 198.51.100.8",
         },
         body: JSON.stringify({
           action: "remove",
@@ -308,10 +311,40 @@ describe("admin routes", () => {
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({
       actorUserId: user.id,
+      actorEmail: "boss-remove@ex.com",
       action: "remove",
       requestId: "req-ok",
-      clientIp: "198.51.100.8",
-      targetIds: [member.user.id],
+      clientIp: "203.0.113.77",
+      forwardedFor: "1.2.3.4, 198.51.100.8",
+      status: "completed",
+      targets: [{ id: member.user.id, email: "member-remove@ex.com" }],
     });
+  });
+
+  it("returns 500 and deletes nothing when the pending audit insert fails", async () => {
+    const { session, user } = await makeUser("boss-audit-fail@ex.com");
+    const member = await makeUser("member-audit-fail@ex.com");
+    await getDb().update(users).set({ role: "admin" }).where(eq(users.id, user.id));
+    cookieValue = session.id;
+    setPendingAuditInsert(async () => {
+      throw new Error("audit insert failed");
+    });
+    const res = await bulkUsers(
+      new Request("http://test/api/admin/users/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "remove",
+          ids: [member.user.id],
+          confirmCount: 1,
+        }),
+      }),
+    );
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("INTERNAL");
+    const still = await getDb().select({ id: users.id }).from(users).where(eq(users.id, member.user.id));
+    expect(still).toHaveLength(1);
+    expect(await getDb().select().from(auditEvents)).toHaveLength(0);
   });
 });

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  jsonb,
   numeric,
   pgTable,
   primaryKey,
@@ -10,6 +11,17 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+export interface AuditTarget {
+  id: string;
+  email: string | null;
+}
+
+export interface AuditResultBody {
+  removed: string[];
+  skipped: string[];
+  failed: string[];
+}
 
 export const users = pgTable(
   "users",
@@ -167,10 +179,18 @@ export const timeEntryTags = pgTable(
 export const auditEvents = pgTable("audit_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  // Snapshot so the actor survives ON DELETE SET NULL on actor_user_id.
+  actorEmail: text("actor_email").notNull(),
   action: text("action").notNull(),
-  targetIds: uuid("target_ids").array().notNull(),
+  // Each target's id and email. Written once; the app role cannot update it.
+  targets: jsonb("targets").$type<AuditTarget[]>().notNull(),
   requestId: text("request_id").notNull(),
   clientIp: text("client_ip"),
+  forwardedFor: text("forwarded_for"),
+  // The runtime role may UPDATE only these three columns (0008 grants).
+  status: text("status").notNull().default("pending"),
+  result: jsonb("result").$type<AuditResultBody>(),
+  completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
     .notNull()
     .defaultNow(),

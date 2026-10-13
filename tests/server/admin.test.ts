@@ -24,6 +24,8 @@ import {
   listAdminUsers,
   promoteAdminUser,
   removeAdminUser,
+  setBeforeBulkTarget,
+  setPendingAuditInsert,
   unblockAdminUser,
 } from "@/server/services/admin";
 import { startOfDayInZone } from "@/lib/tz";
@@ -47,6 +49,8 @@ async function insertUser(email: string, role: "user" | "admin" = "user"): Promi
 
 describe("admin service", () => {
   beforeEach(async () => {
+    setPendingAuditInsert(null);
+    setBeforeBulkTarget(null);
     await truncateAll();
   });
 
@@ -110,7 +114,9 @@ describe("admin service", () => {
     expect(audit).toHaveLength(1);
     expect(audit[0]?.action).toBe("remove");
     expect(audit[0]?.actorUserId).toBe(actor.user.id);
-    expect(audit[0]?.targetIds).toEqual([member.id]);
+    expect(audit[0]?.actorEmail).toBe("actor@ex.com");
+    expect(audit[0]?.status).toBe("completed");
+    expect(audit[0]?.targets).toEqual([{ id: member.id, email: "member@ex.com" }]);
   });
 
   it("blocks and unblocks, denies self-block, and kills sessions plus login", async () => {
@@ -138,6 +144,10 @@ describe("admin service", () => {
 
     const again = await blockAdminUser(actor.user.id, victim.user.id);
     expect(again.status).toBe("blocked");
+    const singleBlock = await getDb().select().from(auditEvents);
+    expect(singleBlock.length).toBeGreaterThan(0);
+    expect(singleBlock[0]?.actorEmail).toBe("actor-block@ex.com");
+    expect(singleBlock[0]?.targets).toEqual([{ id: victim.user.id, email: "victim@ex.com" }]);
 
     const open = await unblockAdminUser(actor.user.id, victim.user.id);
     expect(open.status).toBe("active");
@@ -212,11 +222,19 @@ describe("admin service", () => {
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({
       actorUserId: actor.user.id,
+      actorEmail: "actor-bulk@ex.com",
       action: "remove",
       requestId: "bulk-cascade",
       clientIp: "203.0.113.9",
+      status: "completed",
     });
-    expect(audit[0]?.targetIds?.slice().sort()).toEqual([keep.id, victim.id].sort());
+    expect(audit[0]?.targets?.slice().sort((a, b) => a.id.localeCompare(b.id))).toEqual(
+      [
+        { id: keep.id, email: "keep@ex.com" },
+        { id: victim.id, email: "gone@ex.com" },
+      ].sort((a, b) => a.id.localeCompare(b.id)),
+    );
+    expect(audit[0]?.result?.removed.slice().sort()).toEqual([keep.id, victim.id].sort());
 
     const remaining = await db.select({ id: users.id }).from(users);
     expect(remaining.map((row) => row.id)).toEqual([actor.user.id]);
@@ -259,7 +277,16 @@ describe("admin service", () => {
       .from(auditEvents)
       .where(eq(auditEvents.action, "block"));
     expect(blockAudit).toHaveLength(1);
-    expect(blockAudit[0]?.targetIds).toEqual([member.id]);
+    expect(blockAudit[0]?.actorEmail).toBe("actor-mix@ex.com");
+    expect(blockAudit[0]?.targets).toEqual([
+      { id: member.id, email: "member-mix@ex.com" },
+      { id: "00000000-0000-4000-8000-000000000099", email: null },
+    ]);
+    expect(blockAudit[0]?.result).toEqual({
+      removed: [member.id],
+      skipped: ["00000000-0000-4000-8000-000000000099"],
+      failed: [],
+    });
     expect(blockAudit[0]?.actorUserId).toBe(actor.user.id);
 
     const opened = await bulkAdminUsers(actor.user.id, "unblock", [member.id]);
@@ -321,6 +348,53 @@ describe("admin service", () => {
     expect(ok).toEqual({ applied: 1, skipped: 2 });
     await expect(getAdminUser(member.id)).rejects.toMatchObject({ status: 404 });
     expect((await getAdminUser(admin.id)).user.role).toBe("admin");
+  });
+
+  it("deletes nothing when the pending audit insert fails", async () => {
+    const actor = await makeUser("actor-audit-fail@ex.com");
+    const member = await insertUser("member-audit-fail@ex.com");
+    await setRole(actor.user.id, "admin");
+    setPendingAuditInsert(async () => {
+      throw new Error("audit insert failed");
+    });
+    await expect(
+      bulkAdminUsers(actor.user.id, "remove", [member.id], { confirmCount: 1 }),
+    ).rejects.toThrow("audit insert failed");
+    expect((await getAdminUser(member.id)).user.email).toBe("member-audit-fail@ex.com");
+    expect(await getDb().select().from(auditEvents)).toHaveLength(0);
+  });
+
+  it("keeps the pending audit row when a delete fails mid-loop", async () => {
+    const actor = await makeUser("actor-mid@ex.com");
+    const first = await insertUser("first-mid@ex.com");
+    const second = await insertUser("second-mid@ex.com");
+    await setRole(actor.user.id, "admin");
+    setBeforeBulkTarget(async (index) => {
+      if (index === 1) throw new Error("delete failed mid-loop");
+    });
+    await expect(
+      bulkAdminUsers(actor.user.id, "remove", [first.id, second.id], {
+        confirmCount: 2,
+        requestId: "mid-loop",
+      }),
+    ).rejects.toThrow("delete failed mid-loop");
+    await expect(getAdminUser(first.id)).rejects.toMatchObject({ status: 404 });
+    expect((await getAdminUser(second.id)).user.email).toBe("second-mid@ex.com");
+    const audit = await getDb().select().from(auditEvents);
+    expect(audit).toHaveLength(1);
+    expect(audit[0]?.status).toBe("failed");
+    expect(audit[0]?.actorEmail).toBe("actor-mid@ex.com");
+    expect(audit[0]?.requestId).toBe("mid-loop");
+    expect(audit[0]?.targets).toEqual([
+      { id: first.id, email: "first-mid@ex.com" },
+      { id: second.id, email: "second-mid@ex.com" },
+    ]);
+    expect(audit[0]?.result).toEqual({
+      removed: [first.id],
+      skipped: [],
+      failed: [second.id],
+    });
+    expect(audit[0]?.completedAt).toBeInstanceOf(Date);
   });
 
   it("returns per-user stats and instance stats over a range", async () => {

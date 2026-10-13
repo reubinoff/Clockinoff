@@ -435,7 +435,7 @@ services in `src/server/services/*`. Every error is shaped as
 | `GET` | `/api/export/pdf?from&to` | **from/to required**; empty → "No entries" page, 200 |
 | `GET` | `/api/admin/users` | admin only; `?q` email search, `?page` (~25), `?sort` (`email` \| `role` \| `status` \| `created` \| `activity`), `?dir` (`asc` \| `desc`). Invalid sort/dir fall back to created desc. Ties break on id. |
 | `GET` / `DELETE` | `/api/admin/users/:id` | detail + hard-delete; 400 when the target is an admin or the caller |
-| `POST` | `/api/admin/users/bulk` | `{ action, ids, confirmCount? }`. Remove skips admins and the caller; `confirmCount` must equal that effective count or the response is 400. More than 25 ids is 400 (the list is not truncated). Block returns 400 if any id is an admin or the caller. Other actions skip ineligible ids. Remove and block write an `audit_events` row |
+| `POST` | `/api/admin/users/bulk` | `{ action, ids, confirmCount? }`. Remove skips admins and the caller; `confirmCount` must equal that effective count or the response is 400. More than 25 ids is 400 (the list is not truncated). Block returns 400 if any id is an admin or the caller. Other actions skip ineligible ids. Remove and block insert an `audit_events` row (actor email, targets as `{id, email}`, raw `X-Forwarded-For`) before the per-id loop, then update `status` / `result` / `completed_at`. If that insert fails, bulk remove returns 500 and deletes nothing |
 | `POST` | `/api/admin/users/:id/block` | deny login, delete sessions; no self-block |
 | `POST` | `/api/admin/users/:id/unblock` | clear block |
 | `POST` | `/api/admin/users/:id/promote` | role → admin |
@@ -610,7 +610,7 @@ of truth; the short version is:
 
 The pool and the migrate script accept a passwordless `DATABASE_URL`
 backed by Microsoft Entra. When the URL has no password component —
-e.g. `postgresql://<runtime-role>@<pg-host>:5432/<db>?sslmode=verify-full` —
+e.g. `postgresql://clockinoff-prod@<pg-host>:5432/<db>?sslmode=verify-full` —
 the app mints a short-lived access token for the Azure Postgres Entra
 scope and feeds it to `pg` as the password. Tokens are cached
 in-process until shortly before expiry and refreshed on new pool
@@ -620,8 +620,11 @@ connections.
 
 - **Runtime pool** (`src/server/db/client.ts`) — authenticates via
   `DefaultAzureCredential` (on App Service, the system-assigned
-  managed identity / `<runtime-role>`, DML-only). All request-handling
-  queries go through this identity.
+  managed identity). The Postgres role is literally `clockinoff-prod`
+  (quote it in SQL; the hyphen is part of the name) and is DML-only.
+  All request-handling queries go through this identity. Prod default
+  privileges do **not** apply to tables the migrator creates, so each
+  new table needs an explicit `GRANT`.
 - **Startup migrator** (`scripts/migrate.mjs`, run before `node
   server.js`) — authenticates via `ManagedIdentityCredential` pinned
   to a user-assigned managed identity (`<migrator-uami>`). That UAMI
@@ -632,7 +635,7 @@ connections.
   That variable is **required in production** when AAD auth is on
   (Nati confirmed the App Setting is set). Non-production may omit it
   and fall back to `DEFAULT_MIGRATOR_PG_USER` in `scripts/migrate.mjs`.
-  The passwordless URL's `<runtime-role>` is only correct for the
+  The passwordless URL's `clockinoff-prod` user is only correct for the
   runtime pool. The Entra principal in the token must match the
   Postgres role — do not send the migrator token as the runtime user.
 
@@ -645,9 +648,27 @@ not own them. In AAD / migrator mode, `scripts/migrate.mjs` checks that
 the connected role can alter those tables before it applies pending SQL
   and exits 1 if it cannot (the error names the connected role and the
   current owner). The script does not run `ALTER ... OWNER TO`. Transfer
-ownership in Azure / Postgres out of band, then redeploy. CD fails the
-job if `/api/health` does not return `{ ok: true }` after deploy, so a
-startup migrate failure is not reported as success.
+ownership in Azure / Postgres out of band, then redeploy.
+
+`audit_events` (`drizzle/0008_audit_events_grants.sql`) is owned by the
+migrator role (`PG_MIGRATOR_PG_USER`, code default
+`uami-clockinoff-migrator`). The migration grants the runtime role only:
+
+```sql
+GRANT SELECT, INSERT ON audit_events TO "clockinoff-prod";
+GRANT UPDATE (status, result, completed_at) ON audit_events TO "clockinoff-prod";
+```
+
+No `DELETE`, no `TRUNCATE`, and no table-level `UPDATE`. `id` is
+`gen_random_uuid()`, so there is no sequence and no `USAGE` grant.
+The `GRANT` runs only when role `clockinoff-prod` already exists;
+local and CI Postgres skip it. Nati can check prod read-only:
+`\dp audit_events` (SELECT, INSERT, and column UPDATE on `status`,
+`result`, `completed_at` only), owner is the migrator role, and
+`clockinoff-prod` has no DELETE or TRUNCATE.
+
+CD fails the job if `/api/health` does not return `{ ok: true }` after
+deploy, so a startup migrate failure is not reported as success.
 
 **TLS (`sslmode`, #139).** Production `DATABASE_URL` must use
 `sslmode=verify-full`. Boot (`src/instrumentation.ts`) and

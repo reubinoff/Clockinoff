@@ -67,20 +67,46 @@ export function clientIpFromHeaders(headers: HeaderReader): string {
   return "unknown";
 }
 
-// IP stored on a new session and on a bulk-remove audit row (#219).
-// The first X-Forwarded-For hop is the address the header lists first.
-// Rate-limit keys stay on the right-most hop (`clientIpFromHeaders`, #30)
-// so a client-supplied prefix cannot reset those buckets. When the header
-// is missing, use the socket address the app itself accepted.
+// IP stored on a new session and on an audit row (#219).
+// Azure App Service's front end sets X-Azure-ClientIP (and some stacks
+// set X-Client-IP) to the address it observed. Those win over
+// X-Forwarded-For, because the left-most XFF hop is client-supplied and
+// can be spoofed. When neither trusted header is present, use the
+// right-most XFF hop (the proxy-appended address), then the socket.
+// Rate-limit keys stay on `clientIpFromHeaders` (#30) and do not read
+// X-Azure-ClientIP / X-Client-IP.
+function headerIp(headers: HeaderReader, name: string): string | null {
+  const raw = headers.get(name)?.trim();
+  if (!raw) return null;
+  return stripPort(raw);
+}
+
+function lastForwardedHop(headers: HeaderReader): string | null {
+  const xff = headers.get("x-forwarded-for");
+  if (!xff) return null;
+  const parts = xff.split(",");
+  for (let i = parts.length - 1; i >= 0; i -= 1) {
+    const candidate = parts[i]?.trim();
+    if (candidate) return stripPort(candidate);
+  }
+  return null;
+}
+
+export function forwardedForRaw(headers: HeaderReader): string | null {
+  const xff = headers.get("x-forwarded-for");
+  if (!xff) return null;
+  const trimmed = xff.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export function clientIpForRecord(
   headers: HeaderReader,
   socketAddress?: string | null,
 ): string | null {
-  const xff = headers.get("x-forwarded-for");
-  if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return stripPort(first);
-  }
+  const trusted = headerIp(headers, "x-azure-clientip") ?? headerIp(headers, "x-client-ip");
+  if (trusted) return trusted;
+  const hop = lastForwardedHop(headers);
+  if (hop) return hop;
   const socket = socketAddress?.trim();
   if (socket) return stripPort(socket);
   return null;

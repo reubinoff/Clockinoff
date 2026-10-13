@@ -38,6 +38,7 @@ export async function POST(req: Request): Promise<Response> {
       confirmCount: body.confirmCount,
       requestId: meta.requestId,
       clientIp: meta.clientIp,
+      forwardedFor: meta.forwardedFor,
     });
     return ok(result);
   } catch (err) {

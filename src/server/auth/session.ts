@@ -3,6 +3,7 @@ import { and, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-or
 import { getDb } from "@/server/db/client";
 import { sessions, users } from "@/server/db/schema";
 import { tokenId } from "@/lib/id";
+import { logger } from "@/lib/logger";
 import { asUserRole, type UserRole, type UserStatus } from "@/lib/admin-role";
 
 export const SESSION_COOKIE = "timely_session";
@@ -60,7 +61,7 @@ export async function createSession(
       expiresAt,
       createdAt: now,
       lastSeenAt: now,
-      clientIp,
+      clientIp: null,
     });
     const extras = await tx
       .select({ id: sessions.id })
@@ -77,6 +78,13 @@ export async function createSession(
       );
     }
   });
+  if (clientIp) {
+    try {
+      await sessionSideEffects.persistClientIp(tokenHash, clientIp);
+    } catch (err) {
+      logger.exception("[sessions] client_ip write failed", err);
+    }
+  }
   return { id: rawToken, expiresAt };
 }
 
@@ -102,8 +110,16 @@ export async function getSessionUser(
     .limit(1);
   const row = rows[0];
   if (!row || row.blockedAt) return null;
-  await touchSessionLastSeen(tokenHash, now);
+  try {
+    await sessionSideEffects.touchLastSeen(tokenHash, now);
+  } catch (err) {
+    logger.exception("[sessions] last_seen_at write failed", err);
+  }
   return sessionUserFromRow(row);
+}
+
+async function persistSessionClientIp(tokenHash: string, clientIp: string): Promise<void> {
+  await getDb().update(sessions).set({ clientIp }).where(eq(sessions.id, tokenHash));
 }
 
 async function touchSessionLastSeen(tokenHash: string, now: Date): Promise<void> {
@@ -117,6 +133,19 @@ async function touchSessionLastSeen(tokenHash: string, now: Date): Promise<void>
         or(isNull(sessions.lastSeenAt), lte(sessions.lastSeenAt, cutoff)),
       ),
     );
+}
+
+const realSessionSideEffects = {
+  persistClientIp: persistSessionClientIp,
+  touchLastSeen: touchSessionLastSeen,
+};
+
+let sessionSideEffects = realSessionSideEffects;
+
+export function setSessionSideEffects(
+  next: Partial<typeof realSessionSideEffects> | null,
+): void {
+  sessionSideEffects = next ? { ...realSessionSideEffects, ...next } : realSessionSideEffects;
 }
 
 export async function deleteSession(sessionId: string | null | undefined): Promise<void> {
