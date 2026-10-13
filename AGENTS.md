@@ -665,10 +665,14 @@ No `DELETE`, no `TRUNCATE`, and no table-level `UPDATE`. `id` is
 If role `clockinoff-prod` is missing, the migration raises and does
 not skip the grants, unless
 `current_setting('clockinoff.allow_missing_app_role', true) = 'on'`.
+That setting may be set only in CI workflow and local test setup
+(today the grant test uses `SET LOCAL` inside the test transaction).
+Do not put it in the production `DATABASE_URL`, App Settings, a
+Dockerfile, `.github/workflows/cd.yml`, or the migrator's environment.
 CI (`.github/workflows/ci.yml`, `nightly.yml`) and the Vitest setup
 (`tests/setup.ts`) run `scripts/ensure-app-role.mjs` /
 `CREATE ROLE "clockinoff-prod" NOLOGIN` before migrating, so the grant
-path runs in CI. Nati can check prod read-only: `\dp audit_events`
+path runs in CI without the bypass. Nati can check prod read-only: `\dp audit_events`
 (SELECT, INSERT, and column UPDATE on `status`, `result`,
 `completed_at` only), owner is the migrator role, and
 `clockinoff-prod` has no DELETE or TRUNCATE.
