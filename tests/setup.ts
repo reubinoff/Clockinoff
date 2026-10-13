@@ -13,7 +13,22 @@ if (!process.env.OAUTH_STATE_SECRET) {
   process.env.OAUTH_STATE_SECRET = "test-oauth-state-secret-test-oauth-x";
 }
 
+async function ensureAppRole(): Promise<void> {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query(
+      "SELECT 1 FROM pg_roles WHERE rolname = 'clockinoff-prod'",
+    );
+    if (rows.length === 0) {
+      await client.query('CREATE ROLE "clockinoff-prod" NOLOGIN');
+    }
+  } finally {
+    client.release();
+  }
+}
+
 beforeAll(async () => {
+  await ensureAppRole();
   await runMigrations();
 });
 

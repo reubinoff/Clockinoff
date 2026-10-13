@@ -62,8 +62,33 @@ export default async function globalSetup(): Promise<void> {
     DATABASE_URL_TEST: targetUrl,
   };
 
+  await runEnsureAppRole(childEnv);
   await runMigrateCli(childEnv);
   console.log("[playwright] app DB migrate completed.");
+}
+
+function runEnsureAppRole(env: NodeJS.ProcessEnv): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("node", ["scripts/ensure-app-role.mjs"], {
+      env,
+      stdio: "inherit",
+      shell: true,
+    });
+    child.on("error", reject);
+    child.on("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          `[playwright] ensure-app-role exited with ${
+            signal ? `signal ${signal}` : `code ${code}`
+          }`,
+        ),
+      );
+    });
+  });
 }
 
 function runMigrateCli(env: NodeJS.ProcessEnv): Promise<void> {

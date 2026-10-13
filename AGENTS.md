@@ -118,6 +118,7 @@ Prerequisites: Node.js ≥ 24 (CI uses Node 24), Docker for Postgres.
 docker compose up -d        # starts Postgres 16 with timely + timely_test DBs
 npm install
 cp .env.example .env        # defaults match docker-compose; do NOT commit .env
+node scripts/ensure-app-role.mjs  # NOLOGIN role the audit grants require
 npm run db:migrate          # apply drizzle migrations
 npm run dev                 # http://localhost:3000
 ```
@@ -661,10 +662,15 @@ GRANT UPDATE (status, result, completed_at) ON audit_events TO "clockinoff-prod"
 
 No `DELETE`, no `TRUNCATE`, and no table-level `UPDATE`. `id` is
 `gen_random_uuid()`, so there is no sequence and no `USAGE` grant.
-The `GRANT` runs only when role `clockinoff-prod` already exists;
-local and CI Postgres skip it. Nati can check prod read-only:
-`\dp audit_events` (SELECT, INSERT, and column UPDATE on `status`,
-`result`, `completed_at` only), owner is the migrator role, and
+If role `clockinoff-prod` is missing, the migration raises and does
+not skip the grants, unless
+`current_setting('clockinoff.allow_missing_app_role', true) = 'on'`.
+CI (`.github/workflows/ci.yml`, `nightly.yml`) and the Vitest setup
+(`tests/setup.ts`) run `scripts/ensure-app-role.mjs` /
+`CREATE ROLE "clockinoff-prod" NOLOGIN` before migrating, so the grant
+path runs in CI. Nati can check prod read-only: `\dp audit_events`
+(SELECT, INSERT, and column UPDATE on `status`, `result`,
+`completed_at` only), owner is the migrator role, and
 `clockinoff-prod` has no DELETE or TRUNCATE.
 
 CD fails the job if `/api/health` does not return `{ ok: true }` after

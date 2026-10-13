@@ -82,6 +82,9 @@ jobs:
         run: |
           psql -h localhost -U timely -d postgres -c "CREATE DATABASE timely_test;" || true
 
+      - name: Create app runtime role
+        run: node scripts/ensure-app-role.mjs
+
       - name: Apply migrations (main + test DB)
         run: |
           npm run db:migrate
