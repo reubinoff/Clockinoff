@@ -84,6 +84,7 @@ Prerequisites: **Node.js ≥ 24** and **Docker** for Postgres.
 docker compose up -d
 npm install
 cp .env.example .env
+node scripts/ensure-app-role.mjs
 npm run db:migrate
 npm run dev
 # → http://localhost:3000
