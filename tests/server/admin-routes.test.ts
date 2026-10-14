@@ -11,7 +11,7 @@ import { GET as stats } from "@/app/api/admin/stats/route";
 import { ADMIN_GUARD, BULK_REMOVE_COPY } from "@/lib/admin-copy";
 import { getDb } from "@/server/db/client";
 import { auditEvents, users } from "@/server/db/schema";
-import { setPendingAuditInsert } from "@/server/services/admin";
+import { setBeforeBulkTarget, setPendingAuditInsert } from "@/server/services/admin";
 import { makeUser } from "../helpers";
 import { truncateAll } from "../setup";
 
@@ -31,6 +31,7 @@ function ctx(id: string): { params: Promise<{ id: string }> } {
 describe("admin routes", () => {
   beforeEach(async () => {
     setPendingAuditInsert(null);
+    setBeforeBulkTarget(null);
     await truncateAll();
     cookieValue = undefined;
   });
@@ -346,5 +347,48 @@ describe("admin routes", () => {
     const still = await getDb().select({ id: users.id }).from(users).where(eq(users.id, member.user.id));
     expect(still).toHaveLength(1);
     expect(await getDb().select().from(auditEvents)).toHaveLength(0);
+  });
+
+  it("rejects a replayed bulk remove and does not delete again", async () => {
+    const { session, user } = await makeUser("boss-replay@ex.com");
+    const first = await makeUser("first-replay@ex.com");
+    const second = await makeUser("second-replay@ex.com");
+    const bystander = await makeUser("bystander-replay@ex.com");
+    await getDb().update(users).set({ role: "admin" }).where(eq(users.id, user.id));
+    cookieValue = session.id;
+
+    const body = JSON.stringify({
+      action: "remove",
+      ids: [first.user.id, second.user.id],
+      confirmCount: 2,
+    });
+    const request = () =>
+      new Request("http://test/api/admin/users/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-request-id": "req-replay" },
+        body,
+      });
+
+    const firstRes = await bulkUsers(request());
+    expect(firstRes.status).toBe(200);
+    expect(await firstRes.json()).toEqual({ applied: 2, skipped: 0 });
+
+    let deleteAttempts = 0;
+    setBeforeBulkTarget(() => {
+      deleteAttempts += 1;
+    });
+    const replay = await bulkUsers(request());
+    expect(replay.status).toBe(400);
+    expect(((await replay.json()) as { error: { message: string } }).error.message).toBe(
+      BULK_REMOVE_COPY.mismatch,
+    );
+    expect(deleteAttempts).toBe(0);
+
+    const remaining = await getDb().select({ id: users.id }).from(users);
+    expect(remaining.map((row) => row.id).sort()).toEqual([user.id, bystander.user.id].sort());
+    const audit = await getDb().select().from(auditEvents);
+    expect(audit).toHaveLength(1);
+    expect(audit[0]?.result?.removed.slice().sort()).toEqual([first.user.id, second.user.id].sort());
+    expect(audit[0]?.result?.failed).toEqual([]);
   });
 });

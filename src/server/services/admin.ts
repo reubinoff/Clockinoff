@@ -549,9 +549,9 @@ function confirmCountMatches(value: unknown, expected: number): boolean {
   return typeof value === "number" && Number.isInteger(value) && value === expected;
 }
 
-// Ids that bulk remove will try to delete: not the caller, not an admin.
-// Unknown ids stay in the set so confirmCount counts them; the delete
-// then no-ops them as not found.
+// Ids that bulk remove will try to delete: still present, not the caller,
+// and not an admin. Already-removed ids are left out of this count, so a
+// replay of the same confirmCount is a mismatch and never reaches DELETE.
 async function bulkRemovalTargets(
   actorId: string,
   ids: readonly string[],
@@ -563,7 +563,11 @@ async function bulkRemovalTargets(
     .from(users)
     .where(inArray(users.id, unique));
   const roleOf = new Map(rows.map((row) => [row.id, row.role]));
-  return unique.filter((id) => id !== actorId && roleOf.get(id) !== "admin");
+  return unique.filter((id) => {
+    const role = roleOf.get(id);
+    if (role === undefined) return false;
+    return id !== actorId && role !== "admin";
+  });
 }
 
 async function assertBulkBlockAllowed(actorId: string, ids: readonly string[]): Promise<void> {
