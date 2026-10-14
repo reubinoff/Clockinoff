@@ -155,8 +155,9 @@ jobs:
 
   # Required status check for admin-removal hardening (#219 / #220).
   # Throwaway Postgres, then `next build` and Playwright's `next start`.
-  # The spec seeds an admin and users, and uploads light/dark dialog
-  # screenshots for Dana.
+  # Hermetic: DATABASE_URL is only the Postgres service on localhost.
+  # No repository or environment secrets, and no Azure OIDC login.
+  # clockinoff.allow_missing_app_role is set only on Apply migrations.
   e2e-admin-removal:
     name: Playwright admin removal
     runs-on: ubuntu-latest
@@ -210,7 +211,31 @@ jobs:
         run: node scripts/ensure-app-role.mjs
 
       - name: Apply migrations
-        run: npm run db:migrate
+        env:
+          # Bypass only while migrating this throwaway database. The job
+          # DATABASE_URL (no GUC, localhost) is what `next start` uses.
+          DATABASE_URL: postgres://timely:timely@localhost:5432/timely?options=-c%20clockinoff.allow_missing_app_role%3Don
+        run: |
+          set -o pipefail
+          node --input-type=module -e '
+            const raw = process.env.DATABASE_URL ?? "";
+            const u = new URL(raw);
+            if (u.hostname !== "localhost") {
+              console.error("DATABASE_URL must point at the service container");
+              process.exit(1);
+            }
+            const options = u.searchParams.get("options") ?? "";
+            if (!options.includes("clockinoff.allow_missing_app_role=on")) {
+              console.error("allow_missing_app_role must be set on the migrate step only");
+              process.exit(1);
+            }
+            console.log("migrate host=" + u.hostname + " db=" + u.pathname);
+            console.log("clockinoff.allow_missing_app_role=on");
+          '
+          npm run db:migrate | tee migrate.log
+          grep -q "Applied migrations:" migrate.log
+          echo "migrations applied:"
+          grep -E '^  - ' migrate.log
 
       - name: Build (next build)
         env:
@@ -246,7 +271,40 @@ jobs:
       - name: Run Playwright admin-removal e2e (next start)
         env:
           NODE_ENV: production
-        run: npx playwright test tests/e2e/admin-bulk-remove.spec.ts
+        run: |
+          set -o pipefail
+          node --input-type=module -e '
+            const raw = process.env.DATABASE_URL ?? "";
+            const u = new URL(raw);
+            if (u.hostname !== "localhost" || u.username !== "timely" || !u.pathname.endsWith("/timely")) {
+              console.error("next start DATABASE_URL must be the service container");
+              process.exit(1);
+            }
+            if ((u.searchParams.get("options") ?? "").includes("allow_missing_app_role")) {
+              console.error("allow_missing_app_role must not be set on next start");
+              process.exit(1);
+            }
+            if (process.env.AZURE_CLIENT_ID || process.env.AZURE_TENANT_ID || process.env.AZURE_SUBSCRIPTION_ID) {
+              console.error("this job must not use Azure credentials");
+              process.exit(1);
+            }
+            console.log("start host=" + u.hostname + " db=" + u.pathname);
+          '
+          npx playwright test tests/e2e/admin-bulk-remove.spec.ts --reporter=list | tee playwright-list.log
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const log = readFileSync("playwright-list.log", "utf8");
+            const lines = [...log.matchAll(/^.*\d+\s+passed.*$/gm)].map((match) => match[0]);
+            const line = lines.at(-1) ?? "";
+            const passed = Number((line.match(/(\d+)\s+passed/) ?? [])[1] ?? "0");
+            const skipped = Number((line.match(/(\d+)\s+skipped/) ?? [])[1] ?? "0");
+            const failed = Number((line.match(/(\d+)\s+failed/) ?? [])[1] ?? "0");
+            if (passed < 1 || skipped > 0 || failed > 0) {
+              console.error(`playwright summary rejected: ${line || "(missing)"}`);
+              process.exit(1);
+            }
+            console.log(`playwright summary passed=${passed} skipped=${skipped} failed=${failed}`);
+          '
 
       - name: Upload admin removal dialog screenshots
         if: success()

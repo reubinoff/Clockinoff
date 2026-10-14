@@ -22,6 +22,18 @@ const mismatchBEmail = `e2e-mis-b-${stamp}@example.com`;
 const doubleEmail = `e2e-dbl-${stamp}@example.com`;
 const happyEmail = `e2e-happy-${stamp}@example.com`;
 
+const SHOT_THEMES = ["light", "dark"] as const;
+const SHOT_WIDTHS = [390, 768, 1280] as const;
+const SHOT_STATES = ["opened", "mismatch", "matching", "inflight", "success"] as const;
+
+function shotUser(theme: string, width: number, kind: "keep" | "misa" | "misb" | "ok" | "adm"): string {
+  return `shot-${theme}-${width}-${kind}-${stamp}@example.com`;
+}
+
+function shotFile(theme: string, width: number, state: string): string {
+  return `${SHOT_DIR}/219-${theme}-${width}-${state}.png`;
+}
+
 const ids = new Map<string, string>();
 
 function databaseUrl(): string {
@@ -42,22 +54,42 @@ async function withDb<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> {
 
 async function seed(): Promise<void> {
   const hash = await argon2.hash(password, { type: argon2.argon2id });
-  const rows: Array<{ email: string; role: "admin" | "user" }> = [
-    { email: adminEmail, role: "admin" },
-    { email: keepEmail, role: "user" },
-    { email: otherEmail, role: "user" },
-    { email: mismatchAEmail, role: "user" },
-    { email: mismatchBEmail, role: "user" },
-    { email: doubleEmail, role: "user" },
-    { email: happyEmail, role: "user" },
-  ];
+  const rows: Array<{ email: string; role: "admin" | "user"; createdAt: string | null }> = [];
+  // Older than the behaviour-test users so created-desc page 1 still
+  // shows those rows (page size is 25).
+  for (const theme of SHOT_THEMES) {
+    for (const width of SHOT_WIDTHS) {
+      rows.push(
+        { email: shotUser(theme, width, "keep"), role: "user", createdAt: "2020-01-01T00:00:00Z" },
+        { email: shotUser(theme, width, "misa"), role: "user", createdAt: "2020-01-01T00:00:00Z" },
+        { email: shotUser(theme, width, "misb"), role: "user", createdAt: "2020-01-01T00:00:00Z" },
+        { email: shotUser(theme, width, "ok"), role: "user", createdAt: "2020-01-01T00:00:00Z" },
+        { email: shotUser(theme, width, "adm"), role: "admin", createdAt: "2020-01-01T00:00:00Z" },
+      );
+    }
+  }
+  rows.push(
+    { email: adminEmail, role: "admin", createdAt: null },
+    { email: keepEmail, role: "user", createdAt: null },
+    { email: otherEmail, role: "user", createdAt: null },
+    { email: mismatchAEmail, role: "user", createdAt: null },
+    { email: mismatchBEmail, role: "user", createdAt: null },
+    { email: doubleEmail, role: "user", createdAt: null },
+    { email: happyEmail, role: "user", createdAt: null },
+  );
   await withDb(async (client) => {
+    const applied = await client.query<{ name: string }>(
+      'select name from "__migrations" order by name',
+    );
+    if (applied.rows.length === 0) throw new Error("no migrations applied");
+    for (const row of applied.rows) console.log(`migration ${row.name}`);
+
     for (const row of rows) {
       const inserted = await client.query<{ id: string }>(
-        `insert into users (email, password_hash, role, timezone)
-         values ($1, $2, $3, 'Asia/Jerusalem')
+        `insert into users (email, password_hash, role, timezone, created_at)
+         values ($1, $2, $3, 'Asia/Jerusalem', coalesce($4::timestamptz, now()))
          returning id`,
-        [row.email, hash, row.role],
+        [row.email, hash, row.role, row.createdAt],
       );
       const id = inserted.rows[0]?.id;
       if (!id) throw new Error(`seed failed for ${row.email}`);
@@ -152,31 +184,168 @@ test.beforeAll(async () => {
   await seed();
 });
 
-test("saves the remove dialog in light and dark", async ({ page }) => {
-  // Init scripts run on every navigation, so a one-shot "set light" would
-  // wipe a later dark choice. sessionStorage survives the reload.
+async function useTheme(page: Page, theme: "light" | "dark"): Promise<void> {
+  // Init scripts run on every navigation, so a one-shot write would wipe a
+  // later choice. sessionStorage survives the reload that applies it.
   await page.addInitScript(() => {
-    const theme = sessionStorage.getItem("e2e-theme") ?? "light";
-    localStorage.setItem("timely.appearance", theme);
+    const stored = sessionStorage.getItem("e2e-theme") ?? "light";
+    localStorage.setItem("timely.appearance", stored);
   });
-  await login(page, adminEmail);
-  const light = await openRemove(page, [keepEmail]);
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await expect(light).toContainText("Type 1 to confirm");
-  const lightPath = `${SHOT_DIR}/light.png`;
-  await light.screenshot({ path: lightPath });
-  expect((await stat(lightPath)).size).toBeGreaterThan(1000);
-
-  await page.evaluate(() => {
-    sessionStorage.setItem("e2e-theme", "dark");
-  });
+  await page.evaluate((value) => {
+    sessionStorage.setItem("e2e-theme", value);
+  }, theme);
   await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  const dark = await openRemove(page, [keepEmail]);
-  await expect(dark).toContainText("Type 1 to confirm");
-  const darkPath = `${SHOT_DIR}/dark.png`;
-  await dark.screenshot({ path: darkPath });
-  expect((await stat(darkPath)).size).toBeGreaterThan(1000);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+}
+
+async function filterShots(page: Page, theme: string, width: number): Promise<void> {
+  await page.locator("#admin-user-search").fill(`shot-${theme}-${width}-`);
+  await expect(
+    page.getByRole("link", { name: shotUser(theme, width, "keep"), exact: true }),
+  ).toBeVisible();
+}
+
+async function selectOnly(page: Page, emails: string[]): Promise<void> {
+  const clear = page.getByRole("button", { name: "Clear selection" });
+  if (await clear.isVisible()) await clear.click();
+  for (const email of emails) {
+    await page.getByRole("checkbox", { name: `Select ${email}` }).click();
+  }
+}
+
+async function saveShot(page: Page, theme: string, width: number, state: string): Promise<void> {
+  const path = shotFile(theme, width, state);
+  await page.screenshot({ path, animations: "disabled" });
+  expect((await stat(path)).size).toBeGreaterThan(1000);
+  console.log(`saved ${path}`);
+}
+
+for (const theme of SHOT_THEMES) {
+  for (const width of SHOT_WIDTHS) {
+    test(`saves 219-${theme}-${width} remove dialog states`, async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.setViewportSize({ width, height: width < 768 ? 844 : 900 });
+      await login(page, adminEmail);
+      await useTheme(page, theme);
+      await filterShots(page, theme, width);
+
+      const keep = shotUser(theme, width, "keep");
+      const misa = shotUser(theme, width, "misa");
+      const misb = shotUser(theme, width, "misb");
+      const ok = shotUser(theme, width, "ok");
+      const adm = shotUser(theme, width, "adm");
+      const toolbar = page.getByRole("toolbar", { name: "Bulk user actions" });
+
+      await selectOnly(page, [keep]);
+      await toolbar.getByRole("button", { name: "Remove" }).click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toBeVisible();
+      await expect(dialog.locator("#admin-bulk-remove-count")).toHaveValue("");
+      await expect(dialog.getByRole("button", { name: "Remove" })).toBeDisabled();
+      await expect(dialog.getByRole("button", { name: "Cancel" })).toBeEnabled();
+      await saveShot(page, theme, width, "opened");
+      await dialog.getByRole("button", { name: "Cancel" }).click();
+      await expect(dialog).toBeHidden();
+
+      await selectOnly(page, [misa, misb]);
+      await toolbar.getByRole("button", { name: "Remove" }).click();
+      await expect(dialog).toContainText("Remove 2 users?");
+      await dialog.getByLabel("Type 2 to confirm").fill("2");
+      await deleteUser(misb);
+      const mismatchResponse = page.waitForResponse(
+        (res) => res.url().includes("/api/admin/users/bulk") && res.request().method() === "POST",
+      );
+      await dialog.getByRole("button", { name: "Remove" }).click();
+      expect((await mismatchResponse).status()).toBe(400);
+      await expect(dialog.getByRole("alert")).toHaveText(BULK_REMOVE_COPY.mismatch);
+      await expect(dialog.getByLabel("Type 2 to confirm")).toHaveValue("2");
+      await saveShot(page, theme, width, "mismatch");
+      await dialog.getByRole("button", { name: "Cancel" }).click();
+      await expect(dialog).toBeHidden();
+
+      await page.reload();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await filterShots(page, theme, width);
+
+      await selectOnly(page, [keep]);
+      await toolbar.getByRole("button", { name: "Remove" }).click();
+      await expect(dialog).toBeVisible();
+      await dialog.getByLabel("Type 1 to confirm").fill("1");
+      await expect(dialog.getByRole("button", { name: "Remove" })).toBeEnabled();
+      await expect(dialog.getByRole("alert")).toHaveCount(0);
+      await saveShot(page, theme, width, "matching");
+
+      let releaseHold = (): void => {};
+      let requestStarted = false;
+      let markSettled = (): void => {};
+      const settled = new Promise<void>((resolve) => {
+        markSettled = resolve;
+      });
+      await page.route("**/api/admin/users/bulk", async (route) => {
+        if (route.request().method() !== "POST") {
+          await route.continue();
+          return;
+        }
+        requestStarted = true;
+        await new Promise<void>((resolve) => {
+          releaseHold = resolve;
+        });
+        // 500 leaves the dialog up and deletes nobody. Abort races with
+        // unroute and leaves both buttons stuck disabled.
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: { code: "INTERNAL", message: "held" } }),
+        });
+        markSettled();
+      });
+      try {
+        await dialog.getByRole("button", { name: "Remove" }).click();
+        await expect(dialog.getByRole("button", { name: "Remove" })).toBeDisabled();
+        await expect(dialog.getByRole("button", { name: "Cancel" })).toBeDisabled();
+        await saveShot(page, theme, width, "inflight");
+      } finally {
+        releaseHold();
+        if (requestStarted) await settled;
+        await page.unroute("**/api/admin/users/bulk");
+      }
+      await expect(dialog.getByRole("button", { name: "Cancel" })).toBeEnabled();
+      await dialog.getByRole("button", { name: "Cancel" }).click();
+      await expect(dialog).toBeHidden();
+
+      await selectOnly(page, [adm, ok]);
+      await toolbar.getByRole("button", { name: "Remove" }).click();
+      await expect(dialog).toContainText("Remove 1 user?");
+      await expect(dialog).toContainText("1 will be skipped (admins or you).");
+      await dialog.getByLabel("Type 1 to confirm").fill("1");
+      const successResponse = page.waitForResponse(
+        (res) => res.url().includes("/api/admin/users/bulk") && res.request().method() === "POST",
+      );
+      await dialog.getByRole("button", { name: "Remove" }).click();
+      expect((await successResponse).status()).toBe(200);
+      await expect(page.getByRole("status").filter({ hasText: "Removed 1. Skipped 1." })).toBeVisible();
+      await expect(page.getByRole("link", { name: ok, exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: keep, exact: true })).toBeVisible();
+      if (width >= 768) {
+        const table = page.locator("table");
+        await expect(table).toBeVisible();
+        await expect(table).not.toContainText(ok);
+      }
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await saveShot(page, theme, width, "success");
+    });
+  }
+}
+
+test("writes every 219 dialog screenshot", async () => {
+  for (const theme of SHOT_THEMES) {
+    for (const width of SHOT_WIDTHS) {
+      for (const state of SHOT_STATES) {
+        const path = shotFile(theme, width, state);
+        expect((await stat(path)).size).toBeGreaterThan(1000);
+      }
+    }
+  }
 });
 
 test("does not call /bulk for select, keyboard, Select all, Escape, or backdrop", async ({

@@ -541,12 +541,18 @@ and UI render in the user's TZ. All day-boundary math goes through
   **Playwright admin removal** job (check name `CI / Playwright admin removal`)
   runs on every push and PR: throwaway Postgres 16, `clockinoff-prod`
   created, migrations applied, `next build`, then Playwright `next start`.
-  `NODE_ENV` is unset for `npm ci` and `db:migrate` (so `tsx` is installed)
-  and `production` only on the build and `next start` steps.
+  `NODE_ENV` is unset for `npm ci` and `db:migrate` (so `tsx` stays a
+  devDependency and is installed) and `production` only on the build and
+  `next start` steps. The job does not use `next dev`. `DATABASE_URL` is
+  the throwaway service container only — no repository secrets and no
+  Azure login. `clockinoff.allow_missing_app_role` is set only on that
+  job's migrate step. Dialog screenshots upload as `admin-removal-dialog`:
+  `219-<light|dark>-<390|768|1280>-<opened|mismatch|matching|inflight|success>.png`.
   It seeds an admin and users and covers bulk remove (no request on select /
   keyboard / Select all / Escape / backdrop, mismatched typed count,
-  double-click, audit row). Light and dark dialog screenshots upload as the
-  `admin-removal-dialog` artifact.
+  double-click, audit row). The migrate step log lists each applied file.
+  The Playwright step lists every test as passed, with a non-zero total
+  and nothing skipped.
 - **[`nightly.yml`](./.github/workflows/nightly.yml)** — the full Playwright
   regression (register → timer → entries refresh → CSV/PDF export) runs on
   cron (02:15 UTC) and `workflow_dispatch`. It is additive to CI — nothing
