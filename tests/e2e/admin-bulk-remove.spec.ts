@@ -199,7 +199,17 @@ async function useTheme(page: Page, theme: "light" | "dark"): Promise<void> {
 }
 
 async function filterShots(page: Page, theme: string, width: number): Promise<void> {
-  await page.locator("#admin-user-search").fill(`shot-${theme}-${width}-`);
+  const query = `shot-${theme}-${width}-`;
+  // The row can already be on screen before the debounced search returns.
+  // Wait for that response so the dialog is not opened against a list
+  // that is about to reload.
+  const listed = page.waitForResponse((res) => {
+    if (!res.ok() || res.request().method() !== "GET") return false;
+    const url = new URL(res.url());
+    return url.pathname === "/api/admin/users" && url.searchParams.get("q") === query;
+  });
+  await page.locator("#admin-user-search").fill(query);
+  await listed;
   await expect(
     page.getByRole("link", { name: shotUser(theme, width, "keep"), exact: true }),
   ).toBeVisible();
@@ -221,13 +231,9 @@ async function saveShot(page: Page, theme: string, width: number, state: string)
 }
 
 async function cancelDialog(dialog: ReturnType<Page["getByRole"]>): Promise<void> {
-  // locator.click() retries after Cancel unmounts the dialog and can sit
-  // until the test timeout on a slow runner (GitHub-hosted 768).
   const cancel = dialog.getByRole("button", { name: "Cancel" });
   await expect(cancel).toBeEnabled();
-  await cancel.evaluate((el: HTMLButtonElement) => {
-    el.click();
-  });
+  await cancel.click();
   await expect(dialog).toBeHidden();
 }
 
@@ -327,9 +333,7 @@ for (const theme of SHOT_THEMES) {
       const successResponse = page.waitForResponse(
         (res) => res.url().includes("/api/admin/users/bulk") && res.request().method() === "POST",
       );
-      await dialog.getByRole("button", { name: "Remove" }).evaluate((el: HTMLButtonElement) => {
-        el.click();
-      });
+      await dialog.getByRole("button", { name: "Remove" }).click();
       expect((await successResponse).status()).toBe(200);
       await expect(page.getByRole("status").filter({ hasText: "Removed 1. Skipped 1." })).toBeVisible();
       await expect(page.getByRole("link", { name: ok, exact: true })).toHaveCount(0);

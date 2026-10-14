@@ -172,6 +172,37 @@ describe("AdminUsers bulk actions", () => {
     expect(screen.queryByRole("toolbar", { name: "Bulk user actions" })).toBeNull();
   });
 
+  it("keeps the remove dialog when a list reload still includes the selection", async () => {
+    let listCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/bulk")) {
+        return new Response("{}", { status: 500 });
+      }
+      listCalls += 1;
+      return listResponse();
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdminUsers actorId={actorId} timezone="Asia/Jerusalem" />);
+    expect((await screen.findAllByText("ada@ex.com")).length).toBeGreaterThan(0);
+    const callsAfterFirstLoad = listCalls;
+
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Select ada@ex.com" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.getByRole("dialog", { name: "Remove 1 user?" })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Search by email"), { target: { value: "ada" } });
+    await waitFor(() => {
+      expect(listCalls).toBeGreaterThan(callsAfterFirstLoad);
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Remove 1 user?" });
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect((cancel as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(cancel);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("toolbar", { name: "Bulk user actions" }).textContent).toContain("1 selected");
+  });
+
   it("cancel on the remove dialog sends no request and keeps the selection", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) => listResponse());
     vi.stubGlobal("fetch", fetchMock);

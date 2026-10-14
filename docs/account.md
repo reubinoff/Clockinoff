@@ -49,7 +49,9 @@ that action. **Remove** counts only the people who will actually be
 deleted. Admins and your own account are left out of that count. The
 dialog asks you to type that number before **Remove** enables. More
 than 25 people shows a note and keeps **Remove** disabled. **Cancel**
-closes the dialog and does not remove anyone. While a removal is in
+closes the dialog and does not remove anyone. If the list reloads
+while that dialog is open, it stays open as long as the people you
+selected are still on the page. While a removal is in
 progress, **Remove** and **Cancel** both stay disabled and the dialog
 sends the request once. Sending that same removal again is refused,
 and nobody else is deleted. You can’t block or

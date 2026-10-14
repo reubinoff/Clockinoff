@@ -96,6 +96,11 @@ export default function AdminUsers({
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkKind, setBulkKind] = useState<AdminActionKind | null>(null);
+  // load() reads this, not the state value: the callback must not refetch
+  // just because the dialog opened. Cleared before the post-confirm reload
+  // so a finished removal still drops the toolbar.
+  const bulkKindRef = useRef<AdminActionKind | null>(null);
+  bulkKindRef.current = bulkKind;
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const bulkInFlight = useRef(false);
@@ -126,7 +131,12 @@ export default function AdminUsers({
     }
     setError(null);
     setData((await res.json()) as ListResponse);
-    setSelected(new Set());
+    // Clearing here while the confirm dialog is open makes eligible empty
+    // and unmounts the dialog. Cancel is then gone. A finished confirm
+    // nulls the ref first, so that reload still clears the selection.
+    if (bulkKindRef.current === null) {
+      setSelected(new Set());
+    }
   }, [debounced, page, sortState.sort, sortState.dir]);
 
   function applySort(next: AdminUserSort): void {
@@ -247,6 +257,7 @@ export default function AdminUsers({
         const toast = bulkSkippedToast(kind, applied, skipped);
         setBulkError(null);
         setBulkKind(null);
+        bulkKindRef.current = null;
         if (toast) emitToast(toast);
         await load();
         router.refresh();
