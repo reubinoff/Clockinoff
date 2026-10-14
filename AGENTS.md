@@ -537,7 +537,14 @@ and UI render in the user's TZ. All day-boundary math goes through
   type-checks, lints, and runs `npm run test:coverage`. Coverage thresholds
   are enforced by Vitest (`vitest.config.ts`) on `src/server` + `src/lib`:
   ≥90 % lines / statements / functions and ≥80 % branches. A separate
-  `build` job runs `next build` to catch runtime regressions.
+  `build` job runs `next build` to catch runtime regressions. The
+  **Playwright admin removal** job (check name `CI / Playwright admin removal`)
+  runs on every push and PR: throwaway Postgres 16, `clockinoff-prod`
+  created, migrations applied, `next build`, then Playwright `next start`.
+  It seeds an admin and users and covers bulk remove (no request on select /
+  keyboard / Select all / Escape / backdrop, mismatched typed count,
+  double-click, audit row). Light and dark dialog screenshots upload as the
+  `admin-removal-dialog` artifact.
 - **[`nightly.yml`](./.github/workflows/nightly.yml)** — the full Playwright
   regression (register → timer → entries refresh → CSV/PDF export) runs on
   cron (02:15 UTC) and `workflow_dispatch`. It is additive to CI — nothing

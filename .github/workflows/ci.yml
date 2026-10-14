@@ -152,3 +152,111 @@ jobs:
             ${{ runner.os }}-node${{ env.NODE_VERSION }}-nextjs-${{ hashFiles('package-lock.json') }}-
 
       - run: npm run build
+
+  # Required status check for admin-removal hardening (#219 / #220).
+  # Throwaway Postgres, then `next build` and Playwright's `next start`.
+  # The spec seeds an admin and users, and uploads light/dark dialog
+  # screenshots for Dana.
+  e2e-admin-removal:
+    name: Playwright admin removal
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: timely
+          POSTGRES_PASSWORD: timely
+          POSTGRES_DB: timely
+        options: >-
+          --health-cmd "pg_isready -U timely -d timely"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgres://timely:timely@localhost:5432/timely
+      NEXTAUTH_SECRET: ci-secret-ci-secret-ci-secret-000000
+      OAUTH_STATE_SECRET: ci-oauth-state-secret-ci-oauth-000000
+      NEXTAUTH_URL: http://localhost:3000
+      NODE_ENV: production
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U timely && break
+            sleep 1
+          done
+
+      - name: Create app runtime role
+        run: node scripts/ensure-app-role.mjs
+
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      - name: Build (next build)
+        run: npm run build
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: |
+          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright browsers (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright OS deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # `npm run start` is `next start`. Playwright boots it after global
+      # setup migrates the same database again (idempotent).
+      - name: Run Playwright admin-removal e2e (next start)
+        run: npx playwright test tests/e2e/admin-bulk-remove.spec.ts
+
+      - name: Upload admin removal dialog screenshots
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: admin-removal-dialog
+          path: test-results/admin-removal-dialog/
+          if-no-files-found: error
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-admin-removal-report
+          path: playwright-report
+          if-no-files-found: ignore
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-admin-removal-traces
+          path: test-results
+          if-no-files-found: ignore
