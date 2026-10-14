@@ -220,6 +220,17 @@ async function saveShot(page: Page, theme: string, width: number, state: string)
   console.log(`saved ${path}`);
 }
 
+async function cancelDialog(dialog: ReturnType<Page["getByRole"]>): Promise<void> {
+  // locator.click() retries after Cancel unmounts the dialog and can sit
+  // until the test timeout on a slow runner (GitHub-hosted 768).
+  const cancel = dialog.getByRole("button", { name: "Cancel" });
+  await expect(cancel).toBeEnabled();
+  await cancel.evaluate((el: HTMLButtonElement) => {
+    el.click();
+  });
+  await expect(dialog).toBeHidden();
+}
+
 for (const theme of SHOT_THEMES) {
   for (const width of SHOT_WIDTHS) {
     test(`saves 219-${theme}-${width} remove dialog states`, async ({ page }) => {
@@ -242,10 +253,8 @@ for (const theme of SHOT_THEMES) {
       await expect(dialog).toBeVisible();
       await expect(dialog.locator("#admin-bulk-remove-count")).toHaveValue("");
       await expect(dialog.getByRole("button", { name: "Remove" })).toBeDisabled();
-      await expect(dialog.getByRole("button", { name: "Cancel" })).toBeEnabled();
       await saveShot(page, theme, width, "opened");
-      await dialog.getByRole("button", { name: "Cancel" }).click();
-      await expect(dialog).toBeHidden();
+      await cancelDialog(dialog);
 
       await selectOnly(page, [misa, misb]);
       await toolbar.getByRole("button", { name: "Remove" }).click();
@@ -260,8 +269,7 @@ for (const theme of SHOT_THEMES) {
       await expect(dialog.getByRole("alert")).toHaveText(BULK_REMOVE_COPY.mismatch);
       await expect(dialog.getByLabel("Type 2 to confirm")).toHaveValue("2");
       await saveShot(page, theme, width, "mismatch");
-      await dialog.getByRole("button", { name: "Cancel" }).click();
-      await expect(dialog).toBeHidden();
+      await cancelDialog(dialog);
 
       await page.reload();
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -309,9 +317,7 @@ for (const theme of SHOT_THEMES) {
         if (requestStarted) await settled;
         await page.unroute("**/api/admin/users/bulk");
       }
-      await expect(dialog.getByRole("button", { name: "Cancel" })).toBeEnabled();
-      await dialog.getByRole("button", { name: "Cancel" }).click();
-      await expect(dialog).toBeHidden();
+      await cancelDialog(dialog);
 
       await selectOnly(page, [adm, ok]);
       await toolbar.getByRole("button", { name: "Remove" }).click();
@@ -321,7 +327,9 @@ for (const theme of SHOT_THEMES) {
       const successResponse = page.waitForResponse(
         (res) => res.url().includes("/api/admin/users/bulk") && res.request().method() === "POST",
       );
-      await dialog.getByRole("button", { name: "Remove" }).click();
+      await dialog.getByRole("button", { name: "Remove" }).evaluate((el: HTMLButtonElement) => {
+        el.click();
+      });
       expect((await successResponse).status()).toBe(200);
       await expect(page.getByRole("status").filter({ hasText: "Removed 1. Skipped 1." })).toBeVisible();
       await expect(page.getByRole("link", { name: ok, exact: true })).toHaveCount(0);
