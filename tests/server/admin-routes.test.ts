@@ -318,8 +318,9 @@ describe("admin routes", () => {
       actorEmail: "boss-remove@ex.com",
       action: "remove",
       requestId: "req-ok",
-      clientIp: "203.0.113.77",
-      forwardedFor: "1.2.3.4, 198.51.100.8",
+      clientIp: "198.51.100.8",
+      forwardedFor:
+        "x-forwarded-for: 1.2.3.4, 198.51.100.8 | x-azure-clientip: 203.0.113.77",
       status: "completed",
       userAgent: "ClockinoffAdmin/9",
       sessionIdHash: hashSessionToken(session.id),

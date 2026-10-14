@@ -97,11 +97,21 @@ describe("clientIpFromHeaders", () => {
     expect(ip).toBe("2001:db8::1");
   });
 
-  it("does not touch bracketed IPv6 with :port (deferred; see TODO in client-ip.ts)", () => {
+  it("strips brackets and :port from a bracketed IPv6 hop", () => {
     const ip = clientIpFromHeaders(
       headers({ "x-forwarded-for": "10.0.0.1, [2001:db8::1]:443" }),
     );
-    expect(ip).toBe("[2001:db8::1]:443");
+    expect(ip).toBe("2001:db8::1");
+    expect(
+      clientIpFromHeaders(headers({ "x-forwarded-for": "[2001:db8::1]" })),
+    ).toBe("2001:db8::1");
+    expect(
+      clientIpFromHeaders(headers({ "x-forwarded-for": "[2001:db8::1]:abc" })),
+    ).toBe("[2001:db8::1]:abc");
+    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "[" }))).toBe("[");
+    expect(
+      clientIpFromHeaders(headers({ "x-forwarded-for": "[2001:db8::1]extra" })),
+    ).toBe("[2001:db8::1]extra");
   });
 
   it("does not strip a non-numeric suffix after ':' (defensive: not a port)", () => {
@@ -184,27 +194,40 @@ describe("clientIpFromHeaders", () => {
 });
 
 describe("clientIpForRecord", () => {
-  it("trusts X-Azure-ClientIP over X-Client-IP and X-Forwarded-For", () => {
+  it("does not record X-Azure-ClientIP", () => {
+    expect(
+      clientIpForRecord(headers({ "x-azure-clientip": "5.6.7.8" })),
+    ).not.toBe("5.6.7.8");
+    expect(clientIpForRecord(headers({ "x-azure-clientip": "5.6.7.8" }))).toBeNull();
     expect(
       clientIpForRecord(
         headers({
-          "x-azure-clientip": "203.0.113.77:44321",
-          "x-client-ip": "203.0.113.66",
-          "x-forwarded-for": "1.2.3.4, 198.51.100.8",
+          "x-azure-clientip": "5.6.7.8",
+          "x-forwarded-for": "9.9.9.9, 198.51.100.8",
         }),
       ),
-    ).toBe("203.0.113.77");
+    ).toBe("198.51.100.8");
+    expect(
+      clientIpForRecord(
+        headers({
+          "x-azure-clientip": "5.6.7.8",
+          "x-client-ip": "1.2.3.4",
+        }),
+      ),
+    ).toBe("1.2.3.4");
   });
 
-  it("trusts X-Client-IP when X-Azure-ClientIP is absent", () => {
+  it("records X-Client-IP (App Service front end overwrites a client-sent value)", () => {
+    expect(clientIpForRecord(headers({ "x-client-ip": "1.2.3.4" }))).toBe("1.2.3.4");
     expect(
       clientIpForRecord(
         headers({
-          "x-client-ip": "203.0.113.66",
-          "x-forwarded-for": "1.2.3.4, 198.51.100.8",
+          "x-client-ip": "1.2.3.4",
+          "x-azure-clientip": "5.6.7.8",
+          "x-forwarded-for": "9.9.9.9, 198.51.100.8",
         }),
       ),
-    ).toBe("203.0.113.66");
+    ).toBe("1.2.3.4");
     expect(
       clientIpForRecord(
         headers({
@@ -215,6 +238,38 @@ describe("clientIpForRecord", () => {
     ).toBe("203.0.113.66");
   });
 
+  it("parses an X-Forwarded-For hop that includes a port", () => {
+    expect(
+      clientIpForRecord(
+        headers({ "x-forwarded-for": "9.9.9.9, 203.0.113.7:54012" }),
+      ),
+    ).toBe("203.0.113.7");
+  });
+
+  it("parses a bracketed IPv6 X-Forwarded-For hop that includes a port", () => {
+    expect(
+      clientIpForRecord(
+        headers({ "x-forwarded-for": "203.0.113.7, [2001:db8::1]:443" }),
+      ),
+    ).toBe("2001:db8::1");
+  });
+
+  it("keeps forged header values in forwarded_for without using them as the IP", () => {
+    const forged = headers({
+      "x-azure-clientip": "5.6.7.8",
+      "x-client-ip": "1.2.3.4",
+      "x-forwarded-for": "9.9.9.9, 203.0.113.7:54012",
+    });
+    expect(clientIpForRecord(forged)).toBe("1.2.3.4");
+    const evidence = forwardedForRaw(forged);
+    expect(evidence).toContain("5.6.7.8");
+    expect(evidence).toContain("9.9.9.9");
+    expect(evidence).toContain("203.0.113.7:54012");
+    expect(evidence).toBe(
+      "x-forwarded-for: 9.9.9.9, 203.0.113.7:54012 | x-client-ip: 1.2.3.4 | x-azure-clientip: 5.6.7.8",
+    );
+  });
+
   it("ignores a spoofed first X-Forwarded-For hop and uses the last hop", () => {
     expect(
       clientIpForRecord(headers({ "x-forwarded-for": "1.2.3.4, 203.0.113.50" })),
@@ -223,10 +278,11 @@ describe("clientIpForRecord", () => {
       clientIpForRecord(headers({ "x-forwarded-for": "198.51.100.8:44321, 203.0.113.50" })),
     ).toBe("203.0.113.50");
     expect(forwardedForRaw(headers({ "x-forwarded-for": "  1.2.3.4, 203.0.113.50  " }))).toBe(
-      "1.2.3.4, 203.0.113.50",
+      "x-forwarded-for: 1.2.3.4, 203.0.113.50",
     );
     expect(forwardedForRaw(headers({}))).toBeNull();
     expect(forwardedForRaw(headers({ "x-forwarded-for": "   " }))).toBeNull();
+    expect(forwardedForRaw(headers({ "x-azure-clientip": "   " }))).toBeNull();
   });
 
   it("falls back to the socket address when no trusted header is present", () => {

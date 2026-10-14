@@ -30,26 +30,33 @@ export interface HeaderReader {
 //   - Exactly one colon *and* an all-digit suffix → treat as `ip:port` and
 //     drop the suffix. This deliberately won't misfire on unbracketed IPv6
 //     (which always has multiple colons).
-//   - Bracketed IPv6 (`[::1]:443`) is left as-is for now; see the TODO
-//     below. We don't have a confirmed Azure App Service repro that emits
-//     bracketed IPv6 in XFF, and a wrong split there would corrupt the
-//     address. Deferred until we do — or until an IPv6 client actually
-//     hits the rate limiter in prod.
+//   - Bracketed IPv6 (`[2001:db8::1]:443` or `[2001:db8::1]`) drops the
+//     brackets and a trailing all-digit port. The result is a Postgres
+//     `inet` literal. A non-numeric suffix is left untouched.
+function allDigits(value: string): boolean {
+  if (value.length === 0) return false;
+  for (let i = 0; i < value.length; i += 1) {
+    const c = value.charCodeAt(i);
+    if (c < 48 || c > 57) return false;
+  }
+  return true;
+}
+
 function stripPort(host: string): string {
-  // TODO(#30 follow-up): handle bracketed IPv6 hosts of the form
-  // `[<ipv6>]:<port>` — strip the brackets and the trailing `:port` — and
-  // decide whether to normalize the bare IPv6 case too. Left unimplemented
-  // rather than half-implemented to avoid keying on a mangled address.
-  if (host.startsWith("[")) return host;
+  if (host.startsWith("[")) {
+    const close = host.indexOf("]");
+    if (close <= 1) return host;
+    const inner = host.slice(1, close);
+    const rest = host.slice(close + 1);
+    if (rest.length === 0) return inner;
+    if (rest.startsWith(":") && allDigits(rest.slice(1))) return inner;
+    return host;
+  }
   const colon = host.indexOf(":");
   if (colon < 0) return host;
   if (host.indexOf(":", colon + 1) >= 0) return host;
   const port = host.slice(colon + 1);
-  if (port.length === 0) return host;
-  for (let i = 0; i < port.length; i += 1) {
-    const c = port.charCodeAt(i);
-    if (c < 48 || c > 57) return host;
-  }
+  if (!allDigits(port)) return host;
   return host.slice(0, colon);
 }
 
@@ -68,13 +75,13 @@ export function clientIpFromHeaders(headers: HeaderReader): string {
 }
 
 // IP stored on a new session and on an audit row (#219).
-// Azure App Service's front end sets X-Azure-ClientIP (and some stacks
-// set X-Client-IP) to the address it observed. Those win over
-// X-Forwarded-For, because the left-most XFF hop is client-supplied and
-// can be spoofed. When neither trusted header is present, use the
-// right-most XFF hop (the proxy-appended address), then the socket.
+// App Service's front end sets X-Client-IP to the address it observed,
+// overwriting a client-supplied value. That header is the recorded IP.
+// Otherwise use the right-most X-Forwarded-For hop (the proxy-appended
+// address), then the socket. X-Azure-ClientIP is not a trusted source:
+// it is kept only inside `forwardedForRaw` as unparsed evidence.
 // Rate-limit keys stay on `clientIpFromHeaders` (#30) and do not read
-// X-Azure-ClientIP / X-Client-IP.
+// X-Client-IP.
 function headerIp(headers: HeaderReader, name: string): string | null {
   const raw = headers.get(name)?.trim();
   if (!raw) return null;
@@ -92,18 +99,32 @@ function lastForwardedHop(headers: HeaderReader): string | null {
   return null;
 }
 
+const FORWARDED_EVIDENCE_HEADERS = [
+  "x-forwarded-for",
+  "x-client-ip",
+  "x-azure-clientip",
+] as const;
+
+// Unparsed header text for the audit row. Not used as the recorded IP.
+// Includes X-Azure-ClientIP so a forged or platform value remains visible
+// after it is dropped from `clientIpForRecord`.
 export function forwardedForRaw(headers: HeaderReader): string | null {
-  const xff = headers.get("x-forwarded-for");
-  if (!xff) return null;
-  const trimmed = xff.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  const parts: string[] = [];
+  for (const name of FORWARDED_EVIDENCE_HEADERS) {
+    const raw = headers.get(name);
+    if (!raw) continue;
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) continue;
+    parts.push(`${name}: ${trimmed}`);
+  }
+  return parts.length > 0 ? parts.join(" | ") : null;
 }
 
 export function clientIpForRecord(
   headers: HeaderReader,
   socketAddress?: string | null,
 ): string | null {
-  const trusted = headerIp(headers, "x-azure-clientip") ?? headerIp(headers, "x-client-ip");
+  const trusted = headerIp(headers, "x-client-ip");
   if (trusted) return trusted;
   const hop = lastForwardedHop(headers);
   if (hop) return hop;
