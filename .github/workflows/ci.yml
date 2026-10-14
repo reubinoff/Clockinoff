@@ -177,12 +177,15 @@ jobs:
         ports:
           - 5432:5432
 
+    # Leave NODE_ENV unset. `production` at job level makes `npm ci`
+    # omit devDependencies, and `npm run db:migrate` then fails with
+    # `tsx: not found` (exit 127). Set production only on build and
+    # the Playwright step that runs `next start`.
     env:
       DATABASE_URL: postgres://timely:timely@localhost:5432/timely
       NEXTAUTH_SECRET: ci-secret-ci-secret-ci-secret-000000
       OAUTH_STATE_SECRET: ci-oauth-state-secret-ci-oauth-000000
       NEXTAUTH_URL: http://localhost:3000
-      NODE_ENV: production
 
     steps:
       - uses: actions/checkout@v7
@@ -210,6 +213,8 @@ jobs:
         run: npm run db:migrate
 
       - name: Build (next build)
+        env:
+          NODE_ENV: production
         run: npm run build
 
       - name: Resolve installed Playwright version
@@ -233,8 +238,14 @@ jobs:
         run: npx playwright install-deps chromium
 
       # `npm run start` is `next start`. Playwright boots it after global
-      # setup migrates the same database again (idempotent).
+      # setup migrates the same database again (idempotent). tsx is
+      # already on disk from the earlier `npm ci` (NODE_ENV unset).
+      # Unset NODE_ENV would still use DATABASE_URL (client.ts only
+      # switches to DATABASE_URL_TEST when NODE_ENV=test); production
+      # is what `next start` and the secure session cookie expect.
       - name: Run Playwright admin-removal e2e (next start)
+        env:
+          NODE_ENV: production
         run: npx playwright test tests/e2e/admin-bulk-remove.spec.ts
 
       - name: Upload admin removal dialog screenshots

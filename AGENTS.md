@@ -541,6 +541,8 @@ and UI render in the user's TZ. All day-boundary math goes through
   **Playwright admin removal** job (check name `CI / Playwright admin removal`)
   runs on every push and PR: throwaway Postgres 16, `clockinoff-prod`
   created, migrations applied, `next build`, then Playwright `next start`.
+  `NODE_ENV` is unset for `npm ci` and `db:migrate` (so `tsx` is installed)
+  and `production` only on the build and `next start` steps.
   It seeds an admin and users and covers bulk remove (no request on select /
   keyboard / Select all / Escape / backdrop, mismatched typed count,
   double-click, audit row). Light and dark dialog screenshots upload as the
