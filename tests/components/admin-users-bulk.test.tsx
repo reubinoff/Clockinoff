@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AdminUsers from "@/components/admin/AdminUsers";
 import { emitToast } from "@/lib/events";
@@ -245,5 +245,71 @@ describe("AdminUsers bulk actions", () => {
     expect((confirm as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(confirm);
     expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/bulk"))).toBe(false);
+  });
+
+  it("a Remove click that lands after Cancel sends nothing and closes the dialog", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => listResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdminUsers actorId={actorId} timezone="Asia/Jerusalem" />);
+    expect((await screen.findAllByText("ada@ex.com")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Select ada@ex.com" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    const dialog = screen.getByRole("dialog", { name: "Remove 1 user?" });
+    fireEvent.change(within(dialog).getByLabelText("Type 1 to confirm"), { target: { value: "1" } });
+    const confirm = within(dialog).getByRole("button", { name: "Remove" });
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+
+    await act(async () => {
+      cancel.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      confirm.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(fetchMock.mock.calls.filter((call) => String(call[0]).includes("/bulk"))).toHaveLength(0);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("toolbar", { name: "Bulk user actions" }).textContent).toContain("1 selected");
+  });
+
+  it("double-clicking Remove sends exactly one request and disables both buttons", async () => {
+    let release: (value: Response) => void = () => {};
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/admin/users/bulk")) {
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      }
+      return Promise.resolve(listResponse());
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdminUsers actorId={actorId} timezone="Asia/Jerusalem" />);
+    expect((await screen.findAllByText("ada@ex.com")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Select ada@ex.com" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    const dialog = screen.getByRole("dialog", { name: "Remove 1 user?" });
+    fireEvent.change(within(dialog).getByLabelText("Type 1 to confirm"), { target: { value: "1" } });
+    const confirm = within(dialog).getByRole("button", { name: "Remove" });
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+
+    await act(async () => {
+      confirm.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      confirm.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(fetchMock.mock.calls.filter((call) => String(call[0]).includes("/bulk"))).toHaveLength(1);
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    expect((cancel as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      release(
+        new Response(JSON.stringify({ applied: 1, skipped: 0 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(fetchMock.mock.calls.filter((call) => String(call[0]).includes("/bulk"))).toHaveLength(1);
   });
 });

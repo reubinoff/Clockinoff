@@ -49,7 +49,9 @@ that action. **Remove** counts only the people who will actually be
 deleted. Admins and your own account are left out of that count. The
 dialog asks you to type that number before **Remove** enables. More
 than 25 people shows a note and keeps **Remove** disabled. **Cancel**
-closes the dialog and does not remove anyone. You can’t block or
+closes the dialog and does not remove anyone. While a removal is in
+progress, **Remove** and **Cancel** both stay disabled and the dialog
+sends the request once. You can’t block or
 demote yourself, and you can’t demote the last admin.
 Opening `/admin` without that role sends you back to the timer. The
 operator of a self-hosted instance designates the first admin outside

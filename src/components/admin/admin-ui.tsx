@@ -314,15 +314,41 @@ export function AdminBulkConfirmDialog({
   const confirmDisabled = pending || (isRemove && (overCap || !typedMatches));
   const cancelRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  // Set in the click handler, before React re-renders `pending`. A second
+  // Remove click, or a Remove click that arrives after Cancel in the same
+  // turn, must not call the parent again. Cleared when the request ends
+  // so a failed remove can be retried.
+  const actionLock = useRef(false);
+  useEffect(() => {
+    if (!pending) actionLock.current = false;
+  }, [pending]);
+
+  const pendingRef = useRef(pending);
   const onCancelRef = useRef(onCancel);
   useEffect(() => {
+    pendingRef.current = pending;
     onCancelRef.current = onCancel;
-  }, [onCancel]);
+  });
+
+  function handleCancel(): void {
+    if (pending || actionLock.current) return;
+    actionLock.current = true;
+    onCancel();
+  }
+
+  function handleConfirm(): void {
+    if (confirmDisabled || actionLock.current) return;
+    actionLock.current = true;
+    onConfirm();
+  }
+
   useEffect(() => {
     cancelRef.current?.focus();
     function onKey(e: KeyboardEvent): void {
       if (e.key !== "Escape") return;
       e.preventDefault();
+      if (pendingRef.current || actionLock.current) return;
+      actionLock.current = true;
       onCancelRef.current();
     }
     document.addEventListener("keydown", onKey);
@@ -357,7 +383,7 @@ export function AdminBulkConfirmDialog({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 sheet-backdrop-enter"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onCancel();
+        if (e.target === e.currentTarget) handleCancel();
       }}
       role="presentation"
     >
@@ -416,13 +442,13 @@ export function AdminBulkConfirmDialog({
           ) : null}
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
-          <button ref={cancelRef} type="button" className="btn" onClick={onCancel} disabled={pending}>
+          <button ref={cancelRef} type="button" className="btn" onClick={handleCancel} disabled={pending}>
             Cancel
           </button>
           <button
             type="button"
             className={adminActionButtonClass(kind)}
-            onClick={onConfirm}
+            onClick={handleConfirm}
             disabled={confirmDisabled}
           >
             {copy.confirm}

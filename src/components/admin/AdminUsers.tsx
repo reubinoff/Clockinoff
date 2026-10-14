@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AdminBulkConfirmDialog,
   AdminConfirmDialog,
@@ -98,6 +98,8 @@ export default function AdminUsers({
   const [bulkKind, setBulkKind] = useState<AdminActionKind | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const bulkInFlight = useRef(false);
+  const bulkDismissed = useRef(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(q.trim()), 250);
@@ -190,13 +192,23 @@ export default function AdminUsers({
     : null;
 
   function askBulk(kind: AdminActionKind): void {
+    bulkDismissed.current = false;
     setBulkError(null);
     setBulkKind(kind);
   }
 
+  function cancelBulk(): void {
+    if (bulkInFlight.current) return;
+    bulkDismissed.current = true;
+    setBulkKind(null);
+    setBulkError(null);
+  }
+
   async function confirmBulk(): Promise<void> {
+    if (bulkInFlight.current || bulkDismissed.current) return;
     if (!bulkKind || !bulkPlan || bulkPlan.eligible.length === 0 || bulkBusy) return;
     if (bulkKind === "remove" && bulkPlan.eligible.length > BULK_REMOVE_CAP) return;
+    bulkInFlight.current = true;
     const localSkipped = bulkPlan.skipped.length;
     setBulkBusy(true);
     try {
@@ -234,6 +246,7 @@ export default function AdminUsers({
       await load();
       router.refresh();
     } finally {
+      bulkInFlight.current = false;
       setBulkBusy(false);
     }
   }
@@ -456,12 +469,7 @@ export default function AdminUsers({
           skipped={bulkPlan.skipped.length}
           pending={bulkBusy}
           error={bulkKind === "remove" ? bulkError : null}
-          onCancel={() => {
-            if (!bulkBusy) {
-              setBulkKind(null);
-              setBulkError(null);
-            }
-          }}
+          onCancel={cancelBulk}
           onConfirm={() => void confirmBulk()}
         />
       ) : null}
