@@ -13,9 +13,7 @@ export async function POST(req: Request, { params }: Params): Promise<Response> 
   try {
     const actor = await requireAdmin();
     const { id: raw } = await params;
-    const user = await blockAdminUser(actor.id, requireUuid(raw), {
-      requestId: adminRequestMeta(req).requestId,
-    });
+    const user = await blockAdminUser(actor.id, requireUuid(raw), adminRequestMeta(req));
     return ok(user);
   } catch (err) {
     return jsonError(err);

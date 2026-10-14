@@ -11,6 +11,7 @@ import { GET as stats } from "@/app/api/admin/stats/route";
 import { ADMIN_GUARD, BULK_REMOVE_COPY } from "@/lib/admin-copy";
 import { getDb } from "@/server/db/client";
 import { auditEvents, users } from "@/server/db/schema";
+import { hashSessionToken } from "@/server/auth/session";
 import { setBeforeBulkTarget, setPendingAuditInsert } from "@/server/services/admin";
 import { makeUser } from "../helpers";
 import { truncateAll } from "../setup";
@@ -296,6 +297,8 @@ describe("admin routes", () => {
           "x-request-id": "req-ok",
           "x-azure-clientip": "203.0.113.77",
           "x-forwarded-for": "1.2.3.4, 198.51.100.8",
+          "user-agent": "ClockinoffAdmin/9",
+          cookie: `timely_session=${session.id}`,
         },
         body: JSON.stringify({
           action: "remove",
@@ -318,8 +321,16 @@ describe("admin routes", () => {
       clientIp: "203.0.113.77",
       forwardedFor: "1.2.3.4, 198.51.100.8",
       status: "completed",
+      userAgent: "ClockinoffAdmin/9",
+      sessionIdHash: hashSessionToken(session.id),
       targets: [{ id: member.user.id, email: "member-remove@ex.com" }],
+      result: {
+        removed: [{ id: member.user.id, deleted: 1 }],
+        skipped: [],
+        failed: [],
+      },
     });
+    expect(JSON.stringify(audit[0])).not.toContain(session.id);
   });
 
   it("returns 500 and deletes nothing when the pending audit insert fails", async () => {
@@ -388,7 +399,11 @@ describe("admin routes", () => {
     expect(remaining.map((row) => row.id).sort()).toEqual([user.id, bystander.user.id].sort());
     const audit = await getDb().select().from(auditEvents);
     expect(audit).toHaveLength(1);
-    expect(audit[0]?.result?.removed.slice().sort()).toEqual([first.user.id, second.user.id].sort());
+    expect(audit[0]?.result?.removed.slice().sort((a, b) => a.id.localeCompare(b.id))).toEqual(
+      [first.user.id, second.user.id]
+        .sort()
+        .map((id) => ({ id, deleted: 1 })),
+    );
     expect(audit[0]?.result?.failed).toEqual([]);
   });
 });

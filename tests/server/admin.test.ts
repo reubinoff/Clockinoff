@@ -117,6 +117,11 @@ describe("admin service", () => {
     expect(audit[0]?.actorEmail).toBe("actor@ex.com");
     expect(audit[0]?.status).toBe("completed");
     expect(audit[0]?.targets).toEqual([{ id: member.id, email: "member@ex.com" }]);
+    expect(audit[0]?.result).toEqual({
+      removed: [{ id: member.id, deleted: 1 }],
+      skipped: [],
+      failed: [],
+    });
   });
 
   it("blocks and unblocks, denies self-block, and kills sessions plus login", async () => {
@@ -145,9 +150,15 @@ describe("admin service", () => {
     const again = await blockAdminUser(actor.user.id, victim.user.id);
     expect(again.status).toBe("blocked");
     const singleBlock = await getDb().select().from(auditEvents);
-    expect(singleBlock.length).toBeGreaterThan(0);
-    expect(singleBlock[0]?.actorEmail).toBe("actor-block@ex.com");
-    expect(singleBlock[0]?.targets).toEqual([{ id: victim.user.id, email: "victim@ex.com" }]);
+    expect(singleBlock).toHaveLength(2);
+    expect(singleBlock.every((row) => row.actorEmail === "actor-block@ex.com")).toBe(true);
+    expect(singleBlock.every((row) => row.targets?.[0]?.email === "victim@ex.com")).toBe(true);
+    expect(
+      singleBlock
+        .map((row) => row.result?.removed[0]?.deleted)
+        .slice()
+        .sort(),
+    ).toEqual([0, 1]);
 
     const open = await unblockAdminUser(actor.user.id, victim.user.id);
     expect(open.status).toBe("active");
@@ -215,7 +226,13 @@ describe("admin service", () => {
       actor.user.id,
       "remove",
       [victim.id, actor.user.id, keep.id, victim.id],
-      { confirmCount: 2, requestId: "bulk-cascade", clientIp: "203.0.113.9" },
+      {
+        confirmCount: 2,
+        requestId: "bulk-cascade",
+        clientIp: "203.0.113.9",
+        userAgent: "ClockinoffTest/1",
+        sessionIdHash: "abc123sessionhash",
+      },
     );
     expect(result).toEqual({ applied: 2, skipped: 1 });
     const audit = await db.select().from(auditEvents);
@@ -226,6 +243,8 @@ describe("admin service", () => {
       action: "remove",
       requestId: "bulk-cascade",
       clientIp: "203.0.113.9",
+      userAgent: "ClockinoffTest/1",
+      sessionIdHash: "abc123sessionhash",
       status: "completed",
     });
     expect(audit[0]?.targets?.slice().sort((a, b) => a.id.localeCompare(b.id))).toEqual(
@@ -234,7 +253,12 @@ describe("admin service", () => {
         { id: victim.id, email: "gone@ex.com" },
       ].sort((a, b) => a.id.localeCompare(b.id)),
     );
-    expect(audit[0]?.result?.removed.slice().sort()).toEqual([keep.id, victim.id].sort());
+    expect(audit[0]?.result?.removed.slice().sort((a, b) => a.id.localeCompare(b.id))).toEqual(
+      [
+        { id: keep.id, deleted: 1 },
+        { id: victim.id, deleted: 1 },
+      ].sort((a, b) => a.id.localeCompare(b.id)),
+    );
 
     const remaining = await db.select({ id: users.id }).from(users);
     expect(remaining.map((row) => row.id)).toEqual([actor.user.id]);
@@ -283,7 +307,7 @@ describe("admin service", () => {
       { id: "00000000-0000-4000-8000-000000000099", email: null },
     ]);
     expect(blockAudit[0]?.result).toEqual({
-      removed: [member.id],
+      removed: [{ id: member.id, deleted: 0 }],
       skipped: ["00000000-0000-4000-8000-000000000099"],
       failed: [],
     });
@@ -390,7 +414,7 @@ describe("admin service", () => {
       { id: second.id, email: "second-mid@ex.com" },
     ]);
     expect(audit[0]?.result).toEqual({
-      removed: [first.id],
+      removed: [{ id: first.id, deleted: 1 }],
       skipped: [],
       failed: [second.id],
     });

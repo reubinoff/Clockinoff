@@ -1,6 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/errors";
-import { MAX_JSON_BODY_BYTES, jsonError, noContent, ok, readJson, requireAdmin, requireUser } from "@/server/http";
+import { hashSessionToken } from "@/server/auth/session";
+import {
+  MAX_JSON_BODY_BYTES,
+  adminRequestMeta,
+  jsonError,
+  noContent,
+  ok,
+  readJson,
+  requireAdmin,
+  requireUser,
+} from "@/server/http";
 import { truncateAll } from "../setup";
 import { makeUser } from "../helpers";
 
@@ -139,6 +149,37 @@ describe("server/http", () => {
       const found = await requireAdmin();
       expect(found.role).toBe("admin");
       cookieValue = undefined;
+    });
+  });
+
+  describe("adminRequestMeta", () => {
+    it("hashes the session cookie and caps the user-agent", () => {
+      const token = "raw-session-token-not-stored";
+      const agent = `Agent/${"x".repeat(600)}`;
+      const meta = adminRequestMeta(
+        new Request("http://test/api/admin/users/bulk", {
+          headers: {
+            "user-agent": `  ${agent}  `,
+            cookie: `other=1; timely_session=${encodeURIComponent(token)}`,
+            "x-request-id": "req-meta",
+          },
+        }),
+      );
+      expect(meta.requestId).toBe("req-meta");
+      expect(meta.userAgent).toHaveLength(512);
+      expect(meta.userAgent).toBe(agent.slice(0, 512));
+      expect(meta.sessionIdHash).toBe(hashSessionToken(token));
+      expect(meta.sessionIdHash).not.toBe(token);
+    });
+
+    it("leaves user-agent and session hash empty when the request has neither", () => {
+      const meta = adminRequestMeta(new Request("http://test/api/admin/users/bulk"));
+      expect(meta.userAgent).toBeNull();
+      expect(meta.sessionIdHash).toBeNull();
+      const blank = adminRequestMeta(
+        new Request("http://test/api/admin/users/bulk", { headers: { "user-agent": "   " } }),
+      );
+      expect(blank.userAgent).toBeNull();
     });
   });
 });

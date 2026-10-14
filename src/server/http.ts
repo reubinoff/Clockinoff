@@ -5,7 +5,13 @@ import { clientIpForRecord, forwardedForRaw, socketAddressFromRequest } from "@/
 import { ApiError, toErrorBody, errors } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { requestIdFrom } from "@/lib/request-id";
-import { SESSION_COOKIE, getSessionUser, type SessionUser } from "@/server/auth/session";
+import { readRequestCookie } from "@/lib/oauth-next-path";
+import {
+  SESSION_COOKIE,
+  getSessionUser,
+  hashSessionToken,
+  type SessionUser,
+} from "@/server/auth/session";
 
 export function jsonError(err: unknown): NextResponse {
   if (err instanceof ApiError) {
@@ -40,15 +46,35 @@ export async function requireAdmin(): Promise<SessionUser> {
   return user;
 }
 
+const AUDIT_USER_AGENT_MAX = 512;
+
+function userAgentForAudit(req: Request): string | null {
+  const raw = req.headers.get("user-agent");
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, AUDIT_USER_AGENT_MAX);
+}
+
+function sessionIdHashForAudit(req: Request): string | null {
+  const token = readRequestCookie(req, SESSION_COOKIE);
+  if (!token) return null;
+  return hashSessionToken(token);
+}
+
 export function adminRequestMeta(req: Request): {
   requestId: string;
   clientIp: string | null;
   forwardedFor: string | null;
+  userAgent: string | null;
+  sessionIdHash: string | null;
 } {
   return {
     requestId: requestIdFrom(req),
     clientIp: clientIpForRecord(req.headers, socketAddressFromRequest(req)),
     forwardedFor: forwardedForRaw(req.headers),
+    userAgent: userAgentForAudit(req),
+    sessionIdHash: sessionIdHashForAudit(req),
   };
 }
 

@@ -33,12 +33,9 @@ export async function POST(req: Request): Promise<Response> {
       if (!isUuid(raw)) throw errors.validation("Invalid UUID in ids");
       ids.push(raw);
     }
-    const meta = adminRequestMeta(req);
     const result = await bulkAdminUsers(actor.id, body.action as AdminActionKind, ids, {
       confirmCount: body.confirmCount,
-      requestId: meta.requestId,
-      clientIp: meta.clientIp,
-      forwardedFor: meta.forwardedFor,
+      ...adminRequestMeta(req),
     });
     return ok(result);
   } catch (err) {

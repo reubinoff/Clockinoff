@@ -17,8 +17,14 @@ export interface AuditTarget {
   email: string | null;
 }
 
+/** One target and the DELETE statement's rowCount for that id. */
+export interface AuditDeletedTarget {
+  id: string;
+  deleted: number;
+}
+
 export interface AuditResultBody {
-  removed: string[];
+  removed: AuditDeletedTarget[];
   skipped: string[];
   failed: string[];
 }
@@ -187,6 +193,10 @@ export const auditEvents = pgTable("audit_events", {
   requestId: text("request_id").notNull(),
   clientIp: text("client_ip"),
   forwardedFor: text("forwarded_for"),
+  // Request metadata written on INSERT. Not in the column UPDATE grant.
+  userAgent: text("user_agent"),
+  // sha256 of the timely_session cookie (sessions.id). Never the raw token.
+  sessionIdHash: text("session_id_hash"),
   // The runtime role may UPDATE only these three columns (0008 grants).
   status: text("status").notNull().default("pending"),
   result: jsonb("result").$type<AuditResultBody>(),

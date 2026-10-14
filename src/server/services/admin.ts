@@ -307,6 +307,8 @@ interface MutateOptions {
   recordAudit?: boolean;
   clientIp?: string | null;
   forwardedFor?: string | null;
+  userAgent?: string | null;
+  sessionIdHash?: string | null;
 }
 
 function resolveRequestId(requestId: string | undefined): string {
@@ -321,6 +323,8 @@ interface ClosedAuditInput {
   requestId: string;
   clientIp: string | null;
   forwardedFor: string | null;
+  userAgent: string | null;
+  sessionIdHash: string | null;
   result: AuditResultBody;
 }
 
@@ -336,6 +340,8 @@ async function insertClosedAudit(
     requestId: input.requestId,
     clientIp: input.clientIp,
     forwardedFor: input.forwardedFor,
+    userAgent: input.userAgent,
+    sessionIdHash: input.sessionIdHash,
     status: "completed",
     result: input.result,
     completedAt: new Date(),
@@ -350,6 +356,8 @@ export interface PendingAuditRow {
   requestId: string;
   clientIp: string | null;
   forwardedFor: string | null;
+  userAgent: string | null;
+  sessionIdHash: string | null;
 }
 
 async function insertPendingAudit(row: PendingAuditRow): Promise<string> {
@@ -363,6 +371,8 @@ async function insertPendingAudit(row: PendingAuditRow): Promise<string> {
       requestId: row.requestId,
       clientIp: row.clientIp,
       forwardedFor: row.forwardedFor,
+      userAgent: row.userAgent,
+      sessionIdHash: row.sessionIdHash,
       status: "pending",
     })
     .returning({ id: auditEvents.id });
@@ -385,16 +395,30 @@ export function setBeforeBulkTarget(
   beforeBulkTarget = fn;
 }
 
+function deleteRowCount(result: { rowCount: number | null }): number {
+  return result.rowCount ?? 0;
+}
+
+function auditRequestFields(opts: MutateOptions | undefined): {
+  userAgent: string | null;
+  sessionIdHash: string | null;
+} {
+  return {
+    userAgent: opts?.userAgent ?? null,
+    sessionIdHash: opts?.sessionIdHash ?? null,
+  };
+}
+
 async function mutate(
   actorId: string,
   targetId: string,
   action: GuardAction,
   opts?: MutateOptions,
-): Promise<void> {
+): Promise<number> {
   const db = getDb();
   const requestId = resolveRequestId(opts?.requestId);
   const recordAudit = opts?.recordAudit !== false;
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     const lockAdmins = action === "demote";
     const adminRows = lockAdmins
       ? await tx
@@ -446,7 +470,7 @@ async function mutate(
     }
 
     if (action === "remove") {
-      await tx.delete(users).where(eq(users.id, targetId));
+      const deleted = deleteRowCount(await tx.delete(users).where(eq(users.id, targetId)));
       if (recordAudit) {
         await insertClosedAudit(tx, {
           actorId,
@@ -456,16 +480,19 @@ async function mutate(
           requestId,
           clientIp: opts?.clientIp ?? null,
           forwardedFor: opts?.forwardedFor ?? null,
-          result: { removed: [targetId], skipped: [], failed: [] },
+          ...auditRequestFields(opts),
+          result: { removed: [{ id: targetId, deleted }], skipped: [], failed: [] },
         });
       }
-      return;
+      return deleted;
     }
     if (action === "block") {
       if (!target.blockedAt) {
         await tx.update(users).set({ blockedAt: new Date() }).where(eq(users.id, targetId));
       }
-      await tx.delete(sessions).where(eq(sessions.userId, targetId));
+      const deleted = deleteRowCount(
+        await tx.delete(sessions).where(eq(sessions.userId, targetId)),
+      );
       if (recordAudit) {
         await insertClosedAudit(tx, {
           actorId,
@@ -475,22 +502,24 @@ async function mutate(
           requestId,
           clientIp: opts?.clientIp ?? null,
           forwardedFor: opts?.forwardedFor ?? null,
-          result: { removed: [targetId], skipped: [], failed: [] },
+          ...auditRequestFields(opts),
+          result: { removed: [{ id: targetId, deleted }], skipped: [], failed: [] },
         });
       }
-      return;
+      return deleted;
     }
     if (action === "unblock") {
       await tx.update(users).set({ blockedAt: null }).where(eq(users.id, targetId));
-      return;
+      return 0;
     }
     if (action === "promote") {
       if (target.role !== "admin") {
         await tx.update(users).set({ role: "admin" }).where(eq(users.id, targetId));
       }
-      return;
+      return 0;
     }
     await tx.update(users).set({ role: "user" }).where(eq(users.id, targetId));
+    return 0;
   });
 }
 
@@ -498,8 +527,8 @@ export async function removeAdminUser(
   actorId: string,
   targetId: string,
   opts?: MutateOptions,
-): Promise<void> {
-  await mutate(actorId, targetId, "remove", opts);
+): Promise<number> {
+  return mutate(actorId, targetId, "remove", opts);
 }
 
 export async function blockAdminUser(
@@ -543,6 +572,8 @@ export interface BulkAdminOptions {
   requestId?: string;
   clientIp?: string | null;
   forwardedFor?: string | null;
+  userAgent?: string | null;
+  sessionIdHash?: string | null;
 }
 
 function confirmCountMatches(value: unknown, expected: number): boolean {
@@ -665,6 +696,8 @@ export async function bulkAdminUsers(
         requestId,
         clientIp: options.clientIp ?? null,
         forwardedFor: options.forwardedFor ?? null,
+        userAgent: options.userAgent ?? null,
+        sessionIdHash: options.sessionIdHash ?? null,
       });
     } catch (err) {
       logger.exception("[audit] pending insert failed", err);
@@ -674,20 +707,21 @@ export async function bulkAdminUsers(
 
   const auditOpts = { requestId, recordAudit: false as const };
   let applied = 0;
-  const removed: string[] = [];
+  const removed: AuditResultBody["removed"] = [];
   const skippedIds: string[] = [];
   const failed: string[] = [];
   for (let index = 0; index < targets.length; index += 1) {
     const id = targets[index] ?? "";
     try {
       if (beforeBulkTarget) await beforeBulkTarget(index, id);
-      if (action === "remove") await removeAdminUser(actorId, id, auditOpts);
-      else if (action === "block") await blockAdminUser(actorId, id, auditOpts);
+      let deleted = 0;
+      if (action === "remove") deleted = await removeAdminUser(actorId, id, auditOpts);
+      else if (action === "block") deleted = await mutate(actorId, id, "block", auditOpts);
       else if (action === "unblock") await unblockAdminUser(actorId, id);
       else if (action === "promote") await promoteAdminUser(actorId, id);
       else await demoteAdminUser(actorId, id);
       applied += 1;
-      removed.push(id);
+      if (audited) removed.push({ id, deleted });
     } catch (err) {
       if (isBulkSkip(err)) {
         skippedIds.push(id);

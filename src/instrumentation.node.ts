@@ -21,6 +21,7 @@
 //      terminals).
 import { useAzureMonitor } from "@azure/monitor-opentelemetry";
 import type { ReadableSpan, SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { pgInstrumentationOptions, redactPgSpanAttribute } from "@/lib/pg-telemetry";
 import { REDACTED, redactDeep, redactString } from "@/lib/scrub";
 
 const SENSITIVE_ATTRIBUTE_MATCHERS: Array<(key: string) => boolean> = [
@@ -51,6 +52,11 @@ class RedactingSpanProcessor implements SpanProcessor {
     const attrs = span.attributes as Record<string, unknown> | undefined;
     if (!attrs) return;
     for (const key of Object.keys(attrs)) {
+      const pgRedacted = redactPgSpanAttribute(key, attrs[key]);
+      if (pgRedacted !== undefined) {
+        attrs[key] = pgRedacted;
+        continue;
+      }
       if (isSensitiveAttributeKey(key)) {
         attrs[key] = REDACTED;
         continue;
@@ -87,4 +93,11 @@ useAzureMonitor({
     connectionString: process.env.APPLICATIONINSIGHTS_CONNECTION_STRING,
   },
   spanProcessors: [new RedactingSpanProcessor()],
+  // PgInstrumentation is already on in the Azure distro. Pass the pg
+  // options explicitly so bound parameters stay off the dependency span.
+  // The Azure options type only declares `enabled`; the extra fields are
+  // what `new PgInstrumentation(options)` reads.
+  instrumentationOptions: {
+    postgreSql: pgInstrumentationOptions as { enabled?: boolean },
+  },
 });

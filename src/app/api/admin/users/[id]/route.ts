@@ -24,9 +24,7 @@ export async function DELETE(req: Request, { params }: Params): Promise<Response
   try {
     const actor = await requireAdmin();
     const { id: raw } = await params;
-    await removeAdminUser(actor.id, requireUuid(raw), {
-      requestId: adminRequestMeta(req).requestId,
-    });
+    await removeAdminUser(actor.id, requireUuid(raw), adminRequestMeta(req));
     return noContent();
   } catch (err) {
     return jsonError(err);

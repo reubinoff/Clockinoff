@@ -436,7 +436,7 @@ services in `src/server/services/*`. Every error is shaped as
 | `GET` | `/api/export/pdf?from&to` | **from/to required**; empty → "No entries" page, 200 |
 | `GET` | `/api/admin/users` | admin only; `?q` email search, `?page` (~25), `?sort` (`email` \| `role` \| `status` \| `created` \| `activity`), `?dir` (`asc` \| `desc`). Invalid sort/dir fall back to created desc. Ties break on id. |
 | `GET` / `DELETE` | `/api/admin/users/:id` | detail + hard-delete; 400 when the target is an admin or the caller |
-| `POST` | `/api/admin/users/bulk` | `{ action, ids, confirmCount? }`. Remove skips admins, the caller, and ids that are already gone; `confirmCount` must equal that effective count or the response is 400. Replaying the same body after a successful remove is that mismatch: nothing else is deleted, and no `DELETE` is issued for the ids already removed. More than 25 ids is 400 (the list is not truncated). Block returns 400 if any id is an admin or the caller. Other actions skip ineligible ids. Remove and block insert an `audit_events` row (actor email, targets as `{id, email}`, raw `X-Forwarded-For`) before the per-id loop, then update `status` / `result` / `completed_at`. If that insert fails, bulk remove returns 500 and deletes nothing |
+| `POST` | `/api/admin/users/bulk` | `{ action, ids, confirmCount? }`. Remove skips admins, the caller, and ids that are already gone; `confirmCount` must equal that effective count or the response is 400. Replaying the same body after a successful remove is that mismatch: nothing else is deleted, and no `DELETE` is issued for the ids already removed. More than 25 ids is 400 (the list is not truncated). Block returns 400 if any id is an admin or the caller. Other actions skip ineligible ids. Remove and block insert an `audit_events` row (actor email, targets as `{id, email}`, raw `X-Forwarded-For`, user-agent, sha256 of the session cookie) before the per-id loop, then update `status` / `result` / `completed_at`. `result.removed` is `{id, deleted}[]` where `deleted` is that target's `DELETE` rowCount. If that insert fails, bulk remove returns 500 and deletes nothing |
 | `POST` | `/api/admin/users/:id/block` | deny login, delete sessions; no self-block |
 | `POST` | `/api/admin/users/:id/unblock` | clear block |
 | `POST` | `/api/admin/users/:id/promote` | role → admin |
@@ -662,6 +662,10 @@ GRANT UPDATE (status, result, completed_at) ON audit_events TO "clockinoff-prod"
 
 No `DELETE`, no `TRUNCATE`, and no table-level `UPDATE`. `id` is
 `gen_random_uuid()`, so there is no sequence and no `USAGE` grant.
+`drizzle/0009_audit_request_meta.sql` adds `user_agent` and
+`session_id_hash`. Table INSERT covers them; they are not in the
+column UPDATE grant, so the app writes them only on the pending or
+closed insert.
 If role `clockinoff-prod` is missing, the migration raises and does
 not skip the grants, unless
 `current_setting('clockinoff.allow_missing_app_role', true) = 'on'`.
@@ -703,8 +707,8 @@ the redaction contract below.
 
 ### Application Insights
 
-Server-side telemetry (HTTP requests, exceptions, `pg` queries, `console.*`
-output) is exported to Azure Monitor via
+Server-side telemetry (HTTP requests, exceptions, `pg` query dependency
+spans, `console.*` output) is exported to Azure Monitor via
 [`@azure/monitor-opentelemetry`](https://learn.microsoft.com/azure/azure-monitor/app/opentelemetry-enable?tabs=nodejs).
 The SDK is bootstrapped from `src/instrumentation.ts` (Next.js
 [`instrumentation` hook](https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation))
@@ -719,6 +723,11 @@ imported.
 - Span attributes matching `authorization`, `cookie`, `set-cookie`,
   `password`, or `timely_session` are replaced with `[REDACTED]` before
   export.
+- `pg` dependency spans are on. Bound parameters stay off
+  (`enhancedDatabaseReporting: false`). Attributes that still carry
+  query parameters (`db.postgresql.values`, `db.query.parameter*`) are
+  replaced with `[REDACTED]`. Quoted literals inside `db.query.text` /
+  `db.statement` are replaced before export.
 - Log / span bodies with a `postgres://` or `postgresql://` URL are
   replaced with `[REDACTED_DATABASE_URL]` — the full `DATABASE_URL` is
   never emitted.
