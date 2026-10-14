@@ -17,7 +17,7 @@ import {
   type AdminActionKind,
   type AdminUser,
 } from "@/components/admin/admin-ui";
-import { partitionBulk, bulkSkippedToast } from "@/lib/admin-bulk";
+import { parseTypedConfirmCount, partitionBulk, bulkSkippedToast } from "@/lib/admin-bulk";
 import {
   BULK_REMOVE_CAP,
   adminActionErrorMessage,
@@ -204,51 +204,58 @@ export default function AdminUsers({
     setBulkError(null);
   }
 
-  async function confirmBulk(): Promise<void> {
-    if (bulkInFlight.current || bulkDismissed.current) return;
-    if (!bulkKind || !bulkPlan || bulkPlan.eligible.length === 0 || bulkBusy) return;
-    if (bulkKind === "remove" && bulkPlan.eligible.length > BULK_REMOVE_CAP) return;
+  function confirmBulk(typedCount: string): boolean {
+    if (bulkInFlight.current || bulkDismissed.current) return false;
+    if (!bulkKind || !bulkPlan || bulkPlan.eligible.length === 0 || bulkBusy) return false;
+    if (bulkKind === "remove" && bulkPlan.eligible.length > BULK_REMOVE_CAP) return false;
+    const confirmCount = bulkKind === "remove" ? parseTypedConfirmCount(typedCount) : null;
+    if (bulkKind === "remove" && confirmCount === null) return false;
     bulkInFlight.current = true;
     const localSkipped = bulkPlan.skipped.length;
+    const kind = bulkKind;
+    const ids = bulkPlan.eligible.map((user) => user.id);
     setBulkBusy(true);
-    try {
-      const res = await fetch("/api/admin/users/bulk", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: bulkKind,
-          ids: bulkPlan.eligible.map((user) => user.id),
-          ...(bulkKind === "remove" ? { confirmCount: bulkPlan.eligible.length } : {}),
-        }),
-      });
-      if (!res.ok) {
-        let message: string | undefined;
-        try {
-          const body = (await res.json()) as { error?: { message?: string } };
-          message = body.error?.message;
-        } catch {
-          message = undefined;
-        }
-        if (bulkKind === "remove") {
-          setBulkError(bulkRemoveFailureMessage(message));
+    void (async () => {
+      try {
+        const res = await fetch("/api/admin/users/bulk", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: kind,
+            ids,
+            ...(kind === "remove" ? { confirmCount } : {}),
+          }),
+        });
+        if (!res.ok) {
+          let message: string | undefined;
+          try {
+            const body = (await res.json()) as { error?: { message?: string } };
+            message = body.error?.message;
+          } catch {
+            message = undefined;
+          }
+          if (kind === "remove") {
+            setBulkError(bulkRemoveFailureMessage(message));
+            return;
+          }
+          emitToast(adminActionErrorMessage(message));
           return;
         }
-        emitToast(adminActionErrorMessage(message));
-        return;
+        const body = (await res.json()) as { applied?: number; skipped?: number };
+        const applied = Number(body.applied) || 0;
+        const skipped = localSkipped + (Number(body.skipped) || 0);
+        const toast = bulkSkippedToast(kind, applied, skipped);
+        setBulkError(null);
+        setBulkKind(null);
+        if (toast) emitToast(toast);
+        await load();
+        router.refresh();
+      } finally {
+        bulkInFlight.current = false;
+        setBulkBusy(false);
       }
-      const body = (await res.json()) as { applied?: number; skipped?: number };
-      const applied = Number(body.applied) || 0;
-      const skipped = localSkipped + (Number(body.skipped) || 0);
-      const toast = bulkSkippedToast(bulkKind, applied, skipped);
-      setBulkError(null);
-      setBulkKind(null);
-      if (toast) emitToast(toast);
-      await load();
-      router.refresh();
-    } finally {
-      bulkInFlight.current = false;
-      setBulkBusy(false);
-    }
+    })();
+    return true;
   }
 
   return (
@@ -470,7 +477,7 @@ export default function AdminUsers({
           pending={bulkBusy}
           error={bulkKind === "remove" ? bulkError : null}
           onCancel={cancelBulk}
-          onConfirm={() => void confirmBulk()}
+          onConfirm={confirmBulk}
         />
       ) : null}
     </section>

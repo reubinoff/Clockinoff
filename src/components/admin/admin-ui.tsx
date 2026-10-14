@@ -8,6 +8,7 @@ import {
   bulkRemoveSkipLine,
   bulkSampleEmails,
   bulkWillSkipLine,
+  parseTypedConfirmCount,
   type AdminActionKind,
 } from "@/lib/admin-bulk";
 import {
@@ -300,7 +301,7 @@ export function AdminBulkConfirmDialog({
   pending: boolean;
   error?: string | null;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (typedCount: string) => boolean;
 }): JSX.Element {
   const copy = DIALOG[kind];
   const count = emails.length;
@@ -338,8 +339,9 @@ export function AdminBulkConfirmDialog({
 
   function handleConfirm(): void {
     if (confirmDisabled || actionLock.current) return;
+    if (isRemove && parseTypedConfirmCount(typed) === null) return;
     actionLock.current = true;
-    onConfirm();
+    if (!onConfirm(typed)) actionLock.current = false;
   }
 
   useEffect(() => {

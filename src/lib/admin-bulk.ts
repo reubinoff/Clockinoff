@@ -98,6 +98,16 @@ export function bulkSampleEmails(emails: readonly string[]): { shown: string[]; 
   return { shown, more: Math.max(0, emails.length - shown.length) };
 }
 
+// The confirm dialog sends this value, not the eligible-row count.
+// Empty or non-numeric text is not a confirmation.
+export function parseTypedConfirmCount(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!/^[0-9]+$/.test(trimmed)) return null;
+  const value = Number(trimmed);
+  if (!Number.isSafeInteger(value)) return null;
+  return value;
+}
+
 export function bulkWillSkipLine(skipped: number): string | null {
   if (skipped <= 0) return null;
   if (skipped === 1) return "1 will be skipped.";

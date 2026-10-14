@@ -8,6 +8,7 @@ import {
   bulkSkippedToast,
   bulkWillSkipLine,
   isBulkEligible,
+  parseTypedConfirmCount,
   partitionBulk,
   type BulkSubject,
 } from "@/lib/admin-bulk";
@@ -69,5 +70,17 @@ describe("admin bulk eligibility", () => {
     expect(bulkSkippedToast("promote", 2, 0)).toBeNull();
     expect(bulkSkippedToast("demote", 1, 1)).toBe("Demoted 1. Skipped 1.");
     expect(bulkSkippedToast("unblock", 1, 4)).toBe("Unblocked 1. Skipped 4.");
+  });
+
+  it("parses only the digits the user typed", () => {
+    expect(parseTypedConfirmCount("  2  ")).toBe(2);
+    expect(parseTypedConfirmCount("0")).toBe(0);
+    expect(parseTypedConfirmCount("")).toBeNull();
+    expect(parseTypedConfirmCount("   ")).toBeNull();
+    expect(parseTypedConfirmCount("two")).toBeNull();
+    expect(parseTypedConfirmCount("2 users")).toBeNull();
+    expect(parseTypedConfirmCount("1.5")).toBeNull();
+    expect(parseTypedConfirmCount("-1")).toBeNull();
+    expect(parseTypedConfirmCount("9".repeat(20))).toBeNull();
   });
 });

@@ -13,6 +13,7 @@ import {
   type SQL,
   type SQLWrapper,
 } from "drizzle-orm";
+import { capAuditUserAgent } from "@/lib/audit-user-agent";
 import type { AdminActionKind } from "@/lib/admin-bulk";
 import { ADMIN_GUARD, BULK_REMOVE_CAP, BULK_REMOVE_COPY } from "@/lib/admin-copy";
 import { asUserRole, type UserRole, type UserStatus } from "@/lib/admin-role";
@@ -340,7 +341,7 @@ async function insertClosedAudit(
     requestId: input.requestId,
     clientIp: input.clientIp,
     forwardedFor: input.forwardedFor,
-    userAgent: input.userAgent,
+    userAgent: capAuditUserAgent(input.userAgent),
     sessionIdHash: input.sessionIdHash,
     status: "completed",
     result: input.result,
@@ -371,7 +372,7 @@ async function insertPendingAudit(row: PendingAuditRow): Promise<string> {
       requestId: row.requestId,
       clientIp: row.clientIp,
       forwardedFor: row.forwardedFor,
-      userAgent: row.userAgent,
+      userAgent: capAuditUserAgent(row.userAgent),
       sessionIdHash: row.sessionIdHash,
       status: "pending",
     })

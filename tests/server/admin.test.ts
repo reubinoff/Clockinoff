@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { AUDIT_USER_AGENT_MAX } from "@/lib/audit-user-agent";
 import { ADMIN_GUARD } from "@/lib/admin-copy";
 import { login, register } from "@/server/auth/service";
 import { getSessionUser } from "@/server/auth/session";
@@ -122,6 +123,26 @@ describe("admin service", () => {
       skipped: [],
       failed: [],
     });
+  });
+
+  it("stores at most 512 characters of user-agent on the audit insert", async () => {
+    const actor = await makeUser("actor-ua@ex.com");
+    const member = await insertUser("member-ua@ex.com");
+    const other = await insertUser("other-ua@ex.com");
+    await setRole(actor.user.id, "admin");
+    const agent = `UA/${"b".repeat(800)}`;
+    await removeAdminUser(actor.user.id, member.id, { userAgent: `  ${agent}  ` });
+    const bulkAgent = `Bulk/${"c".repeat(700)}`;
+    await bulkAdminUsers(actor.user.id, "remove", [other.id], {
+      confirmCount: 1,
+      userAgent: ` ${bulkAgent}`,
+    });
+    const audit = await getDb().select().from(auditEvents);
+    expect(audit).toHaveLength(2);
+    expect(audit.map((row) => row.userAgent).sort()).toEqual(
+      [agent.slice(0, AUDIT_USER_AGENT_MAX), bulkAgent.slice(0, AUDIT_USER_AGENT_MAX)].sort(),
+    );
+    expect(audit.every((row) => row.userAgent?.length === AUDIT_USER_AGENT_MAX)).toBe(true);
   });
 
   it("blocks and unblocks, denies self-block, and kills sessions plus login", async () => {

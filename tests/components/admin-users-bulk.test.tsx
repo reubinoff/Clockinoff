@@ -123,7 +123,7 @@ describe("AdminUsers bulk actions", () => {
     expect((confirm as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.change(within(dialog).getByLabelText("Type 2 to confirm"), {
-      target: { value: "2" },
+      target: { value: "  2  " },
     });
     expect((within(dialog).getByRole("button", { name: "Remove" }) as HTMLButtonElement).disabled).toBe(
       false,
@@ -145,6 +145,7 @@ describe("AdminUsers bulk actions", () => {
     };
     expect(sent.action).toBe("remove");
     expect(sent.confirmCount).toBe(2);
+    expect(typeof sent.confirmCount).toBe("number");
     expect(sent.ids).toEqual([
       "22222222-2222-4222-8222-222222222222",
       "33333333-3333-4333-8333-333333333333",
@@ -311,5 +312,99 @@ describe("AdminUsers bulk actions", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
     expect(fetchMock.mock.calls.filter((call) => String(call[0]).includes("/bulk"))).toHaveLength(1);
+  });
+
+  function bulkCalls(fetchMock: ReturnType<typeof vi.fn>): unknown[][] {
+    return fetchMock.mock.calls.filter((call) => String(call[0]).includes("/bulk"));
+  }
+
+  it("does not call /bulk when selecting rows or using Select all", async () => {
+    const fetchMock = vi.fn(async () => listResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdminUsers actorId={actorId} timezone="Asia/Jerusalem" />);
+    expect((await screen.findAllByText("ada@ex.com")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Select ada@ex.com" })[0]);
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Select blocked@ex.com" })[0]);
+    expect(bulkCalls(fetchMock)).toHaveLength(0);
+
+    for (const box of screen.getAllByRole("checkbox", { name: "Select all on this page" })) {
+      fireEvent.click(box);
+    }
+    expect(bulkCalls(fetchMock)).toHaveLength(0);
+  });
+
+  it("does not call /bulk for Enter or Space on the toolbar or a row", async () => {
+    const fetchMock = vi.fn(async () => listResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdminUsers actorId={actorId} timezone="Asia/Jerusalem" />);
+    expect((await screen.findAllByText("ada@ex.com")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Select ada@ex.com" })[0]);
+    const toolbar = screen.getByRole("toolbar", { name: "Bulk user actions" });
+    const row = screen.getAllByRole("row").find((candidate) =>
+      candidate.textContent?.includes("ada@ex.com"),
+    );
+    expect(row).toBeTruthy();
+
+    for (const key of ["Enter", " "]) {
+      fireEvent.keyDown(toolbar, { key });
+      fireEvent.keyUp(toolbar, { key });
+      fireEvent.keyDown(row as HTMLElement, { key });
+      fireEvent.keyUp(row as HTMLElement, { key });
+    }
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(bulkCalls(fetchMock)).toHaveLength(0);
+  });
+
+  it("does not call /bulk when the dialog closes with Escape or a backdrop click", async () => {
+    const fetchMock = vi.fn(async () => listResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdminUsers actorId={actorId} timezone="Asia/Jerusalem" />);
+    expect((await screen.findAllByText("ada@ex.com")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Select ada@ex.com" })[0]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.getByRole("dialog", { name: "Remove 1 user?" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(bulkCalls(fetchMock)).toHaveLength(0);
+    expect(screen.getByRole("toolbar", { name: "Bulk user actions" }).textContent).toContain(
+      "1 selected",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    const dialog = screen.getByRole("dialog", { name: "Remove 1 user?" });
+    const backdrop = dialog.parentElement;
+    expect(backdrop).toBeTruthy();
+    fireEvent.mouseDown(backdrop as HTMLElement);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(bulkCalls(fetchMock)).toHaveLength(0);
+    expect(screen.getByRole("toolbar", { name: "Bulk user actions" }).textContent).toContain(
+      "1 selected",
+    );
+  });
+
+  it("does not call /bulk when the typed confirmation is empty or not a number", async () => {
+    const fetchMock = vi.fn(async () => listResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdminUsers actorId={actorId} timezone="Asia/Jerusalem" />);
+    expect((await screen.findAllByText("ada@ex.com")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Select ada@ex.com" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    const dialog = screen.getByRole("dialog", { name: "Remove 1 user?" });
+    const input = within(dialog).getByLabelText("Type 1 to confirm");
+    const confirm = within(dialog).getByRole("button", { name: "Remove" });
+
+    fireEvent.click(confirm);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(bulkCalls(fetchMock)).toHaveLength(0);
+
+    fireEvent.change(input, { target: { value: "nope" } });
+    fireEvent.click(confirm);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("dialog", { name: "Remove 1 user?" })).toBeTruthy();
+    expect(bulkCalls(fetchMock)).toHaveLength(0);
   });
 });
