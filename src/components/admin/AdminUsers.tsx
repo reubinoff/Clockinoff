@@ -100,7 +100,6 @@ export default function AdminUsers({
   // just because the dialog opened. Cleared before the post-confirm reload
   // so a finished removal still drops the toolbar.
   const bulkKindRef = useRef<AdminActionKind | null>(null);
-  bulkKindRef.current = bulkKind;
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const bulkInFlight = useRef(false);
@@ -204,12 +203,14 @@ export default function AdminUsers({
   function askBulk(kind: AdminActionKind): void {
     bulkDismissed.current = false;
     setBulkError(null);
+    bulkKindRef.current = kind;
     setBulkKind(kind);
   }
 
   function cancelBulk(): void {
     if (bulkInFlight.current) return;
     bulkDismissed.current = true;
+    bulkKindRef.current = null;
     setBulkKind(null);
     setBulkError(null);
   }
