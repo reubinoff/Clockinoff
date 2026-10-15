@@ -52,8 +52,13 @@ than 25 people shows a note and keeps **Remove** disabled. **Cancel**
 closes the dialog and does not remove anyone. If the list reloads
 while that dialog is open, it stays open as long as the people you
 selected are still on the page. While a removal is in
-progress, **Remove** and **Cancel** both stay disabled and the dialog
-sends the request once. Sending that same removal again is refused,
+progress, **Remove** reads **Removing…**, **Cancel** stays disabled, and the dialog
+sends the request once. If that selection no longer matches the people
+who can be removed, the dialog stays open and says “The selection
+changed. Nothing was removed. Check the list and try again.” When
+someone is left out, the note that follows names the account and the
+reason (an admin, or your own account) and sits below the Clockinoff
+wordmark. Sending that same removal again is refused,
 and nobody else is deleted. You can’t block or
 demote yourself, and you can’t demote the last admin.
 Opening `/admin` without that role sends you back to the timer. The

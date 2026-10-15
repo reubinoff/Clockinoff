@@ -453,7 +453,7 @@ export function AdminBulkConfirmDialog({
             onClick={handleConfirm}
             disabled={confirmDisabled}
           >
-            {copy.confirm}
+            {pending && isRemove ? BULK_REMOVE_COPY.removing : copy.confirm}
           </button>
         </div>
       </div>

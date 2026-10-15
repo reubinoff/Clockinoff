@@ -1,3 +1,5 @@
+import net from "node:net";
+
 // Client IP resolution for request-scoped keys (rate-limit buckets, audit
 // logs, ...). We use the *right-most* `X-Forwarded-For` hop by design:
 //
@@ -120,16 +122,29 @@ export function forwardedForRaw(headers: HeaderReader): string | null {
   return parts.length > 0 ? parts.join(" | ") : null;
 }
 
+// `client_ip` is text. A value that is not an IP must not be stored there.
+// Junk stays in `forwarded_for` (the raw header text). 64 is above any
+// address `net.isIP` accepts (IPv6 textual form is at most 45 characters)
+// and below a column we would otherwise fill with an arbitrary string.
+const RECORDED_IP_MAX = 64;
+
+function recordedIp(value: string | null): string | null {
+  if (!value) return null;
+  if (value.length > RECORDED_IP_MAX) return null;
+  if (net.isIP(value) === 0) return null;
+  return value;
+}
+
 export function clientIpForRecord(
   headers: HeaderReader,
   socketAddress?: string | null,
 ): string | null {
   const trusted = headerIp(headers, "x-client-ip");
-  if (trusted) return trusted;
+  if (trusted) return recordedIp(trusted);
   const hop = lastForwardedHop(headers);
-  if (hop) return hop;
+  if (hop) return recordedIp(hop);
   const socket = socketAddress?.trim();
-  if (socket) return stripPort(socket);
+  if (socket) return recordedIp(stripPort(socket));
   return null;
 }
 

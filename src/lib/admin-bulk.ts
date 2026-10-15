@@ -120,6 +120,30 @@ export function bulkRemoveSkipLine(skipped: number): string | null {
   return `${skipped} will be skipped (admins or you).`;
 }
 
+export interface NamedSkip {
+  email: string;
+  reason: string;
+}
+
+function reasonPhrase(reason: string): string {
+  return reason.endsWith(".") ? reason.slice(0, -1) : reason;
+}
+
+// Remove's success note names who was left out and why. Null when nobody
+// was skipped — the page just refreshes. Other actions still use the
+// count toast below.
+export function bulkRemoveSkippedToast(
+  applied: number,
+  skipped: readonly NamedSkip[],
+): string | null {
+  if (skipped.length === 0) return null;
+  const named = skipped
+    .map((row) => `${row.email} (${reasonPhrase(row.reason)})`)
+    .join(", ");
+  if (applied <= 0) return `Skipped ${named}.`;
+  return `Removed ${applied}. Skipped ${named}.`;
+}
+
 // Null when nobody was skipped — the page just refreshes, same as a
 // single-row action. A skip is the only bulk outcome that needs a toast.
 export function bulkSkippedToast(

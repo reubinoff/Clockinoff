@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   adminUserAriaSort,
+  adminUserSortFromSearchParams,
   nextAdminUserSort,
   parseAdminUserSort,
 } from "@/lib/admin-sort";
@@ -45,6 +46,39 @@ describe("parseAdminUserSort", () => {
     expect(parseAdminUserSort("created); drop table users; --", "asc")).toEqual(fallback);
     expect(parseAdminUserSort("email", "asc; delete from users")).toEqual(fallback);
     expect(parseAdminUserSort("' OR 1=1 --", "desc, (select 1)")).toEqual(fallback);
+  });
+
+  it("falls back to created desc for prototype keys and very long values", () => {
+    const fallback = { sort: "created" as const, dir: "desc" as const };
+    const longSort = "s".repeat(10_000);
+    const longDir = "d".repeat(10_000);
+    expect(() => parseAdminUserSort("__proto__", "desc")).not.toThrow();
+    expect(() => parseAdminUserSort("constructor", "asc")).not.toThrow();
+    expect(() => parseAdminUserSort(longSort, longDir)).not.toThrow();
+    expect(parseAdminUserSort("__proto__", "desc")).toEqual(fallback);
+    expect(parseAdminUserSort("constructor", "asc")).toEqual(fallback);
+    expect(parseAdminUserSort("__proto__", "__proto__")).toEqual(fallback);
+    expect(parseAdminUserSort("constructor", "constructor")).toEqual(fallback);
+    expect(parseAdminUserSort(longSort, "desc")).toEqual(fallback);
+    expect(parseAdminUserSort("email", longDir)).toEqual(fallback);
+
+    const repeated = new URLSearchParams("sort=email&sort=__proto__&dir=asc");
+    expect(adminUserSortFromSearchParams(repeated)).toEqual(fallback);
+    expect(
+      adminUserSortFromSearchParams(new URLSearchParams("sort=email&sort=email&dir=asc")),
+    ).toEqual(fallback);
+    expect(
+      adminUserSortFromSearchParams(new URLSearchParams("sort=constructor&dir=desc")),
+    ).toEqual(fallback);
+    expect(
+      adminUserSortFromSearchParams(
+        new URLSearchParams(`sort=${encodeURIComponent(longSort)}&dir=asc`),
+      ),
+    ).toEqual(fallback);
+    expect(adminUserSortFromSearchParams(new URLSearchParams("sort=email&dir=asc"))).toEqual({
+      sort: "email",
+      dir: "asc",
+    });
   });
 });
 

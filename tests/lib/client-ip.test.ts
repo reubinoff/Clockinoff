@@ -298,6 +298,31 @@ describe("clientIpForRecord", () => {
     );
   });
 
+  it("stores null for a value that is not an IP and keeps the junk in forwarded_for", () => {
+    const junk = headers({
+      "x-client-ip": "not-an-ip",
+      "x-forwarded-for": "203.0.113.7, evil.example",
+      "x-azure-clientip": "also-junk",
+    });
+    expect(clientIpForRecord(junk)).toBeNull();
+    expect(forwardedForRaw(junk)).toBe(
+      "x-forwarded-for: 203.0.113.7, evil.example | x-client-ip: not-an-ip | x-azure-clientip: also-junk",
+    );
+    expect(clientIpForRecord(headers({ "x-forwarded-for": "9.9.9.9, 999.1.2.3" }))).toBeNull();
+    expect(clientIpForRecord(headers({ "x-client-ip": "1.2.3" }))).toBeNull();
+    expect(clientIpForRecord(headers({}), "nope")).toBeNull();
+    expect(clientIpForRecord(headers({ "x-client-ip": "1.2.3.4:notaport" }))).toBeNull();
+  });
+
+  it("caps a recorded IP at 64 characters", () => {
+    const sixtyFour = "a".repeat(64);
+    const sixtyFive = "b".repeat(65);
+    expect(clientIpForRecord(headers({ "x-client-ip": sixtyFour }))).toBeNull();
+    expect(clientIpForRecord(headers({ "x-forwarded-for": sixtyFive }))).toBeNull();
+    expect(clientIpForRecord(headers({}), `1.2.3.4${"x".repeat(60)}`)).toBeNull();
+    expect(forwardedForRaw(headers({ "x-client-ip": sixtyFive }))).toContain(sixtyFive);
+  });
+
   it("reads a socket address hung off the request", () => {
     const req = new Request("http://test/");
     expect(socketAddressFromRequest(req)).toBeNull();

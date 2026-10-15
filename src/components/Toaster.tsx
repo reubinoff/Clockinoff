@@ -35,16 +35,20 @@ export default function Toaster(): JSX.Element {
     <div
       aria-live="polite"
       aria-atomic="true"
-      className="pointer-events-none fixed z-40 inset-x-0 flex flex-col items-center gap-2
-                 top-[calc(env(safe-area-inset-top)+1rem)]
-                 md:top-auto md:bottom-6 md:inset-x-auto md:right-6 md:items-end"
+      // Below the sticky wordmark on a phone. z-10 stays under the header
+      // (z-20) so a long removal note cannot paint across "Clockinoff".
+      // Desktop keeps the bottom-right pile above the page.
+      className="pointer-events-none fixed z-10 inset-x-0 flex flex-col items-center gap-2 px-4
+                 top-[calc(var(--app-header-h)+0.5rem)]
+                 md:top-auto md:bottom-6 md:inset-x-auto md:right-6 md:z-40 md:items-end md:px-0"
     >
       {toasts.map((t) => (
         <div
           key={t.id}
           role="status"
-          className="toast pointer-events-auto rounded-full border border-border bg-surface
-                     px-4 py-2 text-body-sm text-ink shadow-card"
+          className="toast pointer-events-auto min-w-0 max-w-full wrap-anywhere rounded-2xl border border-border bg-surface
+                     px-4 py-2 text-center text-body-sm text-ink shadow-card
+                     md:max-w-sm md:text-left"
         >
           {t.kind}
         </div>

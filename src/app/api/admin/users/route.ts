@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { adminUserSortFromSearchParams } from "@/lib/admin-sort";
 import { errors } from "@/lib/errors";
 import { jsonError, ok, requireAdmin } from "@/server/http";
 import { listAdminUsers } from "@/server/services/admin";
@@ -20,14 +21,16 @@ export async function GET(req: Request): Promise<Response> {
       page: url.searchParams.get("page") ?? undefined,
     });
     if (!parsed.success) throw errors.validation("Invalid query");
-    // Raw sort/dir go to the service, which allowlists them onto Drizzle
-    // columns. Unknown, wrong-case, and injection values become created
-    // desc and still return 200.
+    // Allowlisted here, then again in the service, onto Drizzle columns.
+    // Unknown keys, wrong case, injection, `__proto__`, `constructor`,
+    // a repeated `sort=`, and very long values become created desc and
+    // still return 200.
+    const sort = adminUserSortFromSearchParams(url.searchParams);
     const result = await listAdminUsers({
       q: parsed.data.q,
       page: parsed.data.page,
-      sort: url.searchParams.get("sort"),
-      dir: url.searchParams.get("dir"),
+      sort: sort.sort,
+      dir: sort.dir,
     });
     return ok(result);
   } catch (err) {

@@ -150,7 +150,9 @@ describe("AdminUsers bulk actions", () => {
       "22222222-2222-4222-8222-222222222222",
       "33333333-3333-4333-8333-333333333333",
     ]);
-    expect(emitToast).toHaveBeenCalledWith("Removed 2. Skipped 2.");
+    expect(emitToast).toHaveBeenCalledWith(
+      "Removed 2. Skipped me@ex.com (You can’t remove yourself), boss@ex.com (You can’t remove an admin).",
+    );
     await waitFor(() => {
       expect(screen.queryByRole("toolbar", { name: "Bulk user actions" })).toBeNull();
     });
@@ -224,7 +226,12 @@ describe("AdminUsers bulk actions", () => {
       const url = String(input);
       if (url.includes("/api/admin/users/bulk")) {
         return new Response(
-          JSON.stringify({ error: { code: "VALIDATION", message: "The number didn't match. Nothing was removed." } }),
+          JSON.stringify({
+            error: {
+              code: "VALIDATION",
+              message: "The selection changed. Nothing was removed. Check the list and try again.",
+            },
+          }),
           { status: 400, headers: { "content-type": "application/json" } },
         );
       }
@@ -240,7 +247,7 @@ describe("AdminUsers bulk actions", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
 
     expect((await screen.findByRole("alert")).textContent).toBe(
-      "The number didn't match. Nothing was removed.",
+      "The selection changed. Nothing was removed. Check the list and try again.",
     );
     expect(screen.getByRole("dialog", { name: "Remove 1 user?" })).toBeTruthy();
     expect(screen.getByRole("toolbar", { name: "Bulk user actions" }).textContent).toContain("1 selected");
@@ -329,6 +336,7 @@ describe("AdminUsers bulk actions", () => {
 
     expect(fetchMock.mock.calls.filter((call) => String(call[0]).includes("/bulk"))).toHaveLength(1);
     expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    expect(confirm.textContent).toBe("Removing…");
     expect((cancel as HTMLButtonElement).disabled).toBe(true);
 
     await act(async () => {

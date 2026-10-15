@@ -17,7 +17,13 @@ import {
   type AdminActionKind,
   type AdminUser,
 } from "@/components/admin/admin-ui";
-import { parseTypedConfirmCount, partitionBulk, bulkSkippedToast } from "@/lib/admin-bulk";
+import {
+  bulkIneligibleReason,
+  bulkRemoveSkippedToast,
+  bulkSkippedToast,
+  parseTypedConfirmCount,
+  partitionBulk,
+} from "@/lib/admin-bulk";
 import {
   BULK_REMOVE_CAP,
   adminActionErrorMessage,
@@ -225,6 +231,13 @@ export default function AdminUsers({
     const localSkipped = bulkPlan.skipped.length;
     const kind = bulkKind;
     const ids = bulkPlan.eligible.map((user) => user.id);
+    const removeSkips =
+      kind === "remove"
+        ? bulkPlan.skipped.flatMap((user) => {
+            const reason = bulkIneligibleReason("remove", user, actorId, adminsCount);
+            return reason ? [{ email: user.email, reason }] : [];
+          })
+        : [];
     setBulkBusy(true);
     void (async () => {
       try {
@@ -254,8 +267,13 @@ export default function AdminUsers({
         }
         const body = (await res.json()) as { applied?: number; skipped?: number };
         const applied = Number(body.applied) || 0;
-        const skipped = localSkipped + (Number(body.skipped) || 0);
-        const toast = bulkSkippedToast(kind, applied, skipped);
+        const serverSkipped = Number(body.skipped) || 0;
+        const skipped = localSkipped + serverSkipped;
+        const toast =
+          kind === "remove"
+            ? (bulkRemoveSkippedToast(applied, removeSkips) ??
+              bulkSkippedToast(kind, applied, serverSkipped))
+            : bulkSkippedToast(kind, applied, skipped);
         setBulkError(null);
         setBulkKind(null);
         bulkKindRef.current = null;

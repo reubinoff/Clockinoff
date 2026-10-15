@@ -369,13 +369,22 @@ describe("admin service", () => {
 
     await expect(
       bulkAdminUsers(actor.user.id, "remove", [member.id, admin.id], { confirmCount: 2 }),
-    ).rejects.toMatchObject({ status: 400, message: "The number didn't match. Nothing was removed." });
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "The selection changed. Nothing was removed. Check the list and try again.",
+    });
     await expect(
       bulkAdminUsers(actor.user.id, "remove", [member.id]),
-    ).rejects.toMatchObject({ status: 400, message: "The number didn't match. Nothing was removed." });
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "The selection changed. Nothing was removed. Check the list and try again.",
+    });
     await expect(
       bulkAdminUsers(actor.user.id, "remove", [member.id], { confirmCount: 1.5 }),
-    ).rejects.toMatchObject({ status: 400, message: "The number didn't match. Nothing was removed." });
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "The selection changed. Nothing was removed. Check the list and try again.",
+    });
 
     const over = Array.from({ length: 26 }, () => member.id);
     await expect(

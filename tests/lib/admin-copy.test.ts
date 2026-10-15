@@ -22,6 +22,10 @@ describe("admin guard copy", () => {
   });
 
   it("maps bulk-remove failures to the locked copy and hides anything else", () => {
+    expect(BULK_REMOVE_COPY.mismatch).toBe(
+      "The selection changed. Nothing was removed. Check the list and try again.",
+    );
+    expect(BULK_REMOVE_COPY.removing).toBe("Removing…");
     expect(bulkRemoveFailureMessage(BULK_REMOVE_COPY.mismatch)).toBe(BULK_REMOVE_COPY.mismatch);
     expect(bulkRemoveFailureMessage(BULK_REMOVE_COPY.overCap)).toBe(BULK_REMOVE_COPY.overCap);
     expect(bulkRemoveFailureMessage("password hash leaked")).toBe(BULK_REMOVE_COPY.generic);

@@ -4,6 +4,7 @@ import {
   bulkConfirmTitle,
   bulkIneligibleReason,
   bulkRemoveSkipLine,
+  bulkRemoveSkippedToast,
   bulkSampleEmails,
   bulkSkippedToast,
   bulkWillSkipLine,
@@ -70,6 +71,18 @@ describe("admin bulk eligibility", () => {
     expect(bulkSkippedToast("promote", 2, 0)).toBeNull();
     expect(bulkSkippedToast("demote", 1, 1)).toBe("Demoted 1. Skipped 1.");
     expect(bulkSkippedToast("unblock", 1, 4)).toBe("Unblocked 1. Skipped 4.");
+    expect(bulkRemoveSkippedToast(2, [])).toBeNull();
+    expect(
+      bulkRemoveSkippedToast(1, [{ email: "boss@ex.com", reason: ADMIN_GUARD.adminRemove }]),
+    ).toBe("Removed 1. Skipped boss@ex.com (You can’t remove an admin).");
+    expect(
+      bulkRemoveSkippedToast(0, [
+        { email: "me@ex.com", reason: ADMIN_GUARD.selfRemove },
+        { email: "boss@ex.com", reason: "Already an admin" },
+      ]),
+    ).toBe(
+      "Skipped me@ex.com (You can’t remove yourself), boss@ex.com (Already an admin).",
+    );
   });
 
   it("parses only the digits the user typed", () => {

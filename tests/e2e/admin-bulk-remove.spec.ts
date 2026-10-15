@@ -3,7 +3,8 @@ import { stat } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import argon2 from "argon2";
 import pg from "pg";
-import { BULK_REMOVE_COPY } from "@/lib/admin-copy";
+import { bulkRemoveSkippedToast } from "@/lib/admin-bulk";
+import { ADMIN_GUARD, BULK_REMOVE_COPY } from "@/lib/admin-copy";
 
 // Admin bulk-remove against `next start` (#219). Seeds an admin and users
 // directly so the register rate limit does not apply. Dialog screenshots
@@ -314,8 +315,10 @@ for (const theme of SHOT_THEMES) {
         markSettled();
       });
       try {
-        await dialog.getByRole("button", { name: "Remove" }).click();
-        await expect(dialog.getByRole("button", { name: "Remove" })).toBeDisabled();
+        await dialog.getByRole("button", { name: "Remove", exact: true }).click();
+        const removing = dialog.getByRole("button", { name: BULK_REMOVE_COPY.removing, exact: true });
+        await expect(removing).toBeDisabled();
+        await expect(removing).toHaveText(BULK_REMOVE_COPY.removing);
         await expect(dialog.getByRole("button", { name: "Cancel" })).toBeDisabled();
         await saveShot(page, theme, width, "inflight");
       } finally {
@@ -333,9 +336,23 @@ for (const theme of SHOT_THEMES) {
       const successResponse = page.waitForResponse(
         (res) => res.url().includes("/api/admin/users/bulk") && res.request().method() === "POST",
       );
-      await dialog.getByRole("button", { name: "Remove" }).click();
+      await dialog.getByRole("button", { name: "Remove", exact: true }).click();
       expect((await successResponse).status()).toBe(200);
-      await expect(page.getByRole("status").filter({ hasText: "Removed 1. Skipped 1." })).toBeVisible();
+      const toastText = bulkRemoveSkippedToast(1, [
+        { email: adm, reason: ADMIN_GUARD.adminRemove },
+      ]);
+      const toast = page.getByRole("status").filter({ hasText: adm });
+      await expect(toast).toHaveText(toastText ?? "");
+      const wordmark = page.getByRole("link", { name: "Clockinoff home" });
+      const markBox = await wordmark.boundingBox();
+      const toastBox = await toast.boundingBox();
+      expect(markBox).toBeTruthy();
+      expect(toastBox).toBeTruthy();
+      if (width === 390) {
+        expect(toastBox!.y).toBeGreaterThanOrEqual(markBox!.y + markBox!.height);
+        expect(toastBox!.x).toBeGreaterThanOrEqual(0);
+        expect(toastBox!.x + toastBox!.width).toBeLessThanOrEqual(width + 1);
+      }
       await expect(page.getByRole("link", { name: ok, exact: true })).toHaveCount(0);
       await expect(page.getByRole("link", { name: keep, exact: true })).toBeVisible();
       if (width >= 768) {

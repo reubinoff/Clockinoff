@@ -152,6 +152,31 @@ describe("admin routes", () => {
       ]);
     }
 
+    const olderHostile = await makeUser("a-sort-hostile@ex.com");
+    const newerHostile = await makeUser("m-sort-hostile@ex.com");
+    await getDb()
+      .update(users)
+      .set({ createdAt: new Date("2020-01-01T00:00:00.000Z") })
+      .where(eq(users.id, olderHostile.user.id));
+    await getDb()
+      .update(users)
+      .set({ createdAt: new Date("2025-01-01T00:00:00.000Z") })
+      .where(eq(users.id, newerHostile.user.id));
+    const createdDesc = ["m-sort-hostile@ex.com", "a-sort-hostile@ex.com"];
+    const hostileUrls = [
+      "http://test/api/admin/users?q=sort-hostile&sort=__proto__",
+      "http://test/api/admin/users?q=sort-hostile&sort=constructor&dir=asc",
+      "http://test/api/admin/users?q=sort-hostile&sort=email&sort=email&dir=asc",
+      "http://test/api/admin/users?q=sort-hostile&sort=__proto__&sort=constructor",
+      `http://test/api/admin/users?q=sort-hostile&sort=${"x".repeat(8000)}&dir=${"y".repeat(8000)}`,
+    ];
+    for (const url of hostileUrls) {
+      const res = await listUsers(new Request(url));
+      expect(res.status).toBe(200);
+      const hostileBody = (await res.json()) as { users: { email: string }[] };
+      expect(hostileBody.users.map((row) => row.email)).toEqual(createdDesc);
+    }
+
     const byEmailDesc = await listUsers(
       new Request("http://test/api/admin/users?q=route-sort&sort=email&dir=desc"),
     );

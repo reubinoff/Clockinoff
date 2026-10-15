@@ -18,7 +18,8 @@ export const BULK_REMOVE_CAP = 25;
 
 export const BULK_REMOVE_COPY = {
   body: "This permanently deletes these accounts and all their time entries. It can't be undone. Admins and your own account are skipped.",
-  mismatch: "The number didn't match. Nothing was removed.",
+  mismatch: "The selection changed. Nothing was removed. Check the list and try again.",
+  removing: "Removing…",
   overCap: "You can remove up to 25 users at a time. Nothing was removed.",
   overCapHint: "You can remove up to 25 users at a time. Deselect some to continue.",
   generic: "Couldn't remove users. Nothing was changed. Try again.",
