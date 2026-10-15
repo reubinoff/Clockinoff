@@ -298,6 +298,59 @@ describe("clientIpForRecord", () => {
     );
   });
 
+  it("parses X-Client-IP with the same right-most hop rules as X-Forwarded-For", () => {
+    expect(
+      clientIpForRecord(headers({ "x-client-ip": "1.2.3.4, 140.248.50.22" })),
+    ).toBe("140.248.50.22");
+    expect(clientIpForRecord(headers({ "x-client-ip": "140.248.50.22" }))).toBe(
+      "140.248.50.22",
+    );
+    expect(
+      clientIpForRecord(
+        headers({
+          "x-client-ip": "1.2.3.4, not-an-ip",
+          "x-forwarded-for": "9.9.9.9, 140.248.50.22",
+        }),
+      ),
+    ).toBe("140.248.50.22");
+    expect(
+      clientIpForRecord(
+        headers({
+          "x-client-ip": "1.2.3.4, not-an-ip",
+          "x-forwarded-for": "140.248.50.22, junk",
+        }),
+        "192.0.2.10",
+      ),
+    ).toBe("192.0.2.10");
+    expect(
+      clientIpForRecord(headers({ "x-client-ip": "[2001:db8::1]:443" })),
+    ).toBe("2001:db8::1");
+  });
+
+  it("parses X-Forwarded-For chains and falls through when the last hop is junk", () => {
+    expect(
+      clientIpForRecord(headers({ "x-forwarded-for": "1.2.3.4, 140.248.50.22" })),
+    ).toBe("140.248.50.22");
+    expect(
+      clientIpForRecord(headers({ "x-forwarded-for": "140.248.50.22" })),
+    ).toBe("140.248.50.22");
+    expect(
+      clientIpForRecord(
+        headers({ "x-forwarded-for": "140.248.50.22, not-an-ip" }),
+        "192.0.2.8",
+      ),
+    ).toBe("192.0.2.8");
+    expect(
+      clientIpForRecord(headers({ "x-forwarded-for": "140.248.50.22, not-an-ip" })),
+    ).toBeNull();
+    expect(
+      clientIpForRecord(
+        headers({ "x-azure-clientip": "140.248.50.22" }),
+        "192.0.2.8",
+      ),
+    ).toBe("192.0.2.8");
+  });
+
   it("stores null for a value that is not an IP and keeps the junk in forwarded_for", () => {
     const junk = headers({
       "x-client-ip": "not-an-ip",
@@ -319,6 +372,11 @@ describe("clientIpForRecord", () => {
     const sixtyFive = "b".repeat(65);
     expect(clientIpForRecord(headers({ "x-client-ip": sixtyFour }))).toBeNull();
     expect(clientIpForRecord(headers({ "x-forwarded-for": sixtyFive }))).toBeNull();
+    expect(
+      clientIpForRecord(
+        headers({ "x-client-ip": sixtyFive, "x-forwarded-for": "140.248.50.22" }),
+      ),
+    ).toBe("140.248.50.22");
     expect(clientIpForRecord(headers({}), `1.2.3.4${"x".repeat(60)}`)).toBeNull();
     expect(forwardedForRaw(headers({ "x-client-ip": sixtyFive }))).toContain(sixtyFive);
   });

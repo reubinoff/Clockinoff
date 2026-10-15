@@ -77,29 +77,14 @@ export function clientIpFromHeaders(headers: HeaderReader): string {
 }
 
 // IP stored on a new session and on an audit row (#219).
-// App Service's front end sets X-Client-IP to the address it observed,
-// overwriting a client-supplied value. That header is the recorded IP.
-// Otherwise use the right-most X-Forwarded-For hop (the proxy-appended
-// address), then the socket. X-Azure-ClientIP is not a trusted source:
-// it is kept only inside `forwardedForRaw` as unparsed evidence.
+// Trust order is X-Client-IP, then the right-most X-Forwarded-For hop,
+// then the socket. Both headers share one parser: split on commas, take
+// the right-most non-empty entry, strip a port (including bracketed
+// IPv6), require net.isIP, and cap at 64 characters. An invalid entry
+// does not walk left inside that header; the next source is tried.
+// X-Azure-ClientIP is not in this order. It stays in `forwardedForRaw`.
 // Rate-limit keys stay on `clientIpFromHeaders` (#30) and do not read
 // X-Client-IP.
-function headerIp(headers: HeaderReader, name: string): string | null {
-  const raw = headers.get(name)?.trim();
-  if (!raw) return null;
-  return stripPort(raw);
-}
-
-function lastForwardedHop(headers: HeaderReader): string | null {
-  const xff = headers.get("x-forwarded-for");
-  if (!xff) return null;
-  const parts = xff.split(",");
-  for (let i = parts.length - 1; i >= 0; i -= 1) {
-    const candidate = parts[i]?.trim();
-    if (candidate) return stripPort(candidate);
-  }
-  return null;
-}
 
 const FORWARDED_EVIDENCE_HEADERS = [
   "x-forwarded-for",
@@ -128,24 +113,33 @@ export function forwardedForRaw(headers: HeaderReader): string | null {
 // and below a column we would otherwise fill with an arbitrary string.
 const RECORDED_IP_MAX = 64;
 
-function recordedIp(value: string | null): string | null {
-  if (!value) return null;
-  if (value.length > RECORDED_IP_MAX) return null;
-  if (net.isIP(value) === 0) return null;
-  return value;
+// Right-most hop of one source. Blank segments are skipped so a trailing
+// comma still yields the last address. The first non-blank entry from the
+// right is the only candidate: junk, or a value over 64 characters, makes
+// this source unusable and the caller tries the next one.
+function rightMostRecordedIp(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const parts = raw.split(",");
+  for (let i = parts.length - 1; i >= 0; i -= 1) {
+    const candidate = parts[i]?.trim();
+    if (!candidate) continue;
+    const stripped = stripPort(candidate);
+    if (stripped.length > RECORDED_IP_MAX) return null;
+    if (net.isIP(stripped) === 0) return null;
+    return stripped;
+  }
+  return null;
 }
 
 export function clientIpForRecord(
   headers: HeaderReader,
   socketAddress?: string | null,
 ): string | null {
-  const trusted = headerIp(headers, "x-client-ip");
-  if (trusted) return recordedIp(trusted);
-  const hop = lastForwardedHop(headers);
-  if (hop) return recordedIp(hop);
-  const socket = socketAddress?.trim();
-  if (socket) return recordedIp(stripPort(socket));
-  return null;
+  const fromClient = rightMostRecordedIp(headers.get("x-client-ip"));
+  if (fromClient) return fromClient;
+  const fromForwarded = rightMostRecordedIp(headers.get("x-forwarded-for"));
+  if (fromForwarded) return fromForwarded;
+  return rightMostRecordedIp(socketAddress);
 }
 
 export function socketAddressFromRequest(req: Request): string | null {
