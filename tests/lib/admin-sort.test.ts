@@ -80,6 +80,25 @@ describe("parseAdminUserSort", () => {
       dir: "asc",
     });
   });
+
+  it("falls back to created desc when dir is repeated, and keeps a single dir", () => {
+    const fallback = { sort: "created" as const, dir: "desc" as const };
+    expect(
+      adminUserSortFromSearchParams(new URLSearchParams("dir=asc&dir=desc")),
+    ).toEqual(fallback);
+    expect(
+      adminUserSortFromSearchParams(new URLSearchParams("dir=asc&dir=__proto__")),
+    ).toEqual(fallback);
+    expect(
+      adminUserSortFromSearchParams(
+        new URLSearchParams("sort=email&dir=asc&dir=desc"),
+      ),
+    ).toEqual(fallback);
+    expect(adminUserSortFromSearchParams(new URLSearchParams("dir=asc"))).toEqual({
+      sort: "created",
+      dir: "asc",
+    });
+  });
 });
 
 describe("nextAdminUserSort", () => {

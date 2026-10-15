@@ -22,17 +22,18 @@ export interface AdminUserSort {
   dir: AdminUserSortDir;
 }
 
-// Query strings can repeat a key (`sort=email&sort=__proto__`). Taking the
-// first value would honor an allowlisted key that arrived beside a hostile
-// one. Any repeat falls back to Created desc, same as an unknown key.
+// Query strings can repeat a key (`sort=email&sort=__proto__`,
+// `dir=asc&dir=desc`). Taking the first value would honor an allowlisted
+// key that arrived beside a hostile one. A repeated `sort` or `dir`
+// drops the whole pair back to Created desc, same as an unknown key.
 export function adminUserSortFromSearchParams(
   params: { getAll(name: string): string[] },
 ): AdminUserSort {
   const sorts = params.getAll("sort");
-  if (sorts.length > 1) {
+  const dirs = params.getAll("dir");
+  if (sorts.length > 1 || dirs.length > 1) {
     return { sort: DEFAULT_ADMIN_USER_SORT, dir: DEFAULT_ADMIN_USER_SORT_DIR };
   }
-  const dirs = params.getAll("dir");
   return parseAdminUserSort(
     sorts.length === 0 ? undefined : sorts[0],
     dirs.length === 0 ? undefined : dirs[0],
