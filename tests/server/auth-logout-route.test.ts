@@ -32,7 +32,7 @@ describe("POST /api/auth/logout", () => {
       password: PW,
     });
     cookieValue = session.id;
-    const res = await logoutPost();
+    const res = await logoutPost(new Request("http://test/api/auth/logout", { method: "POST" }));
     expect(res.status).toBe(204);
     const cookie = res.headers.get("set-cookie") ?? "";
     expect(cookie).toMatch(new RegExp(`${SESSION_COOKIE}=;`));
@@ -47,7 +47,7 @@ describe("POST /api/auth/logout", () => {
 
   it("is a no-op 204 when no cookie is present", async () => {
     cookieValue = undefined;
-    const res = await logoutPost();
+    const res = await logoutPost(new Request("http://test/api/auth/logout", { method: "POST" }));
     expect(res.status).toBe(204);
   });
 });

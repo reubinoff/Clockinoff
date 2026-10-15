@@ -181,6 +181,10 @@ describe("DELETE /api/auth/me", () => {
     expect(audits[0]?.actorEmail).toBe(account.email);
     expect(audits[0]?.targets).toEqual([{ id: account.id, email: account.email }]);
     expect(audits[0]?.clientIp).toBe("203.0.113.10");
+    expect(audits[0]?.clientIp).not.toBe("1.1.1.1");
+    expect(audits[0]?.forwardedFor).toContain("1.1.1.1, 9.9.9.9");
+    expect(audits[0]?.userAgent).toBe("vitest-self-delete");
+    expect(audits[0]?.createdAt).toBeInstanceOf(Date);
     expect(audits[0]?.status).toBe("completed");
     expect(audits[0]?.sessionIdHash).toBe(hashSessionToken(account.token));
     forgetQaSweepPassword(account.email);

@@ -64,6 +64,9 @@ export async function deleteOwnAccount(input: SelfDeleteInput): Promise<void> {
     if (!locked) throw errors.unauthorized();
     if (locked.role === "admin") throw errors.forbidden(ADMIN_GUARD.adminRemove);
 
+    // Fail closed (#193): the insert shares this transaction with the
+    // delete. A throw rolls the user delete back. Login, register, and
+    // logout use recordAuthEvent, which logs and continues.
     const auditId = await insertSelfDeletePendingAudit(tx, {
       actorUserId: locked.id,
       actorEmail: locked.email,

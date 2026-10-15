@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { AUDIT_USER_AGENT_MAX, capAuditUserAgent } from "@/lib/audit-user-agent";
+import {
+  AUDIT_FORWARDED_FOR_MAX,
+  AUDIT_USER_AGENT_MAX,
+  capAuditForwardedFor,
+  capAuditUserAgent,
+} from "@/lib/audit-user-agent";
 
 describe("capAuditUserAgent", () => {
   it("caps the value at 512 characters before insert", () => {
@@ -15,5 +20,28 @@ describe("capAuditUserAgent", () => {
     expect(capAuditUserAgent("   ")).toBeNull();
     expect(capAuditUserAgent(null)).toBeNull();
     expect(capAuditUserAgent(undefined)).toBeNull();
+  });
+
+  it("stores text only, dropping control characters", () => {
+    expect(capAuditUserAgent("bad\u0000agent\nline")).toBe("badagentline");
+    expect(capAuditUserAgent("\u0000")).toBeNull();
+  });
+});
+
+describe("capAuditForwardedFor", () => {
+  it("caps the raw header text at 512 characters", () => {
+    const raw = `x-forwarded-for: ${"1.2.3.4, ".repeat(80)}203.0.113.50`;
+    const capped = capAuditForwardedFor(raw);
+    expect(AUDIT_FORWARDED_FOR_MAX).toBe(512);
+    expect(capped).toHaveLength(512);
+    expect(capped).toBe(raw.slice(0, 512));
+  });
+
+  it("drops blank and non-text values", () => {
+    expect(capAuditForwardedFor("  x-client-ip: 203.0.113.10  ")).toBe(
+      "x-client-ip: 203.0.113.10",
+    );
+    expect(capAuditForwardedFor(" \n\u0000 ")).toBeNull();
+    expect(capAuditForwardedFor(null)).toBeNull();
   });
 });

@@ -1,0 +1,320 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { POST as loginPost } from "@/app/api/auth/login/route";
+import { POST as logoutPost } from "@/app/api/auth/logout/route";
+import { POST as registerPost } from "@/app/api/auth/register/route";
+import { AUDIT_FORWARDED_FOR_MAX, AUDIT_USER_AGENT_MAX } from "@/lib/audit-user-agent";
+import { AUTH_AUDIT, loginFailureActorEmail, setAuthAuditInsert } from "@/server/auth/auth-audit";
+import { resetAuthRateLimits } from "@/server/auth/rate-limit";
+import { hashSessionToken, SESSION_COOKIE } from "@/server/auth/session";
+import { getDb } from "@/server/db/client";
+import { auditEvents, sessions, users } from "@/server/db/schema";
+import { truncateAll } from "../setup";
+
+const PW = "pw-do-not-store-9f3a";
+
+let cookieValue: string | undefined;
+
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      cookieValue === undefined || name !== SESSION_COOKIE
+        ? undefined
+        : { name: SESSION_COOKIE, value: cookieValue },
+  }),
+}));
+
+const WRONG = "not-the-password-zz";
+
+function forgedHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    "content-type": "application/json",
+    "x-client-ip": "1.2.3.4, 140.248.50.22",
+    "x-forwarded-for": "1.2.3.4, 203.0.113.50",
+    "x-azure-clientip": "5.6.7.8",
+    "user-agent": "ClockinoffAudit/1",
+    "x-request-id": "auth-audit-req",
+    ...extra,
+  };
+}
+
+function post(url: string, body: unknown, headers: Record<string, string>): Request {
+  return new Request(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+describe("auth audit trail", () => {
+  beforeEach(async () => {
+    await truncateAll();
+    resetAuthRateLimits();
+    setAuthAuditInsert(null);
+    cookieValue = undefined;
+  });
+
+  it("records register with the parsed client IP, not the forged left hop", async () => {
+    const res = await registerPost(
+      post(
+        "http://test/api/auth/register",
+        { email: "new@example.com", password: PW },
+        forgedHeaders(),
+      ),
+    );
+    expect(res.status).toBe(201);
+    const rows = await getDb().select().from(auditEvents);
+    expect(rows).toHaveLength(1);
+    const row = rows[0];
+    expect(row?.action).toBe(AUTH_AUDIT.register);
+    expect(row?.actorEmail).toBe("new@example.com");
+    expect(row?.actorUserId).toBeTruthy();
+    expect(row?.targets).toEqual([{ id: row?.actorUserId, email: "new@example.com" }]);
+    expect(row?.clientIp).toBe("140.248.50.22");
+    expect(row?.clientIp).not.toBe("1.2.3.4");
+    expect(row?.forwardedFor).toContain("x-client-ip: 1.2.3.4, 140.248.50.22");
+    expect(row?.forwardedFor).toContain("x-forwarded-for: 1.2.3.4, 203.0.113.50");
+    expect(row?.forwardedFor).toContain("x-azure-clientip: 5.6.7.8");
+    expect(row?.userAgent).toBe("ClockinoffAudit/1");
+    expect(row?.createdAt).toBeInstanceOf(Date);
+    expect(row?.status).toBe("completed");
+    const setCookie = res.headers.get("set-cookie") ?? "";
+    const token = new RegExp(`${SESSION_COOKIE}=([^;]+)`).exec(setCookie)?.[1] ?? "";
+    expect(token.length).toBeGreaterThan(0);
+    expect(row?.sessionIdHash).toBe(hashSessionToken(token));
+    expect(JSON.stringify(row)).not.toContain(PW);
+    expect(JSON.stringify(row)).not.toContain(token);
+  });
+
+  it("records login success from the right-most X-Forwarded-For hop", async () => {
+    await registerPost(
+      post(
+        "http://test/api/auth/register",
+        { email: "in@example.com", password: PW },
+        { "content-type": "application/json", "x-forwarded-for": "198.51.100.9" },
+      ),
+    );
+    const res = await loginPost(
+      post(
+        "http://test/api/auth/login",
+        { email: "in@example.com", password: PW },
+        {
+          "content-type": "application/json",
+          "x-forwarded-for": "1.2.3.4, 203.0.113.50",
+          "x-azure-clientip": "5.6.7.8",
+          "user-agent": "ClockinoffLogin/2",
+        },
+      ),
+    );
+    expect(res.status).toBe(200);
+    const loginRows = (await getDb().select().from(auditEvents)).filter(
+      (row) => row.action === AUTH_AUDIT.loginSuccess,
+    );
+    expect(loginRows).toHaveLength(1);
+    expect(loginRows[0]?.clientIp).toBe("203.0.113.50");
+    expect(loginRows[0]?.clientIp).not.toBe("1.2.3.4");
+    expect(loginRows[0]?.forwardedFor).toContain("1.2.3.4, 203.0.113.50");
+    expect(loginRows[0]?.actorEmail).toBe("in@example.com");
+    expect(loginRows[0]?.userAgent).toBe("ClockinoffLogin/2");
+    expect(loginRows[0]?.createdAt).toBeInstanceOf(Date);
+    const token = new RegExp(`${SESSION_COOKIE}=([^;]+)`).exec(res.headers.get("set-cookie") ?? "")?.[1];
+    expect(token).toBeTruthy();
+    expect(JSON.stringify(loginRows[0])).not.toContain(PW);
+    expect(JSON.stringify(loginRows[0])).not.toContain(token);
+  });
+
+  it("records the same failed-login shape when the account is missing or the password is wrong", async () => {
+    await registerPost(
+      post(
+        "http://test/api/auth/register",
+        { email: "real@example.com", password: PW },
+        { "content-type": "application/json", "x-forwarded-for": "198.51.100.20" },
+      ),
+    );
+    const headers = forgedHeaders({ "user-agent": `Agent/${"b".repeat(600)}` });
+    headers["x-client-ip"] = `${"1.2.3.4, ".repeat(80)}140.248.50.22`;
+
+    const missing = await loginPost(
+      post(
+        "http://test/api/auth/login",
+        { email: "Ghost@Example.com", password: WRONG },
+        headers,
+      ),
+    );
+    const wrong = await loginPost(
+      post(
+        "http://test/api/auth/login",
+        { email: "real@example.com", password: WRONG },
+        headers,
+      ),
+    );
+    expect(missing.status).toBe(401);
+    expect(wrong.status).toBe(401);
+    const missingBody = JSON.stringify(await missing.json());
+    const wrongBody = JSON.stringify(await wrong.json());
+    expect(missingBody).toBe(wrongBody);
+    expect(missingBody).not.toContain(PW);
+    expect(missingBody).not.toContain(WRONG);
+    expect(missingBody).not.toContain("audit");
+
+    const failures = (await getDb().select().from(auditEvents)).filter(
+      (row) => row.action === AUTH_AUDIT.loginFailure,
+    );
+    expect(failures).toHaveLength(2);
+    const ghost = failures.find((row) => row.actorEmail === "Ghost@Example.com");
+    const real = failures.find((row) => row.actorEmail === "real@example.com");
+    const [account] = await getDb()
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, "real@example.com"));
+    expect(account?.id).toBeTruthy();
+    for (const row of [ghost, real]) {
+      expect(row?.actorUserId).toBeNull();
+      expect(row?.actorUserId).not.toBe(account?.id);
+      expect(row?.targets).toEqual([]);
+      expect(row?.sessionIdHash).toBeNull();
+      expect(row?.result).toBeNull();
+      expect(row?.clientIp).toBe("140.248.50.22");
+      expect(row?.clientIp).not.toBe("1.2.3.4");
+      expect(row?.userAgent).toHaveLength(AUDIT_USER_AGENT_MAX);
+      expect(row?.forwardedFor).toHaveLength(AUDIT_FORWARDED_FOR_MAX);
+      expect(row?.createdAt).toBeInstanceOf(Date);
+      const blob = JSON.stringify(row);
+      expect(blob).not.toContain(PW);
+      expect(blob).not.toContain(WRONG);
+      expect(blob).not.toContain("password");
+    }
+    expect(ghost?.actorUserId).toBe(real?.actorUserId);
+    expect(ghost?.targets).toEqual(real?.targets);
+    expect(ghost?.clientIp).toBe(real?.clientIp);
+    expect(ghost?.sessionIdHash).toBe(real?.sessionIdHash);
+  });
+
+  it("caps a failed-login email at 254 characters", () => {
+    const local = "a".repeat(300);
+    expect(loginFailureActorEmail(`  ${local}@example.com  `)).toHaveLength(254);
+    expect(loginFailureActorEmail("  In@Example.com ")).toBe("In@Example.com");
+  });
+
+  it("does not write an audit row for an unknown session cookie", async () => {
+    cookieValue = "not-a-real-session";
+    const res = await logoutPost(
+      new Request("http://test/api/auth/logout", {
+        method: "POST",
+        headers: forgedHeaders(),
+      }),
+    );
+    expect(res.status).toBe(204);
+    expect(await getDb().select().from(auditEvents)).toHaveLength(0);
+  });
+
+  it("leaves earlier audit rows in place when the session is deleted", async () => {
+    const registered = await registerPost(
+      post(
+        "http://test/api/auth/register",
+        { email: "stay@example.com", password: PW },
+        forgedHeaders(),
+      ),
+    );
+    const token =
+      new RegExp(`${SESSION_COOKIE}=([^;]+)`).exec(registered.headers.get("set-cookie") ?? "")?.[1] ??
+      "";
+    cookieValue = token;
+    const before = await getDb().select().from(auditEvents);
+    expect(before.map((row) => row.action)).toEqual([AUTH_AUDIT.register]);
+    const beforeId = before[0]?.id;
+
+    const res = await logoutPost(
+      new Request("http://test/api/auth/logout", {
+        method: "POST",
+        headers: forgedHeaders(),
+      }),
+    );
+    expect(res.status).toBe(204);
+    const after = await getDb().select().from(auditEvents);
+    expect(after).toHaveLength(2);
+    const kept = after.find((row) => row.id === beforeId);
+    expect(kept?.action).toBe(AUTH_AUDIT.register);
+    expect(kept?.clientIp).toBe(before[0]?.clientIp);
+    const logout = after.find((row) => row.action === AUTH_AUDIT.logout);
+    expect(logout?.actorEmail).toBe("stay@example.com");
+    expect(logout?.clientIp).toBe("140.248.50.22");
+    expect(logout?.clientIp).not.toBe("1.2.3.4");
+    expect(logout?.forwardedFor).toContain("1.2.3.4, 203.0.113.50");
+    expect(logout?.userAgent).toBe("ClockinoffAudit/1");
+    expect(logout?.createdAt).toBeInstanceOf(Date);
+    expect(logout?.sessionIdHash).toBe(hashSessionToken(token));
+    expect(JSON.stringify(after)).not.toContain(token);
+    expect(JSON.stringify(after)).not.toContain(PW);
+    const sessionRows = await getDb().select().from(sessions);
+    expect(sessionRows).toHaveLength(0);
+  });
+
+  it("still registers when the audit insert throws, and the body is not the database error", async () => {
+    setAuthAuditInsert(async () => {
+      throw new Error("audit_events down password=pw-do-not-store-9f3a");
+    });
+    const res = await registerPost(
+      post(
+        "http://test/api/auth/register",
+        { email: "open@example.com", password: PW },
+        forgedHeaders(),
+      ),
+    );
+    expect(res.status).toBe(201);
+    const text = JSON.stringify(await res.json());
+    expect(text).not.toContain("audit_events");
+    expect(text).not.toContain(PW);
+    expect(await getDb().select().from(users)).toHaveLength(1);
+    expect(await getDb().select().from(auditEvents)).toHaveLength(0);
+  });
+
+  it("still returns 401 when a failed-login audit insert throws", async () => {
+    setAuthAuditInsert(async () => {
+      throw new Error("duplicate key audit_events password=pw-do-not-store-9f3a");
+    });
+    const res = await loginPost(
+      post(
+        "http://test/api/auth/login",
+        { email: "missing@example.com", password: PW },
+        forgedHeaders(),
+      ),
+    );
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body).toEqual({
+      error: { code: "UNAUTHORIZED", message: "Invalid email or password" },
+    });
+    expect(JSON.stringify(body)).not.toContain("audit_events");
+    expect(JSON.stringify(body)).not.toContain(PW);
+    expect(await getDb().select().from(auditEvents)).toHaveLength(0);
+  });
+
+  it("still logs out when the audit insert throws and keeps earlier rows", async () => {
+    const registered = await registerPost(
+      post(
+        "http://test/api/auth/register",
+        { email: "bye@example.com", password: PW },
+        { "content-type": "application/json", "x-forwarded-for": "198.51.100.40" },
+      ),
+    );
+    const token =
+      new RegExp(`${SESSION_COOKIE}=([^;]+)`).exec(registered.headers.get("set-cookie") ?? "")?.[1] ??
+      "";
+    cookieValue = token;
+    const before = await getDb().select().from(auditEvents);
+    expect(before).toHaveLength(1);
+    setAuthAuditInsert(async () => {
+      throw new Error("logout audit failed");
+    });
+    const res = await logoutPost(
+      new Request("http://test/api/auth/logout", { method: "POST", headers: forgedHeaders() }),
+    );
+    expect(res.status).toBe(204);
+    const after = await getDb().select().from(auditEvents);
+    expect(after).toEqual(before);
+    expect(await getDb().select().from(sessions).where(eq(sessions.userId, before[0]!.actorUserId!))).toHaveLength(
+      0,
+    );
+  });
+});

@@ -154,6 +154,19 @@ export function setSessionSideEffects(
   sessionSideEffects = next ? { ...realSessionSideEffects, ...next } : realSessionSideEffects;
 }
 
+export async function findSessionOwner(
+  sessionToken: string | null | undefined,
+): Promise<{ id: string; email: string } | null> {
+  if (!sessionToken) return null;
+  const rows = await getDb()
+    .select({ id: users.id, email: users.email })
+    .from(sessions)
+    .innerJoin(users, eq(users.id, sessions.userId))
+    .where(eq(sessions.id, hashSessionToken(sessionToken)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function deleteSession(sessionId: string | null | undefined): Promise<void> {
   if (!sessionId) return;
   const db = getDb();

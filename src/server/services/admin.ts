@@ -13,7 +13,7 @@ import {
   type SQL,
   type SQLWrapper,
 } from "drizzle-orm";
-import { capAuditUserAgent } from "@/lib/audit-user-agent";
+import { capAuditForwardedFor, capAuditUserAgent } from "@/lib/audit-user-agent";
 import type { AdminActionKind } from "@/lib/admin-bulk";
 import { ADMIN_GUARD, BULK_REMOVE_CAP, BULK_REMOVE_COPY } from "@/lib/admin-copy";
 import { asUserRole, type UserRole, type UserStatus } from "@/lib/admin-role";
@@ -340,7 +340,7 @@ async function insertClosedAudit(
     targets: input.targets,
     requestId: input.requestId,
     clientIp: input.clientIp,
-    forwardedFor: input.forwardedFor,
+    forwardedFor: capAuditForwardedFor(input.forwardedFor),
     userAgent: capAuditUserAgent(input.userAgent),
     sessionIdHash: input.sessionIdHash,
     status: "completed",
@@ -371,7 +371,7 @@ async function insertPendingAudit(row: PendingAuditRow): Promise<string> {
       targets: row.targets,
       requestId: row.requestId,
       clientIp: row.clientIp,
-      forwardedFor: row.forwardedFor,
+      forwardedFor: capAuditForwardedFor(row.forwardedFor),
       userAgent: capAuditUserAgent(row.userAgent),
       sessionIdHash: row.sessionIdHash,
       status: "pending",
@@ -422,7 +422,7 @@ export async function insertSelfDeletePendingAudit(
       targets: row.targets,
       requestId: row.requestId,
       clientIp: row.clientIp,
-      forwardedFor: row.forwardedFor,
+      forwardedFor: capAuditForwardedFor(row.forwardedFor),
       userAgent: capAuditUserAgent(row.userAgent),
       sessionIdHash: row.sessionIdHash,
       status: "pending",

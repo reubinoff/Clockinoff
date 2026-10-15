@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { jsonError, readJson } from "@/server/http";
+import { adminRequestMeta, jsonError, readJson } from "@/server/http";
 import { register } from "@/server/auth/service";
-import { SESSION_COOKIE } from "@/server/auth/session";
+import { hashSessionToken, SESSION_COOKIE } from "@/server/auth/session";
 import {
   isRegisterRateLimited,
   recordRegisterAttempt,
@@ -10,6 +10,7 @@ import {
 } from "@/server/auth/rate-limit";
 import { clientIpForRecord, clientIpFromHeaders, socketAddressFromRequest } from "@/lib/client-ip";
 import { errors } from "@/lib/errors";
+import { AUTH_AUDIT, recordAuthEvent } from "@/server/auth/auth-audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,9 +33,21 @@ export async function POST(req: Request): Promise<Response> {
     // outcomes just stops attackers from using cheap 400s as a free probe.
     recordRegisterAttempt(ip);
     const body = await readJson<{ email: string; password: string; timezone?: string }>(req);
+    const meta = adminRequestMeta(req);
     const { user, session } = await register({
       ...body,
       clientIp: clientIpForRecord(req.headers, socketAddressFromRequest(req)),
+    });
+    await recordAuthEvent({
+      action: AUTH_AUDIT.register,
+      actorUserId: user.id,
+      actorEmail: user.email,
+      targets: [{ id: user.id, email: user.email }],
+      requestId: meta.requestId,
+      clientIp: meta.clientIp,
+      forwardedFor: meta.forwardedFor,
+      userAgent: meta.userAgent,
+      sessionIdHash: hashSessionToken(session.id),
     });
     const res = NextResponse.json(user, { status: 201 });
     res.cookies.set(SESSION_COOKIE, session.id, {

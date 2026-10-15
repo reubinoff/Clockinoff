@@ -418,10 +418,10 @@ services in `src/server/services/*`. Every error is shaped as
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/api/auth/register` | `{ email, password, timezone? }` → 201 + session cookie |
-| `POST` | `/api/auth/login` | `{ email, password }` → 200 |
-| `POST` | `/api/auth/logout` | 204, clears cookie |
-| `GET` / `PATCH` / `DELETE` | `/api/auth/me` | current user; `PATCH { timezone }`. `DELETE` removes the signed-in non-admin after an Origin check and a password or a Google session created within 5 minutes. Admins get 403. There is no 409 |
+| `POST` | `/api/auth/register` | `{ email, password, timezone? }` → 201 + session cookie. Success inserts `auth.register` (parsed client IP, raw `forwarded_for` capped at 512, user agent capped at 512, sha256 of the new session). A failed audit insert is logged and the 201 still returns |
+| `POST` | `/api/auth/login` | `{ email, password }` → 200. Success inserts `auth.login_success`. A 401 inserts `auth.login_failure` with the submitted email only (trimmed, max 254), a null actor id, and no password. The failure row does not depend on whether the account exists. A failed audit insert is logged and the original 200/401 still returns |
+| `POST` | `/api/auth/logout` | 204, clears cookie. Inserts `auth.logout` for a known session, then deletes that session row only. Earlier `audit_events` rows stay. A failed audit insert is logged and the 204 still returns |
+| `GET` / `PATCH` / `DELETE` | `/api/auth/me` | current user; `PATCH { timezone }`. `DELETE` removes the signed-in non-admin after an Origin check and a password or a Google session created within 5 minutes. Admins get 403. There is no 409. The delete inserts `user.self_delete` in the same transaction and fails closed if that insert throws |
 | `GET` | `/api/auth/google/start` | begins the **Continue with Google** flow; 302 to Google (fail-closed to `/login?error=network` when Google env vars are blank) |
 | `GET` | `/api/auth/google/callback` | OIDC callback; 302 to `/app` on success, `/login?error=...` on cancel / unverified / network |
 | CRUD | `/api/clients`, `/api/projects`, `/api/tags` | `?archived=true` includes archived |

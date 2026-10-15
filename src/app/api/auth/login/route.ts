@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { jsonError, readJson } from "@/server/http";
+import { adminRequestMeta, jsonError, readJson } from "@/server/http";
 import { login } from "@/server/auth/service";
-import { SESSION_COOKIE } from "@/server/auth/session";
+import { hashSessionToken, SESSION_COOKIE } from "@/server/auth/session";
 import {
   isLoginIpRateLimited,
   isLoginRateLimited,
@@ -12,12 +12,14 @@ import {
 } from "@/server/auth/rate-limit";
 import { clientIpForRecord, clientIpFromHeaders, socketAddressFromRequest } from "@/lib/client-ip";
 import { ApiError, errors } from "@/lib/errors";
+import { AUTH_AUDIT, loginFailureActorEmail, recordAuthEvent } from "@/server/auth/auth-audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request): Promise<Response> {
   const ip = clientIpFromHeaders(req.headers);
+  const meta = adminRequestMeta(req);
   let email = "";
   try {
     // #151: the per-IP ceiling does not need the body. Check it first so a
@@ -46,6 +48,17 @@ export async function POST(req: Request): Promise<Response> {
       ...body,
       clientIp: clientIpForRecord(req.headers, socketAddressFromRequest(req)),
     });
+    await recordAuthEvent({
+      action: AUTH_AUDIT.loginSuccess,
+      actorUserId: user.id,
+      actorEmail: user.email,
+      targets: [{ id: user.id, email: user.email }],
+      requestId: meta.requestId,
+      clientIp: meta.clientIp,
+      forwardedFor: meta.forwardedFor,
+      userAgent: meta.userAgent,
+      sessionIdHash: hashSessionToken(session.id),
+    });
     recordLoginSuccess(email, ip);
     const res = NextResponse.json(user, { status: 200 });
     res.cookies.set(SESSION_COOKIE, session.id, {
@@ -63,6 +76,21 @@ export async function POST(req: Request): Promise<Response> {
       email.trim().length > 0
     ) {
       recordLoginFailure(email, ip);
+      // login() already returned the same 401 for a missing account and a
+      // wrong password. This insert does not look the user up, and
+      // recordAuthEvent forces a null actor id, so the row (and the time
+      // to write it) does not depend on whether the account exists.
+      await recordAuthEvent({
+        action: AUTH_AUDIT.loginFailure,
+        actorUserId: null,
+        actorEmail: loginFailureActorEmail(email),
+        targets: [],
+        requestId: meta.requestId,
+        clientIp: meta.clientIp,
+        forwardedFor: meta.forwardedFor,
+        userAgent: meta.userAgent,
+        sessionIdHash: null,
+      });
     }
     return jsonError(err);
   }
