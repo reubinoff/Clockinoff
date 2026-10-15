@@ -89,7 +89,10 @@ the email matches (spaces around it and capital letters do not
 matter). A Google-only account signs in with Google again first.
 That return opens the dialog only when the sign-in is still fresh,
 then the address is typed the same way. The link never fills the
-form in or deletes by itself.
+form in or deletes by itself. If that sign-in cannot be confirmed,
+Account shows “We couldn’t confirm it was you. Please sign in with
+Google again to delete your account.” The dialog stays closed, and
+**Delete account** starts the Google sign-in again.
 
 While the request runs, the button reads **Deleting…** and
 **Cancel** stays off. **Cancel** and Escape close the dialog when

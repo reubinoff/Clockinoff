@@ -61,6 +61,15 @@ function redirectToAccount(origin: string, query: string): NextResponse {
   return res;
 }
 
+// Fixed path. Not derived from the OAuth `next` value or any other request input.
+const REAUTH_STALE_PATH = "/app/account?reauth=stale";
+
+function redirectReauthStale(origin: string): NextResponse {
+  const res = NextResponse.redirect(new URL(REAUTH_STALE_PATH, origin), 302);
+  clearOAuthCookie(res);
+  return res;
+}
+
 export async function GET(req: Request): Promise<Response> {
   const ip = clientIpFromHeaders(req.headers);
   if (isGoogleOAuthRateLimited(ip)) {
@@ -100,18 +109,15 @@ export async function GET(req: Request): Promise<Response> {
 
   if (!state || !stateParam || state.s !== stateParam) {
     logger.warn("[google] state mismatch on callback");
-    if (state?.i === "reauth") return redirectToAccount(origin, "error=network");
     return redirectToLoginWithError(origin, "network");
   }
 
   if (!consumeStateNonce(state.s)) {
     logger.warn("[google] oauth state already used or unknown");
-    if (state.i === "reauth") return redirectToAccount(origin, "error=network");
     return redirectToLoginWithError(origin, "network");
   }
 
   if (!code || !isGoogleAuthCode(code)) {
-    if (state.i === "reauth") return redirectToAccount(origin, "error=network");
     return redirectToLoginWithError(origin, "network");
   }
 
@@ -126,22 +132,21 @@ export async function GET(req: Request): Promise<Response> {
     validateIdTokenClaims(payload, config);
 
     if (isReauth) {
+      // State was consumed above. The ID-token nonce is checked before
+      // auth_time so a forged or replayed callback never lands on Account.
+      if (!payload.nonce || payload.nonce !== state.nonce) {
+        logger.warn("[google] reauth nonce mismatch");
+        return redirectToLoginWithError(origin, "network");
+      }
+      // Missing or stale auth_time: do not read or write the session.
+      if (googleReauthAuthTimeRejected(payload.auth_time)) {
+        return redirectReauthStale(origin);
+      }
       const previousToken = readRequestCookie(req, SESSION_COOKIE);
       const sessionUser = await getSessionUser(previousToken);
       if (!sessionUser || !state.uid || sessionUser.id !== state.uid) {
         logger.warn("[google] reauth uid mismatch");
         return redirectToAccount(origin, "error=network");
-      }
-      if (!payload.nonce || payload.nonce !== state.nonce) {
-        logger.warn("[google] reauth nonce mismatch");
-        return redirectToAccount(origin, "error=network");
-      }
-      // ID-token auth_time is the real Google sign-in instant. A missing
-      // or stale value must not mint a fresh sessions.created_at.
-      if (googleReauthAuthTimeRejected(payload.auth_time)) {
-        const res = jsonError(errors.unauthorized("reauth_required"));
-        clearOAuthCookie(res);
-        return res;
       }
       const session = await completeGoogleReauth({
         userId: sessionUser.id,

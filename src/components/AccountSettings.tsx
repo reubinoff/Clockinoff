@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import DeleteAccountDialog, { DELETE_ACCOUNT_COPY } from "@/components/DeleteAccountDialog";
+import DeleteAccountDialog, {
+  DELETE_ACCOUNT_COPY,
+  GOOGLE_REAUTH_HREF,
+} from "@/components/DeleteAccountDialog";
 import { emitToast } from "@/lib/events";
 import {
   GOOGLE_AUTH_ERROR_COPY,
@@ -37,6 +40,7 @@ export default function AccountSettings({
   const params = useSearchParams();
   const connected = params.get("google") === "connected";
   const deleteRequested = params.get("delete") === "1";
+  const reauthStale = params.get("reauth") === "stale";
   const errorCode = params.get("error");
   const error =
     errorCode === "google_email_mismatch"
@@ -46,8 +50,14 @@ export default function AccountSettings({
         : null;
   const [open, setOpen] = useState(false);
   const [staleReturn, setStaleReturn] = useState(false);
+  const [staleNote, setStaleNote] = useState(false);
   const [handledDelete, setHandledDelete] = useState(false);
-  if (deleteRequested && !handledDelete) {
+  const [handledReauth, setHandledReauth] = useState(false);
+  if (reauthStale && !handledReauth) {
+    setHandledReauth(true);
+    if (!isAdmin) setStaleNote(true);
+  }
+  if (deleteRequested && !handledDelete && !reauthStale) {
     setHandledDelete(true);
     const googleOnly = !methods.hasPassword;
     if (!isAdmin && googleOnly && sessionFresh) setOpen(true);
@@ -55,10 +65,10 @@ export default function AccountSettings({
   }
 
   useEffect(() => {
-    if (!connected && !deleteRequested) return;
+    if (!connected && !deleteRequested && !reauthStale) return;
     if (connected) emitToast(GOOGLE_CONNECTED_TOAST);
     router.replace("/app/account");
-  }, [connected, deleteRequested, router]);
+  }, [connected, deleteRequested, reauthStale, router]);
 
   return (
     <section className="space-y-4 max-w-xl">
@@ -97,6 +107,14 @@ export default function AccountSettings({
           </p>
         ) : null}
       </div>
+      {staleNote && !isAdmin ? (
+        <p
+          role="status"
+          className="rounded-xl border border-border bg-canvas-2 px-3 py-3 text-sm text-ink-2"
+        >
+          {DELETE_ACCOUNT_COPY.reauthStale}
+        </p>
+      ) : null}
       <div className="mt-8">
         <h2 className="text-sm font-medium text-ink">Danger zone</h2>
         <p className="mt-1 text-body-sm text-muted">
@@ -107,17 +125,23 @@ export default function AccountSettings({
             {DELETE_ACCOUNT_COPY.reauthRequired}
           </p>
         ) : null}
-        <button
-          type="button"
-          className="btn btn-danger mt-3"
-          disabled={isAdmin}
-          title={isAdmin ? DELETE_ACCOUNT_COPY.admin : undefined}
-          onClick={() => {
-            if (!isAdmin) setOpen(true);
-          }}
-        >
-          Delete account
-        </button>
+        {staleNote && !isAdmin && !methods.hasPassword ? (
+          <a href={GOOGLE_REAUTH_HREF} className="btn btn-danger mt-3">
+            Delete account
+          </a>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-danger mt-3"
+            disabled={isAdmin}
+            title={isAdmin ? DELETE_ACCOUNT_COPY.admin : undefined}
+            onClick={() => {
+              if (!isAdmin) setOpen(true);
+            }}
+          >
+            Delete account
+          </button>
+        )}
       </div>
       {open && !isAdmin ? (
         <DeleteAccountDialog

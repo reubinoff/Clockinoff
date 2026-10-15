@@ -27,6 +27,8 @@ export const DELETE_ACCOUNT_COPY = {
   emailMismatch: "That email doesn’t match your account. Check it and try again.",
   wrongPassword: "Wrong password. Try again.",
   reauthRequired: "For security, sign in with Google again, then try deleting.",
+  reauthStale:
+    "We couldn’t confirm it was you. Please sign in with Google again to delete your account.",
   rateLimit: "Too many attempts. Wait a few minutes and try again.",
   admin: "Admins can’t delete their own account.",
   failed: "We couldn’t finish deleting your account. Nothing was removed — try again.",
@@ -34,7 +36,7 @@ export const DELETE_ACCOUNT_COPY = {
   generic: "Couldn’t delete your account. Try again.",
 } as const;
 
-const GOOGLE_REAUTH_HREF =
+export const GOOGLE_REAUTH_HREF =
   "/api/auth/google/start?intent=reauth&next=%2Fapp%2Faccount%3Fdelete%3D1";
 
 export function deleteAccountErrorCopy(status: number, message: string): string {

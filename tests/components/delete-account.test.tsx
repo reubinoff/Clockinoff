@@ -3,7 +3,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AccountSettings from "@/components/AccountSettings";
-import { DELETE_ACCOUNT_COPY, deleteAccountErrorCopy } from "@/components/DeleteAccountDialog";
+import {
+  DELETE_ACCOUNT_COPY,
+  deleteAccountErrorCopy,
+  GOOGLE_REAUTH_HREF,
+} from "@/components/DeleteAccountDialog";
 
 const nav = vi.hoisted(() => ({
   replace: vi.fn(),
@@ -255,6 +259,20 @@ describe("Account danger zone", () => {
     renderAccount({ hasPassword: false, sessionFresh: false });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("alert")).toHaveTextContent(DELETE_ACCOUNT_COPY.reauthRequired);
+    expect(nav.replace).toHaveBeenCalledWith("/app/account");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("shows a neutral note for ?reauth=stale, keeps the sheet closed, and starts Google from Delete account", () => {
+    nav.params = new URLSearchParams("reauth=stale");
+    renderAccount({ hasPassword: false, sessionFresh: false });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const note = screen.getByRole("status");
+    expect(note).toHaveTextContent(DELETE_ACCOUNT_COPY.reauthStale);
+    expect(note.className).toContain("bg-canvas-2");
+    expect(note.className).not.toContain("danger");
+    const restart = screen.getByRole("link", { name: "Delete account" });
+    expect(restart.getAttribute("href")).toBe(GOOGLE_REAUTH_HREF);
     expect(nav.replace).toHaveBeenCalledWith("/app/account");
     expect(fetch).not.toHaveBeenCalled();
   });
