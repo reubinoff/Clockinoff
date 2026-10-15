@@ -15,7 +15,7 @@ export const DELETE_ACCOUNT_COPY = {
     "You’ll be signed out on every device",
   ],
   zoneHelper: "Permanently delete your account and all of your data. This can’t be undone.",
-  kept: "Nothing is kept. This can’t be undone.",
+  kept: "Nothing is kept.",
   reauthNeeded: "For security, sign in with Google again to continue.",
   googleCta: "Sign in with Google again",
   passwordLabel: "Password",
@@ -265,7 +265,7 @@ export default function DeleteAccountDialog({
                   className="input"
                   type="email"
                   autoComplete="off"
-                  placeholder={email}
+                  placeholder={DELETE_ACCOUNT_COPY.emailLabel}
                   value={typedEmail}
                   onChange={(e) => setTypedEmail(e.target.value)}
                   disabled={pending}

@@ -225,9 +225,7 @@
      a filled control is the danger action. Light danger (#b91c1c) takes
      a white label (~6.5:1). Dark keeps that same fill and white label
      (#b91c1c is ~6.5:1 with white). The shared --color-danger token
-     stays #f87171 so error text and status pills keep their contrast;
-     outline danger text is deepened only as far as ~4.5:1 on the dark
-     surface allows. */
+     stays #f87171 so error text and status pills keep their contrast. */
   .btn.btn-danger-fill {
     background-color: var(--color-danger);
     border-color: var(--color-danger);
@@ -238,8 +236,19 @@
     border-color: color-mix(in srgb, var(--color-danger) 86%, black);
     color: var(--color-accent-fg);
   }
+  /* Dark outline danger. A surface fill stays a light grey control on
+     the dark canvas. Soft danger is the dark-theme danger token pair:
+     #f87171 on #3b1418 is ~5.9:1. Hover flips to the token fill with
+     canvas text (~7.5:1); white on #f87171 does not clear 4.5:1. */
   html[data-theme="dark"] .btn-danger {
-    color: #ee5555;
+    color: var(--color-danger);
+    background-color: var(--color-danger-soft);
+    border-color: var(--color-danger);
+  }
+  html[data-theme="dark"] .btn-danger:hover {
+    background-color: var(--color-danger);
+    border-color: var(--color-danger);
+    color: var(--color-canvas);
   }
   html[data-theme="dark"] .btn.btn-danger-fill {
     background-color: #b91c1c;

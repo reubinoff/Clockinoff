@@ -102,11 +102,14 @@ describe("Account danger zone", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
     openSheet();
-    expect(screen.getByRole("dialog", { name: DELETE_ACCOUNT_COPY.title })).toBeTruthy();
+    const dialog = screen.getByRole("dialog", { name: DELETE_ACCOUNT_COPY.title });
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
     for (const line of DELETE_ACCOUNT_COPY.bullets) {
-      expect(screen.getByText(line)).toBeTruthy();
+      expect(within(dialog).getByText(line)).toBeTruthy();
     }
+    expect(within(dialog).getByText(DELETE_ACCOUNT_COPY.body)).toBeTruthy();
+    expect(within(dialog).getByText(DELETE_ACCOUNT_COPY.kept)).toBeTruthy();
+    expect(within(dialog).getAllByText(/can’t be undone/)).toHaveLength(1);
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -117,7 +120,7 @@ describe("Account danger zone", () => {
     const email = screen.getByLabelText(DELETE_ACCOUNT_COPY.emailLabel) as HTMLInputElement;
     expect(password.getAttribute("autocomplete")).toBe("current-password");
     expect(email.value).toBe("");
-    expect(email.placeholder).toBe("Ada@Example.com");
+    expect(email.placeholder).toBe("Type your email to confirm");
     const confirm = dialogConfirm();
     expect(confirm).toBeDisabled();
     fireEvent.change(password, { target: { value: "correct-horse" } });
