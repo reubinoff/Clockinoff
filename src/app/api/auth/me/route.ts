@@ -4,6 +4,7 @@ import { z } from "zod";
 import { publicOrigin } from "@/lib/base-url";
 import { clientIpForRecord, clientIpFromHeaders, socketAddressFromRequest } from "@/lib/client-ip";
 import { ApiError, errors } from "@/lib/errors";
+import { PASSWORD_MAX_LENGTH } from "@/lib/password";
 import { jsonError, ok, requireUser, readJson, adminRequestMeta } from "@/server/http";
 import { updateTimezone } from "@/server/auth/service";
 import { getSignInMethods } from "@/server/auth/google";
@@ -12,12 +13,13 @@ import {
   recordSelfDeleteFailure,
   selfDeleteRetryAfterSeconds,
 } from "@/server/auth/rate-limit";
-import { deleteOwnAccount } from "@/server/auth/self-delete";
+import { CONFIRM_EMAIL_MAX, deleteOwnAccount } from "@/server/auth/self-delete";
 import { getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
 
+// Reject over-length fields before deleteOwnAccount reaches argon2.
 const DeleteBody = z.object({
-  password: z.string().optional(),
-  confirmEmail: z.string(),
+  password: z.string().max(PASSWORD_MAX_LENGTH).optional(),
+  confirmEmail: z.string().max(CONFIRM_EMAIL_MAX),
 });
 
 export const runtime = "nodejs";

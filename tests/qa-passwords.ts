@@ -1,10 +1,10 @@
 // In-memory passwords for this process only. Never written to disk, logs,
-// or CI artifacts. A later process that does not have the password reports
-// the email and stops.
+// artifacts, or another process. The sweep walks this map and calls
+// DELETE /api/auth/me. It does not read the users table.
 
 const passwords = new Map<string, string>();
 
-type Deleter = (email: string, password: string) => Promise<void>;
+type Deleter = (email: string, password: string) => Promise<boolean>;
 
 let deleter: Deleter | null = null;
 
@@ -28,12 +28,15 @@ export function setQaSweepDeleter(fn: Deleter | null): void {
 
 export async function sweepRememberedQaUsers(): Promise<void> {
   const entries = [...passwords.entries()];
+  const stillThere: string[] = [];
   for (const [email, password] of entries) {
-    if (!deleter) {
-      console.error(`qa sweep: no in-memory password path for ${email}`);
-      throw new Error("qa sweep: password is not available for a leftover user");
-    }
-    await deleter(email, password);
-    passwords.delete(email);
+    const gone = deleter ? await deleter(email, password) : false;
+    if (gone) passwords.delete(email);
+    else stillThere.push(email);
   }
+  if (stillThere.length === 0) return;
+  for (const email of stillThere) {
+    console.error(`qa sweep: user still exists: ${email}`);
+  }
+  throw new Error("qa sweep: remembered user still exists");
 }

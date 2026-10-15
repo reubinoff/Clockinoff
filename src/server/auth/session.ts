@@ -42,6 +42,9 @@ export interface CreatedSession {
 }
 
 export function hashSessionToken(token: string): string {
+  // codeql[js/insufficient-password-hash]
+  // Opaque session cookie token (tokenId), not a password. Passwords use
+  // argon2id in src/server/auth/passwords.ts.
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 

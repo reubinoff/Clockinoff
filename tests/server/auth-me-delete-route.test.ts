@@ -4,6 +4,7 @@ import { DELETE, GET } from "@/app/api/auth/me/route";
 import { POST as loginPost } from "@/app/api/auth/login/route";
 import { ADMIN_GUARD } from "@/lib/admin-copy";
 import { publicOrigin } from "@/lib/base-url";
+import { PASSWORD_MAX_LENGTH } from "@/lib/password";
 import { SELF_DELETE_REAUTH_MS, setBeforeSelfDeleteLock } from "@/server/auth/self-delete";
 import {
   SELF_DELETE_RATE_LIMIT,
@@ -64,21 +65,19 @@ setQaSweepDeleter(async (email, password) => {
       body: JSON.stringify({ email, password }),
     }),
   );
-  if (login.status === 401) return;
-  if (login.status !== 200) {
-    throw new Error(`qa sweep login failed for ${email}`);
-  }
+  if (login.status === 401) return true;
+  if (login.status !== 200) return false;
   const setCookie = login.headers.get("set-cookie") ?? "";
   const match = new RegExp(`${SESSION_COOKIE}=([^;]+)`).exec(setCookie);
   cookieValue = match?.[1];
+  if (!cookieValue) return false;
   const del = await DELETE(call({ password, confirmEmail: email }));
+  const me = await GET();
   cookieValue = undefined;
-  if (del.status !== 204 && del.status !== 401) {
-    throw new Error(`qa sweep delete failed for ${email}`);
-  }
+  return del.status === 204 && me.status === 401;
 });
 
-async function makePasswordUser(email = nextEmail()): Promise<{
+async function makeRegisteredUser(email = nextEmail()): Promise<{
   id: string;
   email: string;
   token: string;
@@ -126,7 +125,7 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("deletes the signed-in user, cascades rows, clears the cookie, and audits", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     cookieValue = account.token;
     const db = getDb();
     const [client] = await db
@@ -188,7 +187,7 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("rejects a confirm mismatch without deleting or counting the attempt", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     cookieValue = account.token;
     const res = await DELETE(
       call({ password: "wrong-password", confirmEmail: "other@ex.com" }, { "x-client-ip": "203.0.113.20" }),
@@ -201,8 +200,25 @@ describe("DELETE /api/auth/me", () => {
     forgetQaSweepPassword(account.email);
   });
 
+  it("rejects a password longer than the argon2 cap before hashing", async () => {
+    const account = await makeRegisteredUser();
+    cookieValue = account.token;
+    const ip = "203.0.113.41";
+    const res = await DELETE(
+      call(
+        { password: "x".repeat(PASSWORD_MAX_LENGTH + 1), confirmEmail: account.email },
+        { "x-client-ip": ip },
+      ),
+    );
+    expect(res.status).toBe(400);
+    expect((await errorBody(res)).error.code).toBe("VALIDATION");
+    expect(isSelfDeleteRateLimited(account.id, ip)).toBe(false);
+    expect(await getDb().select().from(users).where(eq(users.id, account.id))).toHaveLength(1);
+    forgetQaSweepPassword(account.email);
+  });
+
   it("rejects a confirm value longer than 254 characters", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     cookieValue = account.token;
     const res = await DELETE(
       call({ password: PW, confirmEmail: `${"a".repeat(255)}@ex.com` }),
@@ -213,7 +229,7 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("counts a missing password as a failed attempt", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     cookieValue = account.token;
     const ip = "203.0.113.40";
     const res = await DELETE(call({ confirmEmail: account.email }, { "x-client-ip": ip }));
@@ -231,7 +247,7 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("counts wrong passwords and returns 429 once the bucket is exhausted", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     cookieValue = account.token;
     const ip = "203.0.113.30";
     for (let i = 0; i < SELF_DELETE_RATE_LIMIT.maxFailures; i += 1) {
@@ -252,7 +268,7 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("returns 429 on the 6th wrong password from a different X-Client-IP", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     cookieValue = account.token;
     for (let i = 1; i <= 6; i += 1) {
       const res = await DELETE(
@@ -342,7 +358,7 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("returns 403 when Origin is missing, the string null, or a mismatch", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     cookieValue = account.token;
     const referer = appOrigin();
     const missing = await DELETE(
@@ -369,7 +385,7 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("returns 403 for an admin and never 409, reading the role inside the transaction", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     cookieValue = account.token;
     const db = getDb();
     await db.update(users).set({ role: "admin" }).where(eq(users.id, account.id));
@@ -392,7 +408,7 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("rolls back when the audit insert throws", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     cookieValue = account.token;
     setPendingAuditInsert(async () => {
       throw new Error("audit down");
@@ -405,7 +421,7 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("returns 401 for a second call with the same cookie", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     cookieValue = account.token;
     const first = await DELETE(call({ password: PW, confirmEmail: account.email }));
     expect(first.status).toBe(204);
@@ -415,7 +431,7 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("invalidates every session for the user", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     const other = await createSession(account.id);
     cookieValue = account.token;
     const res = await DELETE(call({ password: PW, confirmEmail: account.email }));
@@ -434,7 +450,7 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("returns 400 for a bad JSON body", async () => {
-    const account = await makePasswordUser();
+    const account = await makeRegisteredUser();
     cookieValue = account.token;
     const res = await DELETE(call(undefined, {}, "{"));
     expect(res.status).toBe(400);
