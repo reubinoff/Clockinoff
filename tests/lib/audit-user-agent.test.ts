@@ -26,6 +26,14 @@ describe("capAuditUserAgent", () => {
     expect(capAuditUserAgent("bad\u0000agent\nline")).toBe("badagentline");
     expect(capAuditUserAgent("\u0000")).toBeNull();
   });
+
+  it("strips CR and LF before the 512 cap", () => {
+    const injected = `ua\r\nINJECTED\n${"a".repeat(600)}`;
+    const capped = capAuditUserAgent(injected);
+    expect(capped).toHaveLength(AUDIT_USER_AGENT_MAX);
+    expect(capped).not.toMatch(/[\r\n]/);
+    expect(capped?.startsWith("uaINJECTED")).toBe(true);
+  });
 });
 
 describe("capAuditForwardedFor", () => {

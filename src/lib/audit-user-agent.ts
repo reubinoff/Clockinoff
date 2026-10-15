@@ -1,7 +1,6 @@
 // Stored on audit_events. Both columns are text. Cap before insert so a
-// long header cannot land in the row from any caller. Control characters
-// are dropped so the value stays a single line of text (NUL would make
-// Postgres reject the insert).
+// long header cannot land in the row. CR, LF, and the other C0 controls
+// are removed first so a header cannot break a log line or the row.
 
 export const AUDIT_USER_AGENT_MAX = 512;
 export const AUDIT_FORWARDED_FOR_MAX = 512;

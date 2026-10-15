@@ -19,9 +19,17 @@ export type AuthAuditAction = (typeof AUTH_AUDIT)[keyof typeof AUTH_AUDIT];
 // so the row is not a second copy of the raw header.
 export const LOGIN_FAILURE_EMAIL_MAX = 254;
 
-// Stable App Insights event. The only extra field is the audit action
-// (`auth.login_failure`, …). No address, IP, user agent, or id.
+// One JSON object on the error stream. App Insights alerts on `event`.
+// `type` is the audit action. `error_class` is the thrown value's name.
+// Nothing else: no message, no request fields.
 export const AUDIT_WRITE_FAILED = "audit_write_failed";
+
+const ERROR_CLASS_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+
+function errorClassName(err: unknown): string {
+  const name = err instanceof Error ? err.name : "";
+  return ERROR_CLASS_NAME.test(name) ? name : "Error";
+}
 
 export function loginFailureActorEmail(email: string): string {
   return email.trim().toLowerCase().slice(0, LOGIN_FAILURE_EMAIL_MAX);
@@ -81,9 +89,15 @@ export async function recordAuthEvent(input: AuthAuditEvent): Promise<void> {
   };
   try {
     await insertAuthAuditFn(row);
-  } catch {
-    // The thrown value can carry the statement text (email, IP, ids).
-    // Alert on this name only.
-    logger.error(AUDIT_WRITE_FAILED, { event: row.action });
+  } catch (err) {
+    // Whole line is JSON. The catch value's message is not included; it
+    // can carry the statement text and the request.
+    logger.error(
+      JSON.stringify({
+        event: AUDIT_WRITE_FAILED,
+        type: row.action,
+        error_class: errorClassName(err),
+      }),
+    );
   }
 }

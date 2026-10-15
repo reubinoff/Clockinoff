@@ -4,9 +4,16 @@ import { POST as loginPost } from "@/app/api/auth/login/route";
 import { POST as logoutPost } from "@/app/api/auth/logout/route";
 import { POST as registerPost } from "@/app/api/auth/register/route";
 import { AUDIT_FORWARDED_FOR_MAX, AUDIT_USER_AGENT_MAX } from "@/lib/audit-user-agent";
-import { AUDIT_WRITE_FAILED, AUTH_AUDIT, loginFailureActorEmail, setAuthAuditInsert } from "@/server/auth/auth-audit";
-import { LOGIN_RATE_LIMIT, resetAuthRateLimits } from "@/server/auth/rate-limit";
+import {
+  AUDIT_WRITE_FAILED,
+  AUTH_AUDIT,
+  loginFailureActorEmail,
+  recordAuthEvent,
+  setAuthAuditInsert,
+} from "@/server/auth/auth-audit";
+import { LOGIN_IP_RATE_LIMIT, LOGIN_RATE_LIMIT, resetAuthRateLimits } from "@/server/auth/rate-limit";
 import { hashSessionToken, SESSION_COOKIE } from "@/server/auth/session";
+import * as passwords from "@/server/auth/passwords";
 import { getDb } from "@/server/db/client";
 import { auditEvents, sessions, users } from "@/server/db/schema";
 import { truncateAll } from "../setup";
@@ -133,23 +140,31 @@ describe("auth audit trail", () => {
     );
     const headers = forgedHeaders({ "user-agent": `Agent/${"b".repeat(600)}` });
     headers["x-client-ip"] = `${"1.2.3.4, ".repeat(80)}140.248.50.22`;
+    const verifySpy = vi.spyOn(passwords, "verifyPassword");
 
-    const missing = await loginPost(
-      post(
-        "http://test/api/auth/login",
-        { email: "Ghost@Example.com", password: WRONG },
-        headers,
-      ),
-    );
-    const wrong = await loginPost(
-      post(
-        "http://test/api/auth/login",
-        { email: "real@example.com", password: WRONG },
-        headers,
-      ),
-    );
-    expect(missing.status).toBe(401);
-    expect(wrong.status).toBe(401);
+    let missing: Response;
+    let wrong: Response;
+    try {
+      missing = await loginPost(
+        post(
+          "http://test/api/auth/login",
+          { email: "Ghost@Example.com", password: WRONG },
+          headers,
+        ),
+      );
+      wrong = await loginPost(
+        post(
+          "http://test/api/auth/login",
+          { email: "real@example.com", password: WRONG },
+          headers,
+        ),
+      );
+      expect(missing.status).toBe(wrong.status);
+      expect(missing.status).toBe(401);
+      expect(verifySpy).toHaveBeenCalledTimes(2);
+    } finally {
+      verifySpy.mockRestore();
+    }
     const missingBody = JSON.stringify(await missing.json());
     const wrongBody = JSON.stringify(await wrong.json());
     expect(missingBody).toBe(wrongBody);
@@ -184,10 +199,20 @@ describe("auth audit trail", () => {
       expect(blob).not.toContain(WRONG);
       expect(blob).not.toContain("password");
     }
-    expect(ghost?.actorUserId).toBe(real?.actorUserId);
-    expect(ghost?.targets).toEqual(real?.targets);
-    expect(ghost?.clientIp).toBe(real?.clientIp);
-    expect(ghost?.sessionIdHash).toBe(real?.sessionIdHash);
+    expect(ghost?.actorEmail).not.toBe(real?.actorEmail);
+    const shape = (row: (typeof failures)[number] | undefined) => {
+      const {
+        id: _id,
+        createdAt: _createdAt,
+        completedAt: _completedAt,
+        requestId: _requestId,
+        actorEmail: _actorEmail,
+        ...rest
+      } = row ?? {};
+      return rest;
+    };
+    expect(shape(ghost)).toEqual(shape(real));
+    expect(Object.keys(ghost ?? {}).sort()).toEqual(Object.keys(real ?? {}).sort());
   });
 
   it("caps a failed-login email at 254 characters", () => {
@@ -356,13 +381,108 @@ describe("auth audit trail", () => {
     expect(await failureCount()).toBe(before);
   });
 
+  it("bounds audit rows when many junk emails come from one IP", async () => {
+    const ip = "198.51.100.91";
+    const extra = 8;
+    const attempts = LOGIN_IP_RATE_LIMIT.maxFailures + extra;
+    let rejected = 0;
+    for (let i = 0; i < attempts; i += 1) {
+      const res = await loginPost(
+        post(
+          "http://test/api/auth/login",
+          { email: `junk-${i}@example.com`, password: WRONG },
+          { "content-type": "application/json", "x-forwarded-for": ip },
+        ),
+      );
+      if (res.status === 429) rejected += 1;
+      else expect(res.status).toBe(401);
+    }
+    expect(rejected).toBe(extra);
+    const failures = (await getDb().select().from(auditEvents)).filter(
+      (row) => row.action === AUTH_AUDIT.loginFailure,
+    );
+    expect(failures.length).toBe(LOGIN_IP_RATE_LIMIT.maxFailures);
+    expect(failures.length).toBeLessThan(attempts);
+  });
+
+  it("strips CR and LF before insert and keeps them out of the failure log", async () => {
+    const marker = "INJECTED-LOG-LINE";
+    const ua = `Agent\r\n${marker}\r\n${"u".repeat(600)}`;
+    const forwarded = `x-forwarded-for: 1.2.3.4\r\n${marker}, 203.0.113.50`;
+    await recordAuthEvent({
+      action: AUTH_AUDIT.loginFailure,
+      actorUserId: null,
+      actorEmail: "crlf@example.com",
+      targets: [],
+      requestId: "req-crlf",
+      clientIp: "203.0.113.50",
+      forwardedFor: forwarded,
+      userAgent: ua,
+      sessionIdHash: null,
+    });
+    const [row] = await getDb().select().from(auditEvents);
+    expect(row?.userAgent).not.toMatch(/[\r\n]/);
+    expect(row?.forwardedFor).not.toMatch(/[\r\n]/);
+    expect(row?.userAgent).toHaveLength(AUDIT_USER_AGENT_MAX);
+    expect(row?.forwardedFor?.length).toBeLessThanOrEqual(AUDIT_FORWARDED_FOR_MAX);
+    expect(row?.userAgent?.startsWith(`Agent${marker}`)).toBe(true);
+    expect(row?.forwardedFor?.includes(`1.2.3.4${marker}`)).toBe(true);
+
+    class QueryFailedError extends Error {
+      constructor() {
+        super(`boom\r\n${marker}\r\n${ua}`);
+        this.name = "QueryFailedError";
+      }
+    }
+    setAuthAuditInsert(async () => {
+      throw new QueryFailedError();
+    });
+    const captured: string[] = [];
+    const errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      captured.push(args.map((part) => String(part)).join(" "));
+    });
+    try {
+      await recordAuthEvent({
+        action: AUTH_AUDIT.loginFailure,
+        actorUserId: null,
+        actorEmail: "crlf@example.com",
+        targets: [],
+        requestId: "req-crlf",
+        clientIp: "203.0.113.50",
+        forwardedFor: forwarded,
+        userAgent: ua,
+        sessionIdHash: null,
+      });
+      expect(captured).toHaveLength(1);
+      const line = captured[0] ?? "";
+      expect(line).not.toMatch(/[\r\n]/);
+      expect(line).not.toContain(marker);
+      expect(line).not.toContain(ua);
+      expect(line).not.toContain(forwarded);
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      expect(parsed).toEqual({
+        event: AUDIT_WRITE_FAILED,
+        type: AUTH_AUDIT.loginFailure,
+        error_class: "QueryFailedError",
+      });
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
   it("emits audit_write_failed with the event type and no user details", async () => {
     const email = "leak-me@example.com";
     const ip = "203.0.113.77";
     const ua = "LeakAgent/9";
     const id = "11111111-2222-3333-4444-555555555555";
+    class QueryFailedError extends Error {
+      constructor() {
+        super(`db down ${email}\r\n${ip} ${ua} ${id} password=${PW}`);
+        this.name = "QueryFailedError";
+      }
+    }
     setAuthAuditInsert(async () => {
-      throw new Error(`db down ${email} ${ip} ${ua} ${id} password=${PW}`);
+      throw new QueryFailedError();
     });
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
@@ -405,10 +525,13 @@ describe("auth audit trail", () => {
 
       const lines = spy.mock.calls.map((call) => call.map((part) => String(part)).join(" "));
       const hits = lines.filter((line) => line.includes(AUDIT_WRITE_FAILED));
-      expect(hits.map((line) => line.includes(AUTH_AUDIT.loginFailure))).toContain(true);
-      expect(hits.map((line) => line.includes(AUTH_AUDIT.register))).toContain(true);
-      expect(hits.map((line) => line.includes(AUTH_AUDIT.logout))).toContain(true);
-      for (const line of hits) {
+      expect(hits).toHaveLength(3);
+      const types = hits.map((line) => {
+        expect(line).not.toMatch(/[\r\n]/);
+        const parsed = JSON.parse(line) as Record<string, unknown>;
+        expect(Object.keys(parsed).sort()).toEqual(["error_class", "event", "type"]);
+        expect(parsed.event).toBe(AUDIT_WRITE_FAILED);
+        expect(parsed.error_class).toBe("QueryFailedError");
         expect(line).not.toContain(email);
         expect(line).not.toContain("open-secret@example.com");
         expect(line).not.toContain(ip);
@@ -417,7 +540,14 @@ describe("auth audit trail", () => {
         expect(line).not.toContain(token);
         expect(line).not.toContain(PW);
         expect(line).not.toContain("password");
-      }
+        expect(line).not.toContain("db down");
+        return parsed.type;
+      });
+      expect(types).toEqual([
+        AUTH_AUDIT.loginFailure,
+        AUTH_AUDIT.register,
+        AUTH_AUDIT.logout,
+      ]);
     } finally {
       spy.mockRestore();
     }
