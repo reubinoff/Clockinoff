@@ -111,6 +111,9 @@ jobs:
       - name: Run tests with coverage (fails under 90%)
         run: npm run test:coverage
 
+      - name: Sweep qa users from this run
+        run: node scripts/sweep-qa-users.mjs
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v7

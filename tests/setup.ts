@@ -37,7 +37,12 @@ beforeEach(() => {
 });
 
 afterAll(async () => {
-  await closeDb();
+  try {
+    const { sweepRememberedQaUsers } = await import("./qa-passwords");
+    await sweepRememberedQaUsers();
+  } finally {
+    await closeDb();
+  }
 });
 
 export async function truncateAll(): Promise<void> {

@@ -124,6 +124,9 @@ async function persistSessionClientIp(tokenHash: string, clientIp: string): Prom
 
 async function touchSessionLastSeen(tokenHash: string, now: Date): Promise<void> {
   const cutoff = new Date(now.getTime() - LAST_SEEN_THROTTLE_MS);
+  // created_at stays the original sign-in time. Google-only self-delete
+  // measures the five-minute window from that column. A sliding expiry or
+  // a last-seen refresh must not make an old sign-in look fresh.
   await getDb()
     .update(sessions)
     .set({ lastSeenAt: now })
@@ -152,6 +155,27 @@ export async function deleteSession(sessionId: string | null | undefined): Promi
   if (!sessionId) return;
   const db = getDb();
   await db.delete(sessions).where(eq(sessions.id, hashSessionToken(sessionId)));
+}
+
+export async function getSessionCreatedAt(
+  sessionId: string | null | undefined,
+): Promise<Date | null> {
+  if (!sessionId) return null;
+  const rows = await getDb()
+    .select({ createdAt: sessions.createdAt })
+    .from(sessions)
+    .where(eq(sessions.id, hashSessionToken(sessionId)))
+    .limit(1);
+  return rows[0]?.createdAt ?? null;
+}
+
+type SessionWriter = Pick<ReturnType<typeof getDb>, "delete">;
+
+export async function deleteAllSessionsForUser(
+  userId: string,
+  executor: SessionWriter = getDb(),
+): Promise<void> {
+  await executor.delete(sessions).where(eq(sessions.userId, userId));
 }
 
 export async function purgeExpiredSessions(now: Date = new Date()): Promise<number> {

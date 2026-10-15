@@ -4,12 +4,14 @@ import {
   LOGIN_IP_RATE_LIMIT,
   LOGIN_RATE_LIMIT,
   REGISTER_RATE_LIMIT,
+  SELF_DELETE_RATE_LIMIT,
   googleOAuthMapSize,
   googleOAuthRetryAfterSeconds,
   isGoogleOAuthRateLimited,
   isLoginIpRateLimited,
   isLoginRateLimited,
   isRegisterRateLimited,
+  isSelfDeleteRateLimited,
   loginIpMapSize,
   loginIpRetryAfterSeconds,
   loginMapSize,
@@ -18,9 +20,13 @@ import {
   recordLoginFailure,
   recordLoginSuccess,
   recordRegisterAttempt,
+  recordSelfDeleteFailure,
   registerMapSize,
   registerRetryAfterSeconds,
   resetAuthRateLimits,
+  selfDeletePairMapSize,
+  selfDeleteRetryAfterSeconds,
+  selfDeleteUserMapSize,
 } from "@/server/auth/rate-limit";
 
 describe("auth/rate-limit", () => {
@@ -247,5 +253,32 @@ describe("auth/rate-limit", () => {
     const retry = googleOAuthRetryAfterSeconds("8.8.4.4", start);
     expect(retry).toBeGreaterThan(0);
     expect(retry).toBeLessThanOrEqual(Math.ceil(GOOGLE_OAUTH_RATE_LIMIT.windowMs / 1000));
+  });
+
+  it("limits self-delete per user even when each failure uses a new IP", () => {
+    const userId = "11111111-1111-1111-1111-111111111111";
+    for (let i = 0; i < SELF_DELETE_RATE_LIMIT.maxFailures; i += 1) {
+      expect(isSelfDeleteRateLimited(userId, `203.0.113.${i + 1}`)).toBe(false);
+      recordSelfDeleteFailure(userId, `203.0.113.${i + 1}`);
+    }
+    expect(isSelfDeleteRateLimited(userId, "203.0.113.99")).toBe(true);
+    expect(isSelfDeleteRateLimited("22222222-2222-2222-2222-222222222222", "203.0.113.99")).toBe(
+      false,
+    );
+    expect(selfDeleteUserMapSize()).toBe(1);
+    expect(selfDeletePairMapSize()).toBe(SELF_DELETE_RATE_LIMIT.maxFailures);
+    expect(selfDeleteRetryAfterSeconds(userId, "203.0.113.99")).toBeGreaterThan(0);
+  });
+
+  it("expires the self-delete user bucket with the window", () => {
+    const start = 9_000_000;
+    const userId = "33333333-3333-3333-3333-333333333333";
+    for (let i = 0; i < SELF_DELETE_RATE_LIMIT.maxFailures; i += 1) {
+      recordSelfDeleteFailure(userId, "198.51.100.8", start);
+    }
+    expect(isSelfDeleteRateLimited(userId, "198.51.100.9", start)).toBe(true);
+    const after = start + SELF_DELETE_RATE_LIMIT.windowMs + 1;
+    expect(isSelfDeleteRateLimited(userId, "198.51.100.9", after)).toBe(false);
+    expect(selfDeleteRetryAfterSeconds(userId, "198.51.100.9", after)).toBe(0);
   });
 });

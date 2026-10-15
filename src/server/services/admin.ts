@@ -352,7 +352,7 @@ async function insertClosedAudit(
 export interface PendingAuditRow {
   actorUserId: string;
   actorEmail: string;
-  action: "remove" | "block";
+  action: "remove" | "block" | "user.self_delete";
   targets: AuditTarget[];
   requestId: string;
   clientIp: string | null;
@@ -398,6 +398,38 @@ export function setBeforeBulkTarget(
 
 function deleteRowCount(result: { rowCount: number | null }): number {
   return result.rowCount ?? 0;
+}
+
+type DbTransaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+
+export async function deleteUserCascade(tx: DbTransaction, userId: string): Promise<number> {
+  return deleteRowCount(await tx.delete(users).where(eq(users.id, userId)));
+}
+
+export async function insertSelfDeletePendingAudit(
+  tx: DbTransaction,
+  row: PendingAuditRow,
+): Promise<string> {
+  if (insertPendingAuditFn !== insertPendingAudit) {
+    return insertPendingAuditFn(row);
+  }
+  const [inserted] = await tx
+    .insert(auditEvents)
+    .values({
+      actorUserId: row.actorUserId,
+      actorEmail: row.actorEmail,
+      action: row.action,
+      targets: row.targets,
+      requestId: row.requestId,
+      clientIp: row.clientIp,
+      forwardedFor: row.forwardedFor,
+      userAgent: capAuditUserAgent(row.userAgent),
+      sessionIdHash: row.sessionIdHash,
+      status: "pending",
+    })
+    .returning({ id: auditEvents.id });
+  if (!inserted) throw new Error("audit insert returned no row");
+  return inserted.id;
 }
 
 function auditRequestFields(opts: MutateOptions | undefined): {
@@ -471,7 +503,7 @@ async function mutate(
     }
 
     if (action === "remove") {
-      const deleted = deleteRowCount(await tx.delete(users).where(eq(users.id, targetId)));
+      const deleted = await deleteUserCascade(tx, targetId);
       if (recordAudit) {
         await insertClosedAudit(tx, {
           actorId,

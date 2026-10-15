@@ -10,6 +10,9 @@
 //   - `GET /api/auth/google/start` + `/callback` — per-IP bucket counting
 //     every hit (~20 / 10 min) so a reused state cookie cannot amplify
 //     outbound token exchanges (#148).
+//   - `DELETE /api/auth/me` — a `(userId, IP)` bucket plus a per-userId
+//     bucket. Wrong passwords count. The per-user bucket still trips when
+//     each attempt comes from a different IP (#193).
 //
 // All limiters:
 //
@@ -43,6 +46,9 @@ const REGISTER_WINDOW_MS = 15 * 60 * 1000;
 const GOOGLE_OAUTH_MAX_ATTEMPTS = 20;
 const GOOGLE_OAUTH_WINDOW_MS = 10 * 60 * 1000;
 
+const SELF_DELETE_MAX_FAILURES = 5;
+const SELF_DELETE_WINDOW_MS = 15 * 60 * 1000;
+
 // Hard cap on every in-process map. 50k live buckets is well above any
 // legitimate single-replica load and cheap enough that FIFO eviction of
 // the oldest key is the right overflow valve (#145).
@@ -62,6 +68,8 @@ const loginBuckets = new Map<string, Bucket>();
 const loginIpBuckets = new Map<string, Bucket>();
 const registerBuckets = new Map<string, Bucket>();
 const googleOAuthBuckets = new Map<string, Bucket>();
+const selfDeletePairBuckets = new Map<string, Bucket>();
+const selfDeleteUserBuckets = new Map<string, Bucket>();
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -69,6 +77,10 @@ function normalizeEmail(email: string): string {
 
 function loginKey(email: string, ip: string): string {
   return `${normalizeEmail(email)}|${ip}`;
+}
+
+function selfDeletePairKey(userId: string, ip: string): string {
+  return `${userId}|${ip}`;
 }
 
 function incrementalPrune(buckets: Map<string, Bucket>, now: number): void {
@@ -197,6 +209,43 @@ export function googleOAuthRetryAfterSeconds(ip: string, now: number = Date.now(
   return retryAfter(googleOAuthBuckets.get(ip), now);
 }
 
+// ---------- self-delete ----------------------------------------------------
+//
+// Wrong-password attempts on DELETE /api/auth/me. The pair bucket matches
+// login's (identifier, IP) shape. The user bucket is separate so rotating
+// the IP (a new X-Client-IP on every try) still stops at 5 failures.
+
+export function isSelfDeleteRateLimited(
+  userId: string,
+  ip: string,
+  now: number = Date.now(),
+): boolean {
+  return (
+    isLimited(selfDeletePairBuckets, selfDeletePairKey(userId, ip), now, SELF_DELETE_MAX_FAILURES) ||
+    isLimited(selfDeleteUserBuckets, userId, now, SELF_DELETE_MAX_FAILURES)
+  );
+}
+
+export function recordSelfDeleteFailure(
+  userId: string,
+  ip: string,
+  now: number = Date.now(),
+): void {
+  remember(selfDeletePairBuckets, selfDeletePairKey(userId, ip), now, SELF_DELETE_WINDOW_MS);
+  remember(selfDeleteUserBuckets, userId, now, SELF_DELETE_WINDOW_MS);
+}
+
+export function selfDeleteRetryAfterSeconds(
+  userId: string,
+  ip: string,
+  now: number = Date.now(),
+): number {
+  return Math.max(
+    retryAfter(selfDeletePairBuckets.get(selfDeletePairKey(userId, ip)), now),
+    retryAfter(selfDeleteUserBuckets.get(userId), now),
+  );
+}
+
 // ---------- test helpers ---------------------------------------------------
 
 export function resetLoginRateLimit(): void {
@@ -212,10 +261,16 @@ export function resetGoogleOAuthRateLimit(): void {
   googleOAuthBuckets.clear();
 }
 
+export function resetSelfDeleteRateLimit(): void {
+  selfDeletePairBuckets.clear();
+  selfDeleteUserBuckets.clear();
+}
+
 export function resetAuthRateLimits(): void {
   resetLoginRateLimit();
   resetRegisterRateLimit();
   resetGoogleOAuthRateLimit();
+  resetSelfDeleteRateLimit();
 }
 
 export function loginMapSize(): number {
@@ -232,6 +287,14 @@ export function registerMapSize(): number {
 
 export function googleOAuthMapSize(): number {
   return googleOAuthBuckets.size;
+}
+
+export function selfDeletePairMapSize(): number {
+  return selfDeletePairBuckets.size;
+}
+
+export function selfDeleteUserMapSize(): number {
+  return selfDeleteUserBuckets.size;
 }
 
 export const LOGIN_RATE_LIMIT = {
@@ -258,6 +321,13 @@ export const REGISTER_RATE_LIMIT = {
 export const GOOGLE_OAUTH_RATE_LIMIT = {
   maxAttempts: GOOGLE_OAUTH_MAX_ATTEMPTS,
   windowMs: GOOGLE_OAUTH_WINDOW_MS,
+  maxBuckets: MAX_BUCKETS,
+  pruneScan: PRUNE_SCAN,
+} as const;
+
+export const SELF_DELETE_RATE_LIMIT = {
+  maxFailures: SELF_DELETE_MAX_FAILURES,
+  windowMs: SELF_DELETE_WINDOW_MS,
   maxBuckets: MAX_BUCKETS,
   pruneScan: PRUNE_SCAN,
 } as const;

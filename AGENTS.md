@@ -421,7 +421,7 @@ services in `src/server/services/*`. Every error is shaped as
 | `POST` | `/api/auth/register` | `{ email, password, timezone? }` → 201 + session cookie |
 | `POST` | `/api/auth/login` | `{ email, password }` → 200 |
 | `POST` | `/api/auth/logout` | 204, clears cookie |
-| `GET` / `PATCH` | `/api/auth/me` | current user; `PATCH { timezone }` |
+| `GET` / `PATCH` / `DELETE` | `/api/auth/me` | current user; `PATCH { timezone }`. `DELETE` removes the signed-in non-admin after an Origin check and a password or a Google session created within 5 minutes. Admins get 403. There is no 409 |
 | `GET` | `/api/auth/google/start` | begins the **Continue with Google** flow; 302 to Google (fail-closed to `/login?error=network` when Google env vars are blank) |
 | `GET` | `/api/auth/google/callback` | OIDC callback; 302 to `/app` on success, `/login?error=...` on cancel / unverified / network |
 | CRUD | `/api/clients`, `/api/projects`, `/api/tags` | `?archived=true` includes archived |

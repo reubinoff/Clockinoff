@@ -3,6 +3,14 @@ import { getDb } from "@/server/db/client";
 import { clients, projects, tags } from "@/server/db/schema";
 import type { SessionUser, CreatedSession } from "@/server/auth/session";
 
+export {
+  forgetQaSweepPassword,
+  qaSweepPrefix,
+  rememberQaSweepPassword,
+  setQaSweepDeleter,
+  sweepRememberedQaUsers,
+} from "./qa-passwords";
+
 export async function makeUser(email = `u-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ex.com`): Promise<{
   user: SessionUser;
   session: CreatedSession;

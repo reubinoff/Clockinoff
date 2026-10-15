@@ -24,13 +24,13 @@ import { spawn } from "node:child_process";
 // We honour `PLAYWRIGHT_BASE_URL`: when a developer points Playwright at an
 // already-running local server, we leave their DB alone.
 
-export default async function globalSetup(): Promise<void> {
+export default async function globalSetup(): Promise<() => Promise<void>> {
   if (process.env.PLAYWRIGHT_BASE_URL) {
     console.log(
       "[playwright] PLAYWRIGHT_BASE_URL is set; skipping app DB migrate " +
         "(assuming the external server already has an up-to-date schema).",
     );
-    return;
+    return async () => {};
   }
 
   // `next start` (our webServer command) inherits this process's env. Mirror
@@ -65,6 +65,10 @@ export default async function globalSetup(): Promise<void> {
   await runEnsureAppRole(childEnv);
   await runMigrateCli(childEnv);
   console.log("[playwright] app DB migrate completed.");
+
+  return async () => {
+    await runQaSweep(childEnv);
+  };
 }
 
 function runEnsureAppRole(env: NodeJS.ProcessEnv): Promise<void> {
@@ -111,6 +115,28 @@ function runMigrateCli(env: NodeJS.ProcessEnv): Promise<void> {
           `[playwright] db:migrate exited with ${
             signal ? `signal ${signal}` : `code ${code}`
           }`,
+        ),
+      );
+    });
+  });
+}
+
+function runQaSweep(env: NodeJS.ProcessEnv): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("node", ["scripts/sweep-qa-users.mjs"], {
+      env,
+      stdio: "inherit",
+      shell: true,
+    });
+    child.on("error", reject);
+    child.on("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          `[playwright] qa sweep exited with ${signal ? `signal ${signal}` : `code ${code}`}`,
         ),
       );
     });

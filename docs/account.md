@@ -73,6 +73,9 @@ people still appear on **Users**.
 The v1 UI does not include a "change email" flow. Support for that is a
 future improvement.
 
+The v1 UI does not include a delete-account control. Deleting the
+signed-in account exists only as an API.
+
 ---
 
 ## Sign-in methods
