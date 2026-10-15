@@ -15,11 +15,16 @@ export const AUTH_AUDIT = {
 export type AuthAuditAction = (typeof AUTH_AUDIT)[keyof typeof AUTH_AUDIT];
 
 // Failed login stores the submitted address only. 254 matches the
-// register/login email length check.
+// register/login email length check. Lowercase matches the login lookup
+// so the row is not a second copy of the raw header.
 export const LOGIN_FAILURE_EMAIL_MAX = 254;
 
+// Stable App Insights event. The only extra field is the audit action
+// (`auth.login_failure`, …). No address, IP, user agent, or id.
+export const AUDIT_WRITE_FAILED = "audit_write_failed";
+
 export function loginFailureActorEmail(email: string): string {
-  return email.trim().slice(0, LOGIN_FAILURE_EMAIL_MAX);
+  return email.trim().toLowerCase().slice(0, LOGIN_FAILURE_EMAIL_MAX);
 }
 
 export interface AuthAuditEvent {
@@ -76,7 +81,9 @@ export async function recordAuthEvent(input: AuthAuditEvent): Promise<void> {
   };
   try {
     await insertAuthAuditFn(row);
-  } catch (err) {
-    logger.exception("[audit] auth event write failed", err, { action: row.action });
+  } catch {
+    // The thrown value can carry the statement text (email, IP, ids).
+    // Alert on this name only.
+    logger.error(AUDIT_WRITE_FAILED, { event: row.action });
   }
 }

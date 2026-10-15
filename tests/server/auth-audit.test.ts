@@ -4,8 +4,8 @@ import { POST as loginPost } from "@/app/api/auth/login/route";
 import { POST as logoutPost } from "@/app/api/auth/logout/route";
 import { POST as registerPost } from "@/app/api/auth/register/route";
 import { AUDIT_FORWARDED_FOR_MAX, AUDIT_USER_AGENT_MAX } from "@/lib/audit-user-agent";
-import { AUTH_AUDIT, loginFailureActorEmail, setAuthAuditInsert } from "@/server/auth/auth-audit";
-import { resetAuthRateLimits } from "@/server/auth/rate-limit";
+import { AUDIT_WRITE_FAILED, AUTH_AUDIT, loginFailureActorEmail, setAuthAuditInsert } from "@/server/auth/auth-audit";
+import { LOGIN_RATE_LIMIT, resetAuthRateLimits } from "@/server/auth/rate-limit";
 import { hashSessionToken, SESSION_COOKIE } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
 import { auditEvents, sessions, users } from "@/server/db/schema";
@@ -161,7 +161,7 @@ describe("auth audit trail", () => {
       (row) => row.action === AUTH_AUDIT.loginFailure,
     );
     expect(failures).toHaveLength(2);
-    const ghost = failures.find((row) => row.actorEmail === "Ghost@Example.com");
+    const ghost = failures.find((row) => row.actorEmail === "ghost@example.com");
     const real = failures.find((row) => row.actorEmail === "real@example.com");
     const [account] = await getDb()
       .select({ id: users.id })
@@ -193,7 +193,7 @@ describe("auth audit trail", () => {
   it("caps a failed-login email at 254 characters", () => {
     const local = "a".repeat(300);
     expect(loginFailureActorEmail(`  ${local}@example.com  `)).toHaveLength(254);
-    expect(loginFailureActorEmail("  In@Example.com ")).toBe("In@Example.com");
+    expect(loginFailureActorEmail("  In@Example.com ")).toBe("in@example.com");
   });
 
   it("does not write an audit row for an unknown session cookie", async () => {
@@ -316,5 +316,110 @@ describe("auth audit trail", () => {
     expect(await getDb().select().from(sessions).where(eq(sessions.userId, before[0]!.actorUserId!))).toHaveLength(
       0,
     );
+  });
+
+  it("does not add an audit row for each login the rate limiter rejects", async () => {
+    const ip = "198.51.100.80";
+    const email = "flood@example.com";
+    await registerPost(
+      post(
+        "http://test/api/auth/register",
+        { email, password: PW },
+        { "content-type": "application/json", "x-forwarded-for": "198.51.100.1" },
+      ),
+    );
+    for (let i = 0; i < LOGIN_RATE_LIMIT.maxFailures; i += 1) {
+      const res = await loginPost(
+        post(
+          "http://test/api/auth/login",
+          { email, password: WRONG },
+          { "content-type": "application/json", "x-forwarded-for": ip },
+        ),
+      );
+      expect(res.status).toBe(401);
+    }
+    const failureCount = async () =>
+      (await getDb().select().from(auditEvents)).filter((row) => row.action === AUTH_AUDIT.loginFailure)
+        .length;
+    const before = await failureCount();
+    expect(before).toBe(LOGIN_RATE_LIMIT.maxFailures);
+    for (let i = 0; i < 6; i += 1) {
+      const res = await loginPost(
+        post(
+          "http://test/api/auth/login",
+          { email, password: PW },
+          { "content-type": "application/json", "x-forwarded-for": ip },
+        ),
+      );
+      expect(res.status).toBe(429);
+    }
+    expect(await failureCount()).toBe(before);
+  });
+
+  it("emits audit_write_failed with the event type and no user details", async () => {
+    const email = "leak-me@example.com";
+    const ip = "203.0.113.77";
+    const ua = "LeakAgent/9";
+    const id = "11111111-2222-3333-4444-555555555555";
+    setAuthAuditInsert(async () => {
+      throw new Error(`db down ${email} ${ip} ${ua} ${id} password=${PW}`);
+    });
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const denied = await loginPost(
+        post(
+          "http://test/api/auth/login",
+          { email, password: PW },
+          {
+            "content-type": "application/json",
+            "x-forwarded-for": ip,
+            "user-agent": ua,
+            "x-request-id": id,
+          },
+        ),
+      );
+      expect(denied.status).toBe(401);
+      const created = await registerPost(
+        post(
+          "http://test/api/auth/register",
+          { email: "open-secret@example.com", password: PW },
+          {
+            "content-type": "application/json",
+            "x-forwarded-for": ip,
+            "user-agent": ua,
+          },
+        ),
+      );
+      expect(created.status).toBe(201);
+      const token =
+        new RegExp(`${SESSION_COOKIE}=([^;]+)`).exec(created.headers.get("set-cookie") ?? "")?.[1] ??
+        "";
+      cookieValue = token;
+      const signedOut = await logoutPost(
+        new Request("http://test/api/auth/logout", {
+          method: "POST",
+          headers: { "x-forwarded-for": ip, "user-agent": ua },
+        }),
+      );
+      expect(signedOut.status).toBe(204);
+
+      const lines = spy.mock.calls.map((call) => call.map((part) => String(part)).join(" "));
+      const hits = lines.filter((line) => line.includes(AUDIT_WRITE_FAILED));
+      expect(hits.map((line) => line.includes(AUTH_AUDIT.loginFailure))).toContain(true);
+      expect(hits.map((line) => line.includes(AUTH_AUDIT.register))).toContain(true);
+      expect(hits.map((line) => line.includes(AUTH_AUDIT.logout))).toContain(true);
+      for (const line of hits) {
+        expect(line).not.toContain(email);
+        expect(line).not.toContain("open-secret@example.com");
+        expect(line).not.toContain(ip);
+        expect(line).not.toContain(ua);
+        expect(line).not.toContain(id);
+        expect(line).not.toContain(token);
+        expect(line).not.toContain(PW);
+        expect(line).not.toContain("password");
+      }
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

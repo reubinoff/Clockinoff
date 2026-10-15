@@ -3,7 +3,11 @@ import { GET } from "@/app/api/auth/google/callback/route";
 import { publicOrigin } from "@/lib/base-url";
 import { signStateCookie } from "@/lib/oauth-state";
 import { issueStateNonce, resetStateNonceStore } from "@/server/auth/oauth-state-store";
-import { resetGoogleOAuthRateLimit } from "@/server/auth/rate-limit";
+import {
+  GOOGLE_OAUTH_RATE_LIMIT,
+  recordGoogleOAuthAttempt,
+  resetGoogleOAuthRateLimit,
+} from "@/server/auth/rate-limit";
 import { register } from "@/server/auth/service";
 import {
   getSessionCreatedAt,
@@ -11,8 +15,9 @@ import {
   hashSessionToken,
   SESSION_COOKIE,
 } from "@/server/auth/session";
+import { AUTH_AUDIT } from "@/server/auth/auth-audit";
 import { getDb } from "@/server/db/client";
-import { sessions, users } from "@/server/db/schema";
+import { auditEvents, sessions, users } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
 import { truncateAll } from "../setup";
 
@@ -70,12 +75,13 @@ function callbackRequest(opts: {
   state?: string | null;
   cookie?: string;
   errorParam?: string;
+  headers?: Record<string, string>;
 }): Request {
   const url = new URL("http://test/api/auth/google/callback");
   if (opts.code) url.searchParams.set("code", opts.code);
   if (opts.state) url.searchParams.set("state", opts.state);
   if (opts.errorParam) url.searchParams.set("error", opts.errorParam);
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...opts.headers };
   if (opts.cookie) headers.cookie = opts.cookie;
   return new Request(url, { method: "GET", headers });
 }
@@ -162,6 +168,11 @@ describe("GET /api/auth/google/callback", () => {
     const loc = new URL(res.headers.get("location") ?? "");
     expect(loc.pathname).toBe("/login");
     expect(loc.searchParams.get("error")).toBe("cancelled");
+    const rows = await getDb().select().from(auditEvents);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.action).toBe(AUTH_AUDIT.loginFailure);
+    expect(rows[0]?.actorUserId).toBeNull();
+    expect(rows[0]?.actorEmail).toBe("");
   });
 
   it("rejects when the state cookie is missing", async () => {
@@ -260,6 +271,12 @@ describe("GET /api/auth/google/callback", () => {
     expect(rows[0].id).toBe(existing.id);
     expect(rows[0].googleSub).toBeNull();
     expect(rows[0].passwordHash).not.toBeNull();
+    const audits = await db.select().from(auditEvents);
+    expect(audits).toHaveLength(1);
+    expect(audits[0]?.action).toBe(AUTH_AUDIT.loginFailure);
+    expect(audits[0]?.actorEmail).toBe("merge@example.com");
+    expect(audits[0]?.actorUserId).toBeNull();
+    expect(JSON.stringify(audits[0])).not.toContain("correct-horse-battery");
   });
 
   it("already-linked user: same sub returning → sign in, no welcome, same user", async () => {
@@ -855,5 +872,87 @@ describe("GET /api/auth/google/callback", () => {
     expect(loc.pathname).toBe("/app/account");
     expect(loc.searchParams.get("error")).toBe("network");
     expect(await getSessionUser(session.id)).toMatchObject({ id: user.id });
+  });
+
+  it("records a sign-in success with the parsed client IP, not the forged left hop", async () => {
+    mockGoogleFetch({
+      idToken: makeIdToken({ sub: "google|audit-ok", email: "Audited@Example.com" }),
+    });
+    const res = await GET(
+      callbackRequest({
+        code: "code-1",
+        state: "s-audit",
+        cookie: stateCookie("s-audit"),
+        headers: {
+          "x-client-ip": "1.2.3.4, 140.248.50.22",
+          "x-forwarded-for": "1.2.3.4, 203.0.113.50",
+          "x-azure-clientip": "5.6.7.8",
+          "user-agent": "ClockinoffGoogle/1",
+        },
+      }),
+    );
+    expect(res.status).toBe(302);
+    const token = extractCookie(res, SESSION_COOKIE)?.value ?? "";
+    const rows = await getDb().select().from(auditEvents);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.action).toBe(AUTH_AUDIT.loginSuccess);
+    expect(rows[0]?.actorEmail).toBe("Audited@Example.com");
+    expect(rows[0]?.actorUserId).toBeTruthy();
+    expect(rows[0]?.targets).toEqual([
+      { id: rows[0]?.actorUserId, email: "Audited@Example.com" },
+    ]);
+    expect(rows[0]?.clientIp).toBe("140.248.50.22");
+    expect(rows[0]?.clientIp).not.toBe("1.2.3.4");
+    expect(rows[0]?.forwardedFor).toContain("x-client-ip: 1.2.3.4, 140.248.50.22");
+    expect(rows[0]?.forwardedFor).toContain("x-forwarded-for: 1.2.3.4, 203.0.113.50");
+    expect(rows[0]?.userAgent).toBe("ClockinoffGoogle/1");
+    expect(rows[0]?.createdAt).toBeInstanceOf(Date);
+    expect(rows[0]?.sessionIdHash).toBe(hashSessionToken(token));
+    expect(JSON.stringify(rows[0])).not.toContain(token);
+  });
+
+  it("records a sign-in failure with the lowercased email and the parsed IP", async () => {
+    mockGoogleFetch({
+      idToken: makeIdToken({
+        sub: "google|unverified",
+        email: "  Mixed@Example.com  ",
+        email_verified: false,
+      }),
+    });
+    const res = await GET(
+      callbackRequest({
+        code: "code-1",
+        state: "s-fail",
+        cookie: stateCookie("s-fail"),
+        headers: {
+          "x-forwarded-for": "1.2.3.4, 203.0.113.50",
+          "user-agent": "ClockinoffGoogle/fail",
+        },
+      }),
+    );
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.searchParams.get("error")).toBe("unverified");
+    const rows = await getDb().select().from(auditEvents);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.action).toBe(AUTH_AUDIT.loginFailure);
+    expect(rows[0]?.actorEmail).toBe("mixed@example.com");
+    expect(rows[0]?.actorUserId).toBeNull();
+    expect(rows[0]?.targets).toEqual([]);
+    expect(rows[0]?.sessionIdHash).toBeNull();
+    expect(rows[0]?.clientIp).toBe("203.0.113.50");
+    expect(rows[0]?.clientIp).not.toBe("1.2.3.4");
+    expect(rows[0]?.forwardedFor).toContain("1.2.3.4, 203.0.113.50");
+    expect(rows[0]?.userAgent).toBe("ClockinoffGoogle/fail");
+    expect(rows[0]?.createdAt).toBeInstanceOf(Date);
+    expect(JSON.stringify(rows[0])).not.toContain("password");
+  });
+
+  it("does not insert an audit row when the Google callback rate limit rejects", async () => {
+    for (let i = 0; i < GOOGLE_OAUTH_RATE_LIMIT.maxAttempts; i += 1) {
+      recordGoogleOAuthAttempt("unknown");
+    }
+    const res = await GET(callbackRequest({ code: "code-1", state: "s1", cookie: stateCookie("s1") }));
+    expect(res.status).toBe(429);
+    expect(await getDb().select().from(auditEvents)).toHaveLength(0);
   });
 });

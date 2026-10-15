@@ -17,8 +17,9 @@ import {
   isGoogleOAuthRateLimited,
   recordGoogleOAuthAttempt,
 } from "@/server/auth/rate-limit";
-import { getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
-import { jsonError } from "@/server/http";
+import { AUTH_AUDIT, recordAuthEvent } from "@/server/auth/auth-audit";
+import { getSessionUser, hashSessionToken, SESSION_COOKIE } from "@/server/auth/session";
+import { adminRequestMeta, jsonError } from "@/server/http";
 import { errors } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { publicOrigin } from "@/lib/base-url";
@@ -64,6 +65,44 @@ function redirectToAccount(origin: string, query: string): NextResponse {
 // Fixed path. Not derived from the OAuth `next` value or any other request input.
 const REAUTH_STALE_PATH = "/app/account?reauth=stale";
 
+function isSignInCallback(state: { i?: string } | null): boolean {
+  return state?.i !== "connect" && state?.i !== "reauth";
+}
+
+async function recordGoogleSignInSuccess(
+  req: Request,
+  user: { id: string; email: string },
+  sessionToken: string,
+): Promise<void> {
+  const meta = adminRequestMeta(req);
+  await recordAuthEvent({
+    action: AUTH_AUDIT.loginSuccess,
+    actorUserId: user.id,
+    actorEmail: user.email,
+    targets: [{ id: user.id, email: user.email }],
+    requestId: meta.requestId,
+    clientIp: meta.clientIp,
+    forwardedFor: meta.forwardedFor,
+    userAgent: meta.userAgent,
+    sessionIdHash: hashSessionToken(sessionToken),
+  });
+}
+
+async function recordGoogleSignInFailure(req: Request, email: string | null): Promise<void> {
+  const meta = adminRequestMeta(req);
+  await recordAuthEvent({
+    action: AUTH_AUDIT.loginFailure,
+    actorUserId: null,
+    actorEmail: email ?? "",
+    targets: [],
+    requestId: meta.requestId,
+    clientIp: meta.clientIp,
+    forwardedFor: meta.forwardedFor,
+    userAgent: meta.userAgent,
+    sessionIdHash: null,
+  });
+}
+
 function redirectReauthStale(origin: string): NextResponse {
   const res = NextResponse.redirect(new URL(REAUTH_STALE_PATH, origin), 302);
   clearOAuthCookie(res);
@@ -104,31 +143,37 @@ export async function GET(req: Request): Promise<Response> {
     if (state?.i === "reauth") {
       return redirectToAccount(origin, "");
     }
+    await recordGoogleSignInFailure(req, null);
     return redirectToLoginWithError(origin, "cancelled");
   }
 
   if (!state || !stateParam || state.s !== stateParam) {
     logger.warn("[google] state mismatch on callback");
+    if (isSignInCallback(state)) await recordGoogleSignInFailure(req, null);
     return redirectToLoginWithError(origin, "network");
   }
 
   if (!consumeStateNonce(state.s)) {
     logger.warn("[google] oauth state already used or unknown");
+    if (isSignInCallback(state)) await recordGoogleSignInFailure(req, null);
     return redirectToLoginWithError(origin, "network");
   }
 
   if (!code || !isGoogleAuthCode(code)) {
+    if (isSignInCallback(state)) await recordGoogleSignInFailure(req, null);
     return redirectToLoginWithError(origin, "network");
   }
 
   const isConnect = state.i === "connect";
   const isReauth = state.i === "reauth";
   let next = sanitiseNext(state.n, origin);
+  let attemptEmail: string | null = null;
 
   try {
     const config = getGoogleConfig(req);
     const tokenRes = await exchangeCode(code, config);
     const payload = decodeIdToken(tokenRes.id_token);
+    attemptEmail = payload.email;
     validateIdTokenClaims(payload, config);
 
     if (isReauth) {
@@ -187,6 +232,7 @@ export async function GET(req: Request): Promise<Response> {
       email: payload.email,
       clientIp: clientIpForRecord(req.headers, socketAddressFromRequest(req)),
     });
+    await recordGoogleSignInSuccess(req, result.user, result.session.id);
 
     // Match the password-register landing: a brand-new account gets the
     // welcome=1 one-time hero on /app. Returning users land exactly where
@@ -206,6 +252,11 @@ export async function GET(req: Request): Promise<Response> {
     clearOAuthCookie(res);
     return res;
   } catch (err) {
+    if (!isConnect && !isReauth) {
+      const email =
+        err instanceof GoogleAuthError ? (err.details?.email ?? attemptEmail) : attemptEmail;
+      await recordGoogleSignInFailure(req, email);
+    }
     if (err instanceof GoogleAuthError) {
       logger.warn("[google] callback aborted", { reason: err.reason });
       if (isConnect) {
