@@ -21,7 +21,14 @@ import { pgErrorCode } from "@/server/db/errors";
 import { users } from "@/server/db/schema";
 import { isQaTestEmail } from "@/lib/qa-allowlist";
 import { applyBootstrapRole, initialRoleForEmail } from "./admin-bootstrap";
-import { createSession, sessionUserFromRow, type CreatedSession, type SessionUser } from "./session";
+import { SELF_DELETE_REAUTH_MS } from "./self-delete";
+import {
+  createSession,
+  deleteSession,
+  sessionUserFromRow,
+  type CreatedSession,
+  type SessionUser,
+} from "./session";
 import { tokenId } from "@/lib/id";
 import { errors } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -45,6 +52,9 @@ export interface GoogleIdTokenPayload {
   aud: string;
   exp: number;
   name?: string;
+  /** Seconds since epoch. Present when Google echoed a fresh authentication. */
+  auth_time?: number;
+  nonce?: string;
 }
 
 export interface GoogleTokenResponse {
@@ -130,6 +140,10 @@ export function summarizeGoogleTokenError(body: string): {
 export function buildAuthorizeUrl(opts: {
   config: GoogleConfig;
   state: string;
+  /** Delete-account re-auth forces a fresh Google login. Default stays select_account. */
+  prompt?: "select_account" | "login";
+  maxAge?: number;
+  nonce?: string;
 }): string {
   const params = new URLSearchParams({
     client_id: opts.config.clientId,
@@ -138,10 +152,25 @@ export function buildAuthorizeUrl(opts: {
     scope: GOOGLE_SCOPES.join(" "),
     access_type: "online",
     include_granted_scopes: "true",
-    prompt: "select_account",
+    prompt: opts.prompt ?? "select_account",
     state: opts.state,
   });
+  if (typeof opts.maxAge === "number") params.set("max_age", String(opts.maxAge));
+  if (opts.nonce) params.set("nonce", opts.nonce);
   return `${GOOGLE_AUTHORIZE_URL}?${params.toString()}`;
+}
+
+/**
+ * Delete-account Google re-auth. Missing `auth_time`, or one older than
+ * the five-minute self-delete window, is rejected. A normal Continue with
+ * Google sign-in does not call this.
+ */
+export function googleReauthAuthTimeRejected(
+  authTime: number | null | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  if (typeof authTime !== "number" || !Number.isFinite(authTime)) return true;
+  return nowMs - authTime * 1000 > SELF_DELETE_REAUTH_MS;
 }
 
 export async function exchangeCode(code: string, config: GoogleConfig): Promise<GoogleTokenResponse> {
@@ -211,10 +240,22 @@ export function decodeIdToken(idToken: string): GoogleIdTokenPayload {
   const aud = typeof p.aud === "string" ? p.aud : "";
   const exp = typeof p.exp === "number" ? p.exp : 0;
   const emailVerified = p.email_verified === true || p.email_verified === "true";
+  const authTime =
+    typeof p.auth_time === "number" && Number.isFinite(p.auth_time) ? p.auth_time : undefined;
+  const nonce = typeof p.nonce === "string" && p.nonce.length > 0 ? p.nonce : undefined;
   if (!sub || !email || !iss || !aud) {
     throw new GoogleAuthError("network", "id_token missing required claims");
   }
-  return { sub, email, email_verified: emailVerified, iss, aud, exp };
+  return {
+    sub,
+    email,
+    email_verified: emailVerified,
+    iss,
+    aud,
+    exp,
+    ...(authTime !== undefined ? { auth_time: authTime } : {}),
+    ...(nonce ? { nonce } : {}),
+  };
 }
 
 export function validateIdTokenClaims(
@@ -378,6 +419,52 @@ export async function signInWithGoogle(
     }
     throw err;
   }
+}
+
+/**
+ * Delete-account re-auth only. Issues a new session row (new created_at)
+ * for the already signed-in user, then invalidates the session they
+ * started from. Never creates a user and never signs in a different
+ * Google account.
+ */
+export async function completeGoogleReauth(input: {
+  userId: string;
+  sub: string;
+  email: string;
+  clientIp: string | null;
+  previousSessionToken: string | null;
+}): Promise<CreatedSession> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      timezone: users.timezone,
+      role: users.role,
+      blockedAt: users.blockedAt,
+      googleSub: users.googleSub,
+    })
+    .from(users)
+    .where(eq(users.id, input.userId))
+    .limit(1);
+  const row = rows[0];
+  if (!row || row.blockedAt) {
+    throw new GoogleAuthError("network", "Reauth user unavailable");
+  }
+  const email = input.email.trim();
+  if (
+    !row.googleSub ||
+    row.googleSub !== input.sub ||
+    row.email.toLowerCase() !== email.toLowerCase()
+  ) {
+    logger.warn("[google] reauth identity mismatch", { userId: row.id });
+    throw new GoogleAuthError("network", "Google account does not match the signed-in user");
+  }
+  const started = await startGoogleSession(row, input.clientIp);
+  if (input.previousSessionToken) {
+    await deleteSession(input.previousSessionToken);
+  }
+  return started.session;
 }
 
 export interface SignInMethods {

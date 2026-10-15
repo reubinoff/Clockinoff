@@ -5,7 +5,7 @@ import { signStateCookie } from "@/lib/oauth-state";
 import { issueStateNonce, resetStateNonceStore } from "@/server/auth/oauth-state-store";
 import { resetGoogleOAuthRateLimit } from "@/server/auth/rate-limit";
 import { register } from "@/server/auth/service";
-import { getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
+import { getSessionCreatedAt, getSessionUser, SESSION_COOKIE } from "@/server/auth/session";
 import { getDb } from "@/server/db/client";
 import { users } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
@@ -38,11 +38,18 @@ function makeIdToken(overrides: Record<string, unknown> = {}): string {
 function stateCookie(
   state: string,
   next = "/app",
-  extras?: { intent?: "connect"; uid?: string },
+  extras?: { intent?: "connect" | "reauth"; uid?: string; nonce?: string },
 ): string {
+  const intent = extras?.intent;
   const payload =
-    extras?.intent === "connect"
-      ? { s: state, n: next, i: "connect" as const, uid: extras.uid ?? "missing-uid" }
+    intent === "connect" || intent === "reauth"
+      ? {
+          s: state,
+          n: next,
+          i: intent,
+          uid: extras?.uid ?? "missing-uid",
+          ...(extras?.nonce ? { nonce: extras.nonce } : {}),
+        }
       : { s: state, n: next };
   issueStateNonce(state);
   return `timely_oauth_state=${encodeURIComponent(signStateCookie(payload))}`;
@@ -645,5 +652,130 @@ describe("GET /api/auth/google/callback", () => {
       .from(users)
       .where(eq(users.id, user.id));
     expect(rows[0].googleSub).toBeNull();
+  });
+
+  async function googleOnlySession(): Promise<{ user: { id: string }; session: { id: string } }> {
+    const registered = await register({
+      email: "a@example.com",
+      password: "correct-horse-battery",
+    });
+    await getDb()
+      .update(users)
+      .set({ passwordHash: null, googleSub: "google|user-1" })
+      .where(eq(users.id, registered.user.id));
+    return { user: registered.user, session: registered.session };
+  }
+
+  function reauthCookie(state: string, uid: string, nonce: string, sessionId: string): string {
+    return `${stateCookie(state, "/app/account?delete=1", { intent: "reauth", uid, nonce })}; ${SESSION_COOKIE}=${sessionId}`;
+  }
+
+  it("reauth callback rejects a stale auth_time and leaves the old session in place", async () => {
+    const { user, session } = await googleOnlySession();
+    const before = await getSessionCreatedAt(session.id);
+    const stale = Math.floor(Date.now() / 1000) - 6 * 60;
+    mockGoogleFetch({
+      idToken: makeIdToken({
+        sub: "google|user-1",
+        email: "a@example.com",
+        auth_time: stale,
+        nonce: "nonce-stale",
+      }),
+    });
+    const res = await GET(
+      callbackRequest({
+        code: "code-1",
+        state: "s-stale",
+        cookie: reauthCookie("s-stale", user.id, "nonce-stale", session.id),
+      }),
+    );
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("UNAUTHORIZED");
+    expect(body.error.message).toBe("reauth_required");
+    expect(extractCookie(res, SESSION_COOKIE)).toBeNull();
+    expect(await getSessionUser(session.id)).toMatchObject({ id: user.id });
+    expect((await getSessionCreatedAt(session.id))?.getTime()).toBe(before?.getTime());
+  });
+
+  it("reauth callback rejects a missing auth_time with reauth_required", async () => {
+    const { user, session } = await googleOnlySession();
+    const before = await getSessionCreatedAt(session.id);
+    mockGoogleFetch({
+      idToken: makeIdToken({
+        sub: "google|user-1",
+        email: "a@example.com",
+        nonce: "nonce-missing",
+      }),
+    });
+    const res = await GET(
+      callbackRequest({
+        code: "code-1",
+        state: "s-missing",
+        cookie: reauthCookie("s-missing", user.id, "nonce-missing", session.id),
+      }),
+    );
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error: { message: string } };
+    expect(body.error.message).toBe("reauth_required");
+    expect(await getSessionUser(session.id)).toMatchObject({ id: user.id });
+    expect((await getSessionCreatedAt(session.id))?.getTime()).toBe(before?.getTime());
+  });
+
+  it("reauth callback issues a new session and invalidates the old one when auth_time is fresh", async () => {
+    const { user, session } = await googleOnlySession();
+    const before = await getSessionCreatedAt(session.id);
+    mockGoogleFetch({
+      idToken: makeIdToken({
+        sub: "google|user-1",
+        email: "a@example.com",
+        auth_time: Math.floor(Date.now() / 1000),
+        nonce: "nonce-fresh",
+      }),
+    });
+    const res = await GET(
+      callbackRequest({
+        code: "code-1",
+        state: "s-fresh",
+        cookie: reauthCookie("s-fresh", user.id, "nonce-fresh", session.id),
+      }),
+    );
+    expect(res.status).toBe(302);
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/app/account");
+    expect(loc.searchParams.get("delete")).toBe("1");
+    const nextCookie = extractCookie(res, SESSION_COOKIE);
+    expect(nextCookie?.value).toBeTruthy();
+    expect(nextCookie?.value).not.toBe(session.id);
+    expect(await getSessionUser(session.id)).toBeNull();
+    expect(await getSessionUser(nextCookie?.value)).toMatchObject({ id: user.id });
+    const created = await getSessionCreatedAt(nextCookie?.value);
+    expect(created).not.toBeNull();
+    expect(Date.now() - created!.getTime()).toBeLessThan(60_000);
+    expect(created!.getTime()).toBeGreaterThanOrEqual(before!.getTime());
+  });
+
+  it("reauth callback does not rotate the session when the Google account does not match", async () => {
+    const { user, session } = await googleOnlySession();
+    mockGoogleFetch({
+      idToken: makeIdToken({
+        sub: "google|someone-else",
+        email: "a@example.com",
+        auth_time: Math.floor(Date.now() / 1000),
+        nonce: "nonce-mismatch",
+      }),
+    });
+    const res = await GET(
+      callbackRequest({
+        code: "code-1",
+        state: "s-who",
+        cookie: reauthCookie("s-who", user.id, "nonce-mismatch", session.id),
+      }),
+    );
+    expect(res.status).toBe(302);
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/app/account");
+    expect(loc.searchParams.get("error")).toBe("network");
+    expect(await getSessionUser(session.id)).toMatchObject({ id: user.id });
   });
 });

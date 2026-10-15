@@ -47,16 +47,17 @@ export function assertOAuthStateSecretInProduction(): void {
 function encodeStateBody(payload: StateCookiePayload): string {
   const exp =
     payload.exp ?? Math.floor(Date.now() / 1000) + STATE_COOKIE_MAX_AGE_SECONDS;
-  const body =
-    payload.i === "connect"
-      ? {
-          s: payload.s,
-          n: payload.n,
-          i: "connect" as const,
-          uid: payload.uid,
-          exp,
-        }
-      : { s: payload.s, n: payload.n, exp };
+  const signedIn = payload.i === "connect" || payload.i === "reauth";
+  const body = signedIn
+    ? {
+        s: payload.s,
+        n: payload.n,
+        i: payload.i,
+        uid: payload.uid,
+        exp,
+        ...(payload.nonce ? { nonce: payload.nonce } : {}),
+      }
+    : { s: payload.s, n: payload.n, exp };
   return Buffer.from(JSON.stringify(body), "utf8").toString("base64url");
 }
 
@@ -64,6 +65,12 @@ function encodeStateBody(payload: StateCookiePayload): string {
 export function signStateCookie(payload: StateCookiePayload): string {
   if (payload.i === "connect" && !payload.uid) {
     throw new Error("connect state cookie requires uid");
+  }
+  if (payload.i === "reauth" && !payload.uid) {
+    throw new Error("reauth state cookie requires uid");
+  }
+  if (payload.i === "reauth" && !payload.nonce) {
+    throw new Error("reauth state cookie requires nonce");
   }
   const key = readMacKey();
   if (!key) {
@@ -92,14 +99,25 @@ export function parseStateCookie(raw: string | undefined): StateCookiePayload | 
     const n = rec.n;
     const i = rec.i;
     const uid = rec.uid;
+    const nonce = rec.nonce;
     const exp = rec.exp;
     if (typeof s !== "string" || s.length === 0) return null;
     if (typeof n !== "string") return null;
     if (typeof exp !== "number" || !Number.isFinite(exp)) return null;
     if (exp <= Math.floor(Date.now() / 1000)) return null;
-    if (i === "connect") {
+    if (i === "connect" || i === "reauth") {
       if (typeof uid !== "string" || uid.length === 0) return null;
-      return { s, n, i: "connect", uid, exp };
+      const parsedNonce =
+        typeof nonce === "string" && nonce.length > 0 ? nonce : undefined;
+      if (i === "reauth" && !parsedNonce) return null;
+      return {
+        s,
+        n,
+        i,
+        uid,
+        exp,
+        ...(parsedNonce ? { nonce: parsedNonce } : {}),
+      };
     }
     return { s, n, exp };
   } catch {

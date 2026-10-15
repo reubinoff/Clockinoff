@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildAuthorizeUrl,
   decodeIdToken,
+  googleReauthAuthTimeRejected,
   exchangeCode,
   getGoogleConfig,
   GoogleAuthError,
@@ -55,6 +56,34 @@ describe("google token helpers", () => {
     expect(url.searchParams.get("scope")).toContain("openid");
     expect(url.searchParams.get("scope")).toContain("email");
     expect(url.searchParams.get("state")).toBe("abc");
+    expect(url.searchParams.get("prompt")).toBe("select_account");
+    expect(url.searchParams.get("max_age")).toBeNull();
+  });
+
+  it("buildAuthorizeUrl can force a fresh Google login for delete-account re-auth", () => {
+    const url = new URL(
+      buildAuthorizeUrl({
+        config: CFG,
+        state: "s",
+        prompt: "login",
+        maxAge: 0,
+        nonce: "nonce-1",
+      }),
+    );
+    expect(url.searchParams.get("prompt")).toBe("login");
+    expect(url.searchParams.get("max_age")).toBe("0");
+    expect(url.searchParams.get("nonce")).toBe("nonce-1");
+    expect(url.searchParams.get("state")).toBe("s");
+  });
+
+  it("rejects a missing or stale Google auth_time and accepts one inside five minutes", () => {
+    const auth = 1_700_000_000;
+    const atWindow = auth * 1000 + 5 * 60 * 1000;
+    expect(googleReauthAuthTimeRejected(undefined, atWindow)).toBe(true);
+    expect(googleReauthAuthTimeRejected(null, atWindow)).toBe(true);
+    expect(googleReauthAuthTimeRejected(Number.NaN, atWindow)).toBe(true);
+    expect(googleReauthAuthTimeRejected(auth, atWindow)).toBe(false);
+    expect(googleReauthAuthTimeRejected(auth, atWindow + 1)).toBe(true);
   });
 
   it("newStateToken returns a long url-safe token", () => {
@@ -76,6 +105,14 @@ describe("google token helpers", () => {
     const token = makeIdToken({ ...fullPayload(), email_verified: "true" });
     const decoded = decodeIdToken(token);
     expect(decoded.email_verified).toBe(true);
+  });
+
+  it("decodeIdToken keeps a numeric auth_time and nonce, and drops a string auth_time", () => {
+    const kept = decodeIdToken(makeIdToken({ ...fullPayload(), auth_time: 10, nonce: "n-1" }));
+    expect(kept.auth_time).toBe(10);
+    expect(kept.nonce).toBe("n-1");
+    const dropped = decodeIdToken(makeIdToken({ ...fullPayload(), auth_time: "10" }));
+    expect(dropped.auth_time).toBeUndefined();
   });
 
   it("decodeIdToken rejects malformed tokens", () => {

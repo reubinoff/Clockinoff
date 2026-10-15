@@ -1,8 +1,12 @@
 "use client";
 
+import type { Ref } from "react";
+
 type Props = {
   href: string;
   pending?: boolean;
+  label?: string;
+  anchorRef?: Ref<HTMLAnchorElement>;
 };
 
 // Official multicolor Google "G" mark — do NOT recolor to accent / purple.
@@ -38,12 +42,18 @@ function GoogleG({ size = 18 }: { size?: number }): JSX.Element {
   );
 }
 
-export function GoogleButton({ href, pending = false }: Props): JSX.Element {
+export function GoogleButton({
+  href,
+  pending = false,
+  label = "Continue with Google",
+  anchorRef,
+}: Props): JSX.Element {
   // Real <a> navigation (not location.href / router.push): the OAuth start
   // route returns a 302 to Google that the browser must follow as a full
   // document navigation.
   return (
     <a
+      ref={anchorRef}
       href={href}
       aria-busy={pending || undefined}
       className="btn w-full min-h-[48px] border-border-strong hover:bg-canvas-2"
@@ -54,7 +64,7 @@ export function GoogleButton({ href, pending = false }: Props): JSX.Element {
         <GoogleG />
       </span>
       <span className="font-medium text-ink">
-        {pending ? "Connecting…" : "Continue with Google"}
+        {pending ? "Connecting…" : label}
       </span>
     </a>
   );

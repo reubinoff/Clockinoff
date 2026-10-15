@@ -40,19 +40,26 @@ export async function GET(req: Request): Promise<Response> {
   const origin = publicOrigin(req);
   const intent = parseStateCookieIntent(url.searchParams.get("intent"));
   const next = sanitiseNext(
-    url.searchParams.get("next") ?? (intent === "connect" ? "/app/account" : "/app"),
+    url.searchParams.get("next") ??
+      (intent === "reauth"
+        ? "/app/account?delete=1"
+        : intent === "connect"
+          ? "/app/account"
+          : "/app"),
     origin,
   );
 
   if (!oauthStateSecretConfigured()) {
     logger.warn("[google] start aborted", { reason: "unavailable" });
     const bounce =
-      intent === "connect" ? "/app/account?error=network" : "/login?error=unavailable";
+      intent === "connect" || intent === "reauth"
+        ? "/app/account?error=network"
+        : "/login?error=unavailable";
     return NextResponse.redirect(new URL(bounce, origin), 302);
   }
 
-  let connectUid: string | undefined;
-  if (intent === "connect") {
+  let sessionUid: string | undefined;
+  if (intent === "connect" || intent === "reauth") {
     const sid = readRequestCookie(req, SESSION_COOKIE);
     const user = await getSessionUser(sid);
     if (!user) {
@@ -60,7 +67,7 @@ export async function GET(req: Request): Promise<Response> {
       login.searchParams.set("next", "/app/account");
       return NextResponse.redirect(login, 302);
     }
-    connectUid = user.id;
+    sessionUid = user.id;
   }
 
   let authorizeUrl: string;
@@ -69,11 +76,22 @@ export async function GET(req: Request): Promise<Response> {
   try {
     const config = getGoogleConfig(req);
     state = newStateToken();
+    const nonce = intent === "reauth" ? newStateToken() : undefined;
     issueStateNonce(state);
-    authorizeUrl = buildAuthorizeUrl({ config, state });
+    authorizeUrl = buildAuthorizeUrl({
+      config,
+      state,
+      ...(intent === "reauth" ? { prompt: "login" as const, maxAge: 0, nonce } : {}),
+    });
     cookieValue = signStateCookie(
-      connectUid
-        ? { s: state, n: next, i: "connect", uid: connectUid }
+      sessionUid
+        ? {
+            s: state,
+            n: next,
+            i: intent === "reauth" ? "reauth" : "connect",
+            uid: sessionUid,
+            ...(nonce ? { nonce } : {}),
+          }
         : { s: state, n: next },
     );
   } catch (err) {
@@ -85,7 +103,9 @@ export async function GET(req: Request): Promise<Response> {
       logger.exception("[google] start unexpected failure", err);
     }
     const bounce =
-      intent === "connect" ? "/app/account?error=network" : "/login?error=network";
+      intent === "connect" || intent === "reauth"
+        ? "/app/account?error=network"
+        : "/login?error=network";
     return NextResponse.redirect(new URL(bounce, origin), 302);
   }
 

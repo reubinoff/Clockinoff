@@ -83,6 +83,8 @@ describe("GET /api/auth/google/start", () => {
     expect(url.searchParams.get("client_id")).toBe("test-client");
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("state")).toBeTruthy();
+    expect(url.searchParams.get("prompt")).toBe("select_account");
+    expect(url.searchParams.get("max_age")).toBeNull();
 
     const cookie = extractStateSetCookie(res.headers.get("set-cookie"));
     const parsed = parseStateCookie(cookie.value);
@@ -120,6 +122,48 @@ describe("GET /api/auth/google/start", () => {
     const cookie = extractStateSetCookie(res.headers.get("set-cookie"));
     const parsed = parseStateCookie(cookie.value);
     expect(parsed).toMatchObject({ i: "connect", n: "/app/account", uid: user.id });
+  });
+
+  it("reauth start forces prompt=login, max_age=0, and a fresh nonce", async () => {
+    const { createSession } = await import("@/server/auth/session");
+    const { register } = await import("@/server/auth/service");
+    const { truncateAll } = await import("../setup");
+    await truncateAll();
+    const { user } = await register({
+      email: "reauth@example.com",
+      password: "correct-horse-battery",
+    });
+    const session = await createSession(user.id);
+    const res = await GET(
+      new Request(
+        "http://test/api/auth/google/start?intent=reauth&next=%2Fapp%2Faccount%3Fdelete%3D1",
+        { headers: { cookie: `timely_session=${session.id}` } },
+      ),
+    );
+    expect(res.status).toBe(302);
+    const url = new URL(res.headers.get("location") ?? "");
+    expect(url.searchParams.get("prompt")).toBe("login");
+    expect(url.searchParams.get("max_age")).toBe("0");
+    const nonce = url.searchParams.get("nonce");
+    const state = url.searchParams.get("state");
+    expect(nonce).toBeTruthy();
+    expect(nonce).not.toBe(state);
+    const cookie = extractStateSetCookie(res.headers.get("set-cookie"));
+    const parsed = parseStateCookie(cookie.value);
+    expect(parsed).toMatchObject({
+      i: "reauth",
+      uid: user.id,
+      n: "/app/account?delete=1",
+      nonce,
+    });
+    expect(parsed?.s).toBe(state);
+  });
+
+  it("bounces reauth without a session to login", async () => {
+    const res = await GET(new Request("http://test/api/auth/google/start?intent=reauth"));
+    expect(res.status).toBe(302);
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/login");
   });
 
   it("bounces connect-without-session to /login?next=/app/account", async () => {

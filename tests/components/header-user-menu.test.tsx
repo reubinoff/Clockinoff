@@ -76,6 +76,7 @@ describe("HeaderUserMenu", () => {
       "Log out",
     ]);
     expect(screen.queryByRole("menuitem", { name: "Admin" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Delete account" })).toBeNull();
   });
 
   it("uses one trigger that carries the email for the wide header", () => {

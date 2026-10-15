@@ -6,6 +6,7 @@ const PUBLIC_ORIGIN = "https://clockinoff.reubinoff.com";
 describe("oauth-next-path helpers", () => {
   it("parses intent=connect and defaults everything else to signin", () => {
     expect(parseStateCookieIntent("connect")).toBe("connect");
+    expect(parseStateCookieIntent("reauth")).toBe("reauth");
     expect(parseStateCookieIntent("signin")).toBe("signin");
     expect(parseStateCookieIntent(null)).toBe("signin");
     expect(parseStateCookieIntent("other")).toBe("signin");

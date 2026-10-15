@@ -160,6 +160,15 @@ export async function deleteSession(sessionId: string | null | undefined): Promi
   await db.delete(sessions).where(eq(sessions.id, hashSessionToken(sessionId)));
 }
 
+export async function sessionCreatedWithin(
+  sessionId: string | null | undefined,
+  windowMs: number,
+): Promise<boolean> {
+  const createdAt = await getSessionCreatedAt(sessionId);
+  if (!createdAt) return false;
+  return Date.now() - createdAt.getTime() <= windowMs;
+}
+
 export async function getSessionCreatedAt(
   sessionId: string | null | undefined,
 ): Promise<Date | null> {

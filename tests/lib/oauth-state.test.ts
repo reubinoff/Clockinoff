@@ -28,6 +28,18 @@ describe("oauth-state HMAC", () => {
     const parsedConnect = parseStateCookie(signStateCookie(connect));
     expect(parsedConnect).toMatchObject(connect);
     expect(parsedConnect?.exp).toBeGreaterThan(before);
+
+    const reauth = {
+      s: "re",
+      n: "/app/account?delete=1",
+      i: "reauth" as const,
+      uid: "user-a",
+      nonce: "nonce-a",
+    };
+    expect(parseStateCookie(signStateCookie(reauth))).toMatchObject(reauth);
+    expect(() =>
+      signStateCookie({ s: "re", n: "/app", i: "reauth", uid: "user-a" }),
+    ).toThrow(/nonce/);
   });
 
   it("rejects unsigned JSON, tampered signatures, and missing exp", () => {

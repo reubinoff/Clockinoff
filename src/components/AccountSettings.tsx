@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import DeleteAccountDialog, { DELETE_ACCOUNT_COPY } from "@/components/DeleteAccountDialog";
 import { emitToast } from "@/lib/events";
 import {
   GOOGLE_AUTH_ERROR_COPY,
@@ -18,15 +19,24 @@ type Methods = {
 type Props = {
   email: string;
   methods: Methods;
+  isAdmin: boolean;
+  /** Google-only self-delete window: sessions.created_at within five minutes. */
+  sessionFresh: boolean;
 };
 
 const CONNECT_GOOGLE_HREF =
   "/api/auth/google/start?intent=connect&next=%2Fapp%2Faccount";
 
-export default function AccountSettings({ email, methods }: Props): JSX.Element {
+export default function AccountSettings({
+  email,
+  methods,
+  isAdmin,
+  sessionFresh,
+}: Props): JSX.Element {
   const router = useRouter();
   const params = useSearchParams();
   const connected = params.get("google") === "connected";
+  const deleteRequested = params.get("delete") === "1";
   const errorCode = params.get("error");
   const error =
     errorCode === "google_email_mismatch"
@@ -34,12 +44,21 @@ export default function AccountSettings({ email, methods }: Props): JSX.Element 
       : errorCode === "network"
         ? GOOGLE_AUTH_ERROR_COPY.network
         : null;
+  const [open, setOpen] = useState(false);
+  const [staleReturn, setStaleReturn] = useState(false);
+  const [handledDelete, setHandledDelete] = useState(false);
+  if (deleteRequested && !handledDelete) {
+    setHandledDelete(true);
+    const googleOnly = !methods.hasPassword;
+    if (!isAdmin && googleOnly && sessionFresh) setOpen(true);
+    else if (!isAdmin && googleOnly && !sessionFresh) setStaleReturn(true);
+  }
 
   useEffect(() => {
-    if (!connected) return;
-    emitToast(GOOGLE_CONNECTED_TOAST);
+    if (!connected && !deleteRequested) return;
+    if (connected) emitToast(GOOGLE_CONNECTED_TOAST);
     router.replace("/app/account");
-  }, [connected, router]);
+  }, [connected, deleteRequested, router]);
 
   return (
     <section className="space-y-4 max-w-xl">
@@ -78,6 +97,40 @@ export default function AccountSettings({ email, methods }: Props): JSX.Element 
           </p>
         ) : null}
       </div>
+      <div className="mt-8">
+        <h2 className="text-sm font-medium text-ink">Danger zone</h2>
+        <p className="mt-1 text-body-sm text-muted">
+          {isAdmin ? DELETE_ACCOUNT_COPY.admin : DELETE_ACCOUNT_COPY.zoneHelper}
+        </p>
+        {staleReturn && !isAdmin ? (
+          <p role="alert" className="mt-2 text-body-sm text-danger">
+            {DELETE_ACCOUNT_COPY.reauthRequired}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          className="btn btn-danger mt-3"
+          disabled={isAdmin}
+          title={isAdmin ? DELETE_ACCOUNT_COPY.admin : undefined}
+          onClick={() => {
+            if (!isAdmin) setOpen(true);
+          }}
+        >
+          Delete account
+        </button>
+      </div>
+      {open && !isAdmin ? (
+        <DeleteAccountDialog
+          email={email}
+          hasPassword={methods.hasPassword}
+          sessionFresh={sessionFresh}
+          reauthAlert={staleReturn}
+          onClose={() => {
+            setOpen(false);
+            setStaleReturn(false);
+          }}
+        />
+      ) : null}
     </section>
   );
 }

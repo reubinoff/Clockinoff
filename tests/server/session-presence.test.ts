@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { logger } from "@/lib/logger";
+import { SELF_DELETE_REAUTH_MS } from "@/server/auth/self-delete";
 import {
   hashSessionToken,
   LAST_SEEN_THROTTLE_MS,
   createSession,
   getSessionUser,
+  sessionCreatedWithin,
   setSessionSideEffects,
 } from "@/server/auth/session";
 import { login, register } from "@/server/auth/service";
@@ -125,5 +127,18 @@ describe("session presence", () => {
       .where(eq(sessions.id, hashSessionToken(session.id)));
     expect(row[0]?.lastSeenAt?.toISOString()).toBe(createdAt.toISOString());
     expect(spy).toHaveBeenCalled();
+  });
+
+  it("treats a sign-in as fresh only inside the self-delete window", async () => {
+    const { user } = await makeUser("fresh@ex.com");
+    const session = await createSession(user.id);
+    expect(await sessionCreatedWithin(session.id, SELF_DELETE_REAUTH_MS)).toBe(true);
+    expect(await sessionCreatedWithin(undefined, SELF_DELETE_REAUTH_MS)).toBe(false);
+    const stale = new Date(Date.now() - SELF_DELETE_REAUTH_MS - 1000);
+    await getDb()
+      .update(sessions)
+      .set({ createdAt: stale })
+      .where(eq(sessions.id, hashSessionToken(session.id)));
+    expect(await sessionCreatedWithin(session.id, SELF_DELETE_REAUTH_MS)).toBe(false);
   });
 });

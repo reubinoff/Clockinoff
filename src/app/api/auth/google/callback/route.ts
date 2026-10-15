@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import {
+  completeGoogleReauth,
   connectGoogleToUser,
   decodeIdToken,
   exchangeCode,
   getGoogleConfig,
+  googleReauthAuthTimeRejected,
   GoogleAuthError,
   isGoogleAuthCode,
   signInWithGoogle,
@@ -53,7 +55,8 @@ function redirectToLoginPasswordAccount(origin: string): NextResponse {
 }
 
 function redirectToAccount(origin: string, query: string): NextResponse {
-  const res = NextResponse.redirect(new URL(`/app/account?${query}`, origin), 302);
+  const path = query.length > 0 ? `/app/account?${query}` : "/app/account";
+  const res = NextResponse.redirect(new URL(path, origin), 302);
   clearOAuthCookie(res);
   return res;
 }
@@ -84,28 +87,36 @@ export async function GET(req: Request): Promise<Response> {
   if (queryError) {
     // Google ships `error=access_denied` (and friends) in the query when the
     // user cancels or we're denied scopes. Treat anything error-shaped as a
-    // consent cancel from the UX side. Settings connect stays on Account.
+    // consent cancel from the UX side. Settings connect and delete-account
+    // re-auth stay on Account. Re-auth does not reopen the confirm sheet.
     if (state?.i === "connect") {
       return redirectToAccount(origin, "error=network");
+    }
+    if (state?.i === "reauth") {
+      return redirectToAccount(origin, "");
     }
     return redirectToLoginWithError(origin, "cancelled");
   }
 
   if (!state || !stateParam || state.s !== stateParam) {
     logger.warn("[google] state mismatch on callback");
+    if (state?.i === "reauth") return redirectToAccount(origin, "error=network");
     return redirectToLoginWithError(origin, "network");
   }
 
   if (!consumeStateNonce(state.s)) {
     logger.warn("[google] oauth state already used or unknown");
+    if (state.i === "reauth") return redirectToAccount(origin, "error=network");
     return redirectToLoginWithError(origin, "network");
   }
 
   if (!code || !isGoogleAuthCode(code)) {
+    if (state.i === "reauth") return redirectToAccount(origin, "error=network");
     return redirectToLoginWithError(origin, "network");
   }
 
   const isConnect = state.i === "connect";
+  const isReauth = state.i === "reauth";
   let next = sanitiseNext(state.n, origin);
 
   try {
@@ -113,6 +124,43 @@ export async function GET(req: Request): Promise<Response> {
     const tokenRes = await exchangeCode(code, config);
     const payload = decodeIdToken(tokenRes.id_token);
     validateIdTokenClaims(payload, config);
+
+    if (isReauth) {
+      const previousToken = readRequestCookie(req, SESSION_COOKIE);
+      const sessionUser = await getSessionUser(previousToken);
+      if (!sessionUser || !state.uid || sessionUser.id !== state.uid) {
+        logger.warn("[google] reauth uid mismatch");
+        return redirectToAccount(origin, "error=network");
+      }
+      if (!payload.nonce || payload.nonce !== state.nonce) {
+        logger.warn("[google] reauth nonce mismatch");
+        return redirectToAccount(origin, "error=network");
+      }
+      // ID-token auth_time is the real Google sign-in instant. A missing
+      // or stale value must not mint a fresh sessions.created_at.
+      if (googleReauthAuthTimeRejected(payload.auth_time)) {
+        const res = jsonError(errors.unauthorized("reauth_required"));
+        clearOAuthCookie(res);
+        return res;
+      }
+      const session = await completeGoogleReauth({
+        userId: sessionUser.id,
+        sub: payload.sub,
+        email: payload.email,
+        clientIp: clientIpForRecord(req.headers, socketAddressFromRequest(req)),
+        previousSessionToken: previousToken ?? null,
+      });
+      const res = NextResponse.redirect(new URL(next, origin), 302);
+      res.cookies.set(SESSION_COOKIE, session.id, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        expires: session.expiresAt,
+      });
+      clearOAuthCookie(res);
+      return res;
+    }
 
     if (isConnect) {
       const sessionUser = await getSessionUser(readRequestCookie(req, SESSION_COOKIE));
@@ -161,6 +209,7 @@ export async function GET(req: Request): Promise<Response> {
         }
         return redirectToAccount(origin, "error=network");
       }
+      if (isReauth) return redirectToAccount(origin, "error=network");
       if (err.reason === "password_account") {
         return redirectToLoginPasswordAccount(origin);
       }
@@ -170,7 +219,7 @@ export async function GET(req: Request): Promise<Response> {
       return redirectToLoginWithError(origin, "network");
     }
     logger.exception("[google] callback unexpected failure", err);
-    if (isConnect) return redirectToAccount(origin, "error=network");
+    if (isConnect || isReauth) return redirectToAccount(origin, "error=network");
     return redirectToLoginWithError(origin, "network");
   }
 }

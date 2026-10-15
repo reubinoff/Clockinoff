@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { ADMIN_GUARD } from "@/lib/admin-copy";
+import { CONFIRM_EMAIL_MAX, confirmEmailMatches } from "@/lib/confirm-email";
 import { errors } from "@/lib/errors";
 import { getDb } from "@/server/db/client";
 import { auditEvents, users } from "@/server/db/schema";
@@ -8,7 +9,7 @@ import { verifyPassword } from "./passwords";
 import { deleteAllSessionsForUser, getSessionCreatedAt } from "./session";
 
 export const SELF_DELETE_REAUTH_MS = 5 * 60 * 1000;
-export const CONFIRM_EMAIL_MAX = 254;
+export { CONFIRM_EMAIL_MAX, confirmEmailMatches };
 
 export interface SelfDeleteInput {
   userId: string;
@@ -27,12 +28,6 @@ let beforeSelfDeleteLock: (() => Promise<void>) | null = null;
 
 export function setBeforeSelfDeleteLock(fn: (() => Promise<void>) | null): void {
   beforeSelfDeleteLock = fn;
-}
-
-export function confirmEmailMatches(accountEmail: string, confirmEmail: string): boolean {
-  const trimmed = confirmEmail.trim();
-  if (trimmed.length === 0 || trimmed.length > CONFIRM_EMAIL_MAX) return false;
-  return trimmed.toLowerCase() === accountEmail.trim().toLowerCase();
 }
 
 export async function deleteOwnAccount(input: SelfDeleteInput): Promise<void> {

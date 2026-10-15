@@ -16,13 +16,15 @@ const DEFAULT_NEXT = "/app";
 const UNSAFE_CHAR = /[\u0000-\u001F\u007F\\]/;
 const UNSAFE_PERCENT = /%(?:0[0-9A-Fa-f]|1[0-9A-Fa-f]|7[Ff]|5[Cc])/;
 
-export type StateCookieIntent = "signin" | "connect";
+export type StateCookieIntent = "signin" | "connect" | "reauth";
 
 export interface StateCookiePayload {
   s: string;
   n: string;
   i?: StateCookieIntent;
   uid?: string;
+  /** OIDC nonce for a delete-account Google re-auth. Fresh per start. */
+  nonce?: string;
   exp?: number;
 }
 
@@ -40,7 +42,9 @@ export function readRequestCookie(req: Request, name: string): string | undefine
 export function parseStateCookieIntent(
   raw: string | null | undefined,
 ): StateCookieIntent {
-  return raw === "connect" ? "connect" : "signin";
+  if (raw === "connect") return "connect";
+  if (raw === "reauth") return "reauth";
+  return "signin";
 }
 
 // Parse-and-compare, not prefix checks. WHATWG URL parsing strips TAB /

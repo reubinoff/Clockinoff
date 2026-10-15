@@ -136,13 +136,25 @@ Neither surfaces as an error.
 
 **How do I wipe everything?**
 
-There is no "reset my account" button. If you self-host, deleting rows
-from the `time_entries`, `projects`, `clients`, `tags`, and
-`time_entry_tags` tables (scoped by your `user_id`) is the supported
-path. Session rows in the `sessions` table are safe to clear as well —
-it just signs you out. The cookie holds a random token; the table
-stores only a hash of it. A deploy that hashes session tokens at rest
-invalidates existing sessions, so everyone signs in once more.
+**Account** has a **Danger zone** at the bottom of the page. It is
+not in the header menu. **Delete account** removes the account, your
+time entries and reports, your projects, clients, and tags, and signs
+you out on every device. Nothing is kept. Password accounts confirm
+with a password and the account email. A Google-only account signs
+in with Google again, then types the email. Admins see the zone
+turned off (“Admins can’t delete their own account.”).
+
+There is no control that wipes the data and keeps the login. After
+a delete, the login page says the account was deleted and does not
+name whose it was.
+
+If you self-host, deleting rows from the `time_entries`, `projects`,
+`clients`, `tags`, and `time_entry_tags` tables (scoped by your
+`user_id`) still removes that data in the database. Session rows in
+the `sessions` table are safe to clear as well — it just signs you
+out. The cookie holds a random token; the table stores only a hash
+of it. A deploy that hashes session tokens at rest invalidates
+existing sessions, so everyone signs in once more.
 
 ## Light and dark
 

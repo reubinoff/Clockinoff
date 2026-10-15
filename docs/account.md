@@ -73,8 +73,34 @@ people still appear on **Users**.
 The v1 UI does not include a "change email" flow. Support for that is a
 future improvement.
 
-The v1 UI does not include a delete-account control. Deleting the
-signed-in account exists only as an API.
+## Delete account
+
+**Danger zone** sits at the bottom of **Account**, under sign-in
+methods. It is not in the header account menu.
+
+**Delete account** is an outline button. It opens a confirm dialog.
+The dialog lists three things that go away: your time entries and
+reports; projects, clients, and tags; and every signed-in device.
+Nothing is kept.
+
+A password account — including one that also has Google connected —
+types its password and its email. The delete button stays off until
+the email matches (spaces around it and capital letters do not
+matter). A Google-only account signs in with Google again first.
+That return opens the dialog only when the sign-in is still fresh,
+then the address is typed the same way. The link never fills the
+form in or deletes by itself.
+
+While the request runs, the button reads **Deleting…** and
+**Cancel** stays off. **Cancel** and Escape close the dialog when
+it is not running. Focus starts on **Cancel**.
+
+Admins see the zone with the button off and the line “Admins can’t
+delete their own account.”
+
+After a successful delete, the login page shows: “Your account has
+been deleted. Thanks for trying Clockinoff.” That sentence does not
+name the account.
 
 ---
 
