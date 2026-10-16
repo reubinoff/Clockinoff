@@ -41,6 +41,13 @@ function mediaSnapshot(query: string): () => boolean {
   return () => window.matchMedia(query).matches;
 }
 
+// Built once. Passing a fresh closure into useSyncExternalStore resubscribes
+// on every render.
+const subscribeNarrowTimer = subscribeMedia(NARROW_TIMER_QUERY);
+const narrowTimerSnapshot = mediaSnapshot(NARROW_TIMER_QUERY);
+const subscribeIconTimer = subscribeMedia(ICON_TIMER_QUERY);
+const iconTimerSnapshot = mediaSnapshot(ICON_TIMER_QUERY);
+
 interface Entry {
   id: string;
   description: string;
@@ -135,13 +142,13 @@ export default function TimerBar({
   // 390 collapsed band and the expanded input share the short invitation.
   // The description control's accessible name stays the full sentence.
   const narrowTimer = useSyncExternalStore(
-    subscribeMedia(NARROW_TIMER_QUERY),
-    mediaSnapshot(NARROW_TIMER_QUERY),
+    subscribeNarrowTimer,
+    narrowTimerSnapshot,
     () => false,
   );
   const iconTimer = useSyncExternalStore(
-    subscribeMedia(ICON_TIMER_QUERY),
-    mediaSnapshot(ICON_TIMER_QUERY),
+    subscribeIconTimer,
+    iconTimerSnapshot,
     () => false,
   );
   const timerPlaceholder = narrowTimer ? TIMER_PLACEHOLDER_NARROW : TIMER_PLACEHOLDER;
@@ -482,14 +489,7 @@ export default function TimerBar({
         </button>
         <span
           className={
-            // Below 400 the 44px circle is still a few pixels short of the
-            // invitation at 360 if the clock keeps its natural mono width.
-            // Pin it to the desktop dock's 92px slot, and tighten tracking
-            // just enough that the eight glyphs stay inside that slot.
-            "timer-digits text-timer-md shrink-0 text-right text-ink " +
-            (iconTimer
-              ? "w-[92px] min-w-[92px] max-w-[92px] tracking-[-0.03em]"
-              : "min-w-[76px]") +
+            "timer-digits text-timer-md tabular-nums shrink-0 text-right text-ink min-w-[76px]" +
             (running ? " timer-running-pulse" : "")
           }
           aria-live="polite"

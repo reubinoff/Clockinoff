@@ -179,6 +179,33 @@ describe("collapsed timer bar", () => {
     expect(stop.getAttribute("aria-label")).toBe("Stop timer");
   });
 
+  it("subscribes each media query once across rerenders", async () => {
+    const added: string[] = [];
+    vi.stubGlobal("matchMedia", (query: string) => {
+      const max = /max-width:\s*(\d+)px/.exec(query);
+      return {
+        matches: max ? 390 <= Number(max[1]) : false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {
+          added.push(query);
+        },
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        dispatchEvent: () => false,
+      };
+    });
+    idleFetch();
+    const view = render(<TimerBar timezone="Asia/Jerusalem" />);
+    await screen.findByRole("button", { name: "What are you working on?" });
+    const before = added.length;
+    expect(added.filter((q) => q === "(max-width: 767px)")).toHaveLength(1);
+    expect(added.filter((q) => q === "(max-width: 399px)")).toHaveLength(1);
+    view.rerender(<TimerBar timezone="Asia/Jerusalem" />);
+    expect(added).toHaveLength(before);
+  });
+
   it("keeps the labelled Stop from 400px up", async () => {
     installMatchMedia(400);
     runningFetch();
