@@ -67,6 +67,11 @@ describe("timer placeholder at 390", () => {
     });
     expect(invitation).toHaveTextContent("What are you on?");
     expect(invitation).not.toHaveTextContent("What are you working on?");
+    expect(invitation.className).toContain("min-w-[125px]");
+    expect(invitation.className).not.toContain("truncate");
+    const label = invitation.querySelector("span");
+    expect(label?.className).toContain("flex-1");
+    expect(label?.className).toContain("min-w-0");
     const field = screen.getByRole("textbox", { name: "Timer description" });
     expect(field).toHaveAttribute("placeholder", "What are you on?");
     expect(field).toHaveAttribute("aria-label", "Timer description");
