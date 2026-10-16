@@ -17,25 +17,28 @@ export default function DocsLayout({
   const pages = listDocPages();
   return (
     <div className="min-h-screen flex flex-col bg-canvas">
-      <header className="border-b border-border bg-surface sticky top-0 z-20">
-        <div className="mx-auto max-w-6xl px-4 py-2.5 flex items-center gap-4">
+      <header className="sticky top-0 z-20 w-full min-w-0 border-b border-border bg-surface">
+        {/* Below sm, gap-4 plus the account slot ran past the 16px inset
+            and 0.4px past a 390px viewport. The tighter gap keeps the
+            right edge on the same inset as the logo. */}
+        <div className="mx-auto flex w-full max-w-6xl min-w-0 items-center gap-2 px-4 py-2.5 sm:gap-4">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 font-semibold tracking-tight text-ink shrink-0"
+            className="inline-flex shrink-0 items-center gap-2 font-semibold tracking-tight text-ink"
             aria-label="Clockinoff home"
           >
             <Mark size={24} />
             <span className="text-sm">Clockinoff</span>
           </Link>
           <span
-            className="whitespace-nowrap border-l border-border pl-2 text-xs uppercase tracking-wide text-muted sm:pl-4"
+            className="min-w-0 truncate whitespace-nowrap border-l border-border pl-1 text-xs uppercase tracking-wide text-muted sm:pl-4"
             aria-hidden="true"
           >
             User docs
           </span>
           {/* Static for every visitor. The slot fetches /api/auth/me in the
               browser so a session never lands in the Front Door or ISR HTML. */}
-          <div className="ml-auto flex items-center">
+          <div className="ml-auto flex shrink-0 items-center">
             <DocsAuthSlot />
           </div>
         </div>

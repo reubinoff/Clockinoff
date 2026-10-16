@@ -17,7 +17,7 @@ import {
   isGoogleOAuthRateLimited,
   recordGoogleOAuthAttempt,
 } from "@/server/auth/rate-limit";
-import { AUTH_AUDIT, recordAuthEvent } from "@/server/auth/auth-audit";
+import { AUTH_AUDIT, LOGIN_METHOD, recordAuthEvent } from "@/server/auth/auth-audit";
 import { getSessionUser, hashSessionToken, SESSION_COOKIE } from "@/server/auth/session";
 import { adminRequestMeta, jsonError } from "@/server/http";
 import { errors } from "@/lib/errors";
@@ -85,6 +85,7 @@ async function recordGoogleSignInSuccess(
     forwardedFor: meta.forwardedFor,
     userAgent: meta.userAgent,
     sessionIdHash: hashSessionToken(sessionToken),
+    method: LOGIN_METHOD.google,
   });
 }
 
@@ -100,6 +101,7 @@ async function recordGoogleSignInFailure(req: Request, email: string | null): Pr
     forwardedFor: meta.forwardedFor,
     userAgent: meta.userAgent,
     sessionIdHash: null,
+    method: LOGIN_METHOD.google,
   });
 }
 

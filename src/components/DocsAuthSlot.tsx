@@ -116,12 +116,8 @@ export default function DocsAuthSlot(): JSX.Element {
   }
 
   return (
-    <div
-      data-docs-auth="pending"
-      className={SLOT_CLASS}
-      aria-busy="true"
-      aria-label="Loading account"
-    >
+    <div data-docs-auth="pending" className={SLOT_CLASS} aria-busy="true">
+      <span className="sr-only">Loading account</span>
       <span
         data-docs-auth-placeholder="true"
         aria-hidden="true"

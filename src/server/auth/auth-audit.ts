@@ -14,6 +14,14 @@ export const AUTH_AUDIT = {
 
 export type AuthAuditAction = (typeof AUTH_AUDIT)[keyof typeof AUTH_AUDIT];
 
+// How the sign-in was attempted. Login rows only; other actions stay null.
+export const LOGIN_METHOD = {
+  password: "password",
+  google: "google",
+} as const;
+
+export type LoginMethod = (typeof LOGIN_METHOD)[keyof typeof LOGIN_METHOD];
+
 // Failed login stores the submitted address only. 254 matches the
 // register/login email length check. Lowercase matches the login lookup
 // so the row is not a second copy of the raw header.
@@ -45,6 +53,7 @@ export interface AuthAuditEvent {
   forwardedFor: string | null;
   userAgent: string | null;
   sessionIdHash: string | null;
+  method?: LoginMethod | null;
 }
 
 type AuthAuditInsert = (row: AuthAuditEvent) => Promise<void>;
@@ -60,6 +69,7 @@ async function insertAuthAudit(row: AuthAuditEvent): Promise<void> {
     forwardedFor: row.forwardedFor,
     userAgent: row.userAgent,
     sessionIdHash: row.sessionIdHash,
+    method: row.method ?? null,
     status: "completed",
     completedAt: new Date(),
   });
@@ -76,6 +86,8 @@ export function setAuthAuditInsert(fn: AuthAuditInsert | null): void {
 // path). Self-delete stays fail-closed in its own transaction.
 export async function recordAuthEvent(input: AuthAuditEvent): Promise<void> {
   const failure = input.action === AUTH_AUDIT.loginFailure;
+  const login =
+    input.action === AUTH_AUDIT.loginSuccess || input.action === AUTH_AUDIT.loginFailure;
   const row: AuthAuditEvent = {
     action: input.action,
     actorUserId: failure ? null : input.actorUserId,
@@ -86,6 +98,7 @@ export async function recordAuthEvent(input: AuthAuditEvent): Promise<void> {
     forwardedFor: capAuditForwardedFor(input.forwardedFor),
     userAgent: capAuditUserAgent(input.userAgent),
     sessionIdHash: failure ? null : input.sessionIdHash,
+    method: login ? (input.method ?? null) : null,
   };
   try {
     await insertAuthAuditFn(row);

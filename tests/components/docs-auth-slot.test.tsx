@@ -110,6 +110,9 @@ describe("DocsAuthSlot", () => {
     expect(slot?.className).toContain("xl:min-w-0");
     expect(slot?.className).toContain("xl:w-[11.25rem]");
     expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
+    const loading = screen.getByText("Loading account");
+    expect(loading.className).toContain("sr-only");
+    expect(slot?.getAttribute("aria-label")).toBeNull();
     expect(screen.queryByRole("button", { name: /Account menu/ })).toBeNull();
     expect(document.body.textContent).not.toContain("@");
   });

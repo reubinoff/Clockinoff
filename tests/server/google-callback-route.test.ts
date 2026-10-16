@@ -947,6 +947,54 @@ describe("GET /api/auth/google/callback", () => {
     expect(JSON.stringify(rows[0])).not.toContain("password");
   });
 
+  it("records method google on sign-in success, failure, and a bare callback", async () => {
+    mockGoogleFetch({
+      idToken: makeIdToken({ sub: "google|method-ok", email: "method-google@example.com" }),
+    });
+    const ok = await GET(
+      callbackRequest({ code: "code-1", state: "s-method", cookie: stateCookie("s-method") }),
+    );
+    expect(ok.status).toBe(302);
+    const success = await getDb().select().from(auditEvents);
+    expect(success).toHaveLength(1);
+    expect(success[0]?.action).toBe(AUTH_AUDIT.loginSuccess);
+    expect(success[0]?.method).toBe("google");
+    expect(success[0]?.actorEmail).toBe("method-google@example.com");
+
+    await truncateAll();
+    resetGoogleOAuthRateLimit();
+    vi.restoreAllMocks();
+    configure();
+    mockGoogleFetch({
+      idToken: makeIdToken({
+        sub: "google|method-fail",
+        email: "Method-Fail@Example.com",
+        email_verified: false,
+      }),
+    });
+    const denied = await GET(
+      callbackRequest({ code: "code-2", state: "s-method-fail", cookie: stateCookie("s-method-fail") }),
+    );
+    expect(new URL(denied.headers.get("location") ?? "").searchParams.get("error")).toBe("unverified");
+    const failure = await getDb().select().from(auditEvents);
+    expect(failure).toHaveLength(1);
+    expect(failure[0]?.action).toBe(AUTH_AUDIT.loginFailure);
+    expect(failure[0]?.method).toBe("google");
+    expect(failure[0]?.actorEmail).toBe("method-fail@example.com");
+
+    await truncateAll();
+    resetGoogleOAuthRateLimit();
+    vi.restoreAllMocks();
+    configure();
+    const early = await GET(callbackRequest({}));
+    expect(early.status).toBe(302);
+    const earlyRows = await getDb().select().from(auditEvents);
+    expect(earlyRows).toHaveLength(1);
+    expect(earlyRows[0]?.action).toBe(AUTH_AUDIT.loginFailure);
+    expect(earlyRows[0]?.method).toBe("google");
+    expect(earlyRows[0]?.actorEmail).toBe("");
+  });
+
   it("does not insert an audit row when the Google callback rate limit rejects", async () => {
     for (let i = 0; i < GOOGLE_OAUTH_RATE_LIMIT.maxAttempts; i += 1) {
       recordGoogleOAuthAttempt("unknown");

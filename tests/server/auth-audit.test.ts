@@ -194,10 +194,10 @@ describe("auth audit trail", () => {
       expect(row?.userAgent).toHaveLength(AUDIT_USER_AGENT_MAX);
       expect(row?.forwardedFor).toHaveLength(AUDIT_FORWARDED_FOR_MAX);
       expect(row?.createdAt).toBeInstanceOf(Date);
+      expect(row?.method).toBe("password");
       const blob = JSON.stringify(row);
       expect(blob).not.toContain(PW);
       expect(blob).not.toContain(WRONG);
-      expect(blob).not.toContain("password");
     }
     expect(ghost?.actorEmail).not.toBe(real?.actorEmail);
     const shape = (row: (typeof failures)[number] | undefined) => {
@@ -213,6 +213,48 @@ describe("auth audit trail", () => {
     };
     expect(shape(ghost)).toEqual(shape(real));
     expect(Object.keys(ghost ?? {}).sort()).toEqual(Object.keys(real ?? {}).sort());
+  });
+
+  it("records method password on login success and failure", async () => {
+    const email = "method-pw@example.com";
+    await registerPost(
+      post(
+        "http://test/api/auth/register",
+        { email, password: PW },
+        { "content-type": "application/json", "x-forwarded-for": "198.51.100.40" },
+      ),
+    );
+    const ok = await loginPost(
+      post(
+        "http://test/api/auth/login",
+        { email, password: PW },
+        { "content-type": "application/json", "x-forwarded-for": "198.51.100.40" },
+      ),
+    );
+    expect(ok.status).toBe(200);
+    const success = (await getDb().select().from(auditEvents)).filter(
+      (row) => row.action === AUTH_AUDIT.loginSuccess,
+    );
+    expect(success).toHaveLength(1);
+    expect(success[0]?.method).toBe("password");
+    expect(success[0]?.actorEmail).toBe(email);
+
+    const denied = await loginPost(
+      post(
+        "http://test/api/auth/login",
+        { email: "Missing@Example.com", password: WRONG },
+        { "content-type": "application/json", "x-forwarded-for": "198.51.100.41" },
+      ),
+    );
+    expect(denied.status).toBe(401);
+    const failure = (await getDb().select().from(auditEvents)).filter(
+      (row) => row.action === AUTH_AUDIT.loginFailure,
+    );
+    expect(failure).toHaveLength(1);
+    expect(failure[0]?.method).toBe("password");
+    expect(failure[0]?.action).toBe(AUTH_AUDIT.loginFailure);
+    expect(failure[0]?.actorEmail).toBe("missing@example.com");
+    expect(JSON.stringify(failure[0])).not.toContain(WRONG);
   });
 
   it("caps a failed-login email at 254 characters", () => {

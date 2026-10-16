@@ -197,6 +197,9 @@ export const auditEvents = pgTable("audit_events", {
   userAgent: text("user_agent"),
   // sha256 of the timely_session cookie (sessions.id). Never the raw token.
   sessionIdHash: text("session_id_hash"),
+  // password | google on login success and failure. Null for every other
+  // action. Written on INSERT only; not in the 0008 column UPDATE grant.
+  method: text("method").$type<"password" | "google" | null>(),
   // The runtime role may UPDATE only these three columns (0008 grants).
   status: text("status").notNull().default("pending"),
   result: jsonb("result").$type<AuditResultBody>(),

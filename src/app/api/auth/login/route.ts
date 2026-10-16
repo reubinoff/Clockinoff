@@ -12,7 +12,12 @@ import {
 } from "@/server/auth/rate-limit";
 import { clientIpForRecord, clientIpFromHeaders, socketAddressFromRequest } from "@/lib/client-ip";
 import { ApiError, errors } from "@/lib/errors";
-import { AUTH_AUDIT, loginFailureActorEmail, recordAuthEvent } from "@/server/auth/auth-audit";
+import {
+  AUTH_AUDIT,
+  LOGIN_METHOD,
+  loginFailureActorEmail,
+  recordAuthEvent,
+} from "@/server/auth/auth-audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +63,7 @@ export async function POST(req: Request): Promise<Response> {
       forwardedFor: meta.forwardedFor,
       userAgent: meta.userAgent,
       sessionIdHash: hashSessionToken(session.id),
+      method: LOGIN_METHOD.password,
     });
     recordLoginSuccess(email, ip);
     const res = NextResponse.json(user, { status: 200 });
@@ -90,6 +96,7 @@ export async function POST(req: Request): Promise<Response> {
         forwardedFor: meta.forwardedFor,
         userAgent: meta.userAgent,
         sessionIdHash: null,
+        method: LOGIN_METHOD.password,
       });
     }
     return jsonError(err);

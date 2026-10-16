@@ -419,11 +419,11 @@ services in `src/server/services/*`. Every error is shaped as
 | Method | Path | Notes |
 |---|---|---|
 | `POST` | `/api/auth/register` | `{ email, password, timezone? }` → 201 + session cookie. Success inserts `auth.register` (parsed client IP, raw `forwarded_for` capped at 512, user agent capped at 512, sha256 of the new session). A 429 does not insert a row. A failed audit insert logs one JSON line `{ event: "audit_write_failed", type, error_class }` and the 201 still returns |
-| `POST` | `/api/auth/login` | `{ email, password }` → 200. Success inserts `auth.login_success`. A 401 inserts `auth.login_failure` with the submitted email only (trimmed, lowercased, max 254), a null actor id, and no password. Missing and existing accounts share that 401 insert (dummy argon2 verify still runs). The per-IP limiter bounds how many of those rows one address can add. A 429 does not insert a row. A failed audit insert logs one JSON line `{ event: "audit_write_failed", type, error_class }` and the original 200/401 still returns |
+| `POST` | `/api/auth/login` | `{ email, password }` → 200. Success inserts `auth.login_success` with `method` `password`. A 401 inserts `auth.login_failure` with `method` `password` and the submitted email only (trimmed, lowercased, max 254), a null actor id, and no password. Missing and existing accounts share that 401 insert (dummy argon2 verify still runs). The per-IP limiter bounds how many of those rows one address can add. A 429 does not insert a row. A failed audit insert logs one JSON line `{ event: "audit_write_failed", type, error_class }` and the original 200/401 still returns |
 | `POST` | `/api/auth/logout` | 204, clears cookie. Inserts `auth.logout` for a known session, then deletes that session row only. Earlier `audit_events` rows stay. A failed audit insert logs one JSON line `{ event: "audit_write_failed", type, error_class }` and the 204 still returns |
 | `GET` / `PATCH` / `DELETE` | `/api/auth/me` | current user; `PATCH { timezone }`. `DELETE` removes the signed-in non-admin after an Origin check and a password or a Google session created within 5 minutes. Admins get 403. There is no 409. The delete inserts `user.self_delete` in the same transaction and fails closed if that insert throws |
 | `GET` | `/api/auth/google/start` | begins the **Continue with Google** flow; 302 to Google (fail-closed to `/login?error=network` when Google env vars are blank) |
-| `GET` | `/api/auth/google/callback` | OIDC callback; 302 to `/app` on success, `/login?error=...` on cancel / unverified / network. Sign-in success and failure insert the same `auth.login_success` / `auth.login_failure` rows as password login (actor when known, `clientIpForRecord`, raw forwarded-for, user agent, timestamp). Connect and re-auth do not. A 429 does not insert a row |
+| `GET` | `/api/auth/google/callback` | OIDC callback; 302 to `/app` on success, `/login?error=...` on cancel / unverified / network. Sign-in success and failure insert the same `auth.login_success` / `auth.login_failure` rows as password login, with `method` `google` (actor when known, `clientIpForRecord`, raw forwarded-for, user agent, timestamp). A failure before the token exchange (cancel, state mismatch, bare callback) stores `actor_email` as `""`. Connect and re-auth do not. A 429 does not insert a row |
 | CRUD | `/api/clients`, `/api/projects`, `/api/tags` | `?archived=true` includes archived |
 | `GET` | `/api/timer` | running entry or `null` |
 | `POST` | `/api/timer/start` | 201 running entry; 409 `TIMER_ALREADY_RUNNING` with `entry_id` |
@@ -678,7 +678,9 @@ GRANT UPDATE (status, result, completed_at) ON audit_events TO "clockinoff-prod"
 No `DELETE`, no `TRUNCATE`, and no table-level `UPDATE`. `id` is
 `gen_random_uuid()`, so there is no sequence and no `USAGE` grant.
 `drizzle/0009_audit_request_meta.sql` adds `user_agent` and
-`session_id_hash`. Table INSERT covers them; they are not in the
+`session_id_hash`. `drizzle/0010_audit_login_method.sql` adds nullable
+`method` (`password` or `google` on login rows; null otherwise).
+Table INSERT covers them; they are not in the
 column UPDATE grant, so the app writes them only on the pending or
 closed insert.
 If role `clockinoff-prod` is missing, the migration raises and does
