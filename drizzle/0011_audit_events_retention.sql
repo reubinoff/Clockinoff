@@ -1,59 +1,12 @@
--- #237 retention purge role and created_at index. #242 method CHECK.
+-- #237 created_at index. #242 method CHECK.
 -- scripts/migrate.mjs applies this file inside BEGIN/COMMIT, and so does
 -- src/server/db/migrate.ts. CREATE INDEX CONCURRENTLY cannot run in a
 -- transaction, so the index is a plain CREATE INDEX.
 --
--- audit_purge is NOLOGIN and has only SELECT, DELETE on audit_events.
--- This file never runs CREATE ROLE. On Azure PG flexible server the
--- migrator has no CREATEROLE, and a failed CREATE ROLE would 503 boot.
--- The role must already exist, be NOLOGIN, and have exactly one member:
--- the migrator (CURRENT_USER while this file runs). The runtime role
--- clockinoff-prod is not a member and is not granted DELETE.
-DO $$
-DECLARE
-  migrator_name text := current_user;
-  member_count integer;
-  migrator_is_member boolean;
-  can_login boolean;
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'audit_purge') THEN
-    RAISE EXCEPTION
-      'audit_purge does not exist. Pre-create it out of band before migrating: CREATE ROLE audit_purge NOLOGIN; GRANT audit_purge TO "%";',
-      migrator_name;
-  END IF;
-
-  EXECUTE 'REVOKE ALL ON TABLE audit_events FROM audit_purge';
-  EXECUTE 'GRANT SELECT, DELETE ON TABLE audit_events TO audit_purge';
-
-  SELECT rolcanlogin INTO can_login
-    FROM pg_roles
-   WHERE rolname = 'audit_purge';
-  IF can_login THEN
-    RAISE EXCEPTION
-      'audit_purge must be NOLOGIN. Out of band: ALTER ROLE audit_purge NOLOGIN;';
-  END IF;
-
-  SELECT count(*) INTO member_count
-    FROM pg_auth_members m
-    JOIN pg_roles granted ON granted.oid = m.roleid
-   WHERE granted.rolname = 'audit_purge';
-
-  SELECT EXISTS (
-    SELECT 1
-      FROM pg_auth_members m
-      JOIN pg_roles granted ON granted.oid = m.roleid
-      JOIN pg_roles member ON member.oid = m.member
-     WHERE granted.rolname = 'audit_purge'
-       AND member.rolname = migrator_name
-  ) INTO migrator_is_member;
-
-  IF member_count <> 1 OR NOT migrator_is_member THEN
-    RAISE EXCEPTION
-      'audit_purge must have exactly one member, the migrator "%". Out of band: revoke other members, then GRANT audit_purge TO "%";',
-      migrator_name, migrator_name;
-  END IF;
-END $$;
---> statement-breakpoint
+-- The retention delete is not in this file. scripts/migrate.mjs runs it
+-- after migrations, as the migrator, which owns audit_events. There is
+-- no separate purge role and no GRANT here. clockinoff-prod still has
+-- no DELETE on audit_events (drizzle/0008_audit_events_grants.sql).
 CREATE INDEX IF NOT EXISTS "audit_events_created_at_idx"
   ON "audit_events" ("created_at");
 --> statement-breakpoint

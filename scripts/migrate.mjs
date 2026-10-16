@@ -50,13 +50,11 @@
 // Mirror of `src/server/db/pg-ssl.ts`.
 //
 // Audit retention (#237): after migrations succeed, `main` purges
-// `audit_events` older than the literal `interval '1 year'` as role
-// `audit_purge` (SELECT, DELETE only). The interval, table, role, and
-// batch size are constants in this file. The `audit.purge` insert runs
-// after RESET ROLE, as the migrator — audit_purge is not granted
-// INSERT. If the role is missing, the purge is logged and skipped.
-// Any other failure logs `error_class` only. Neither path fails the
-// process — CD runs `node scripts/migrate.mjs && node server.js`.
+// `audit_events` older than the literal `interval '1 year'` as the
+// migrator, which owns the table. The interval, table, and batch size
+// are constants in this file. The `audit.purge` row records cutoff,
+// count, and current_user. A failure logs `error_class` only and does
+// not fail the process — CD runs `node scripts/migrate.mjs && node server.js`.
 //
 // This file mirrors `src/server/db/azure-ad.ts` on purpose: both the
 // runtime and the migration runner must build the AAD pool config with
@@ -436,9 +434,6 @@ async function gatePendingMigrations(client, { useAzureAd, pendingCount }) {
 // GUCs, or function arguments.
 const AUDIT_PURGE_BATCH = 10000;
 const AUDIT_PURGE_BUDGET_MS = 10_000;
-const AUDIT_PURGE_ROLE = "audit_purge";
-const AUDIT_PURGE_ROLE_SQL =
-  "SELECT 1 FROM pg_roles WHERE rolname = 'audit_purge'";
 const AUDIT_PURGE_DELETE_SQL =
   "DELETE FROM audit_events WHERE id IN (" +
   "SELECT id FROM audit_events " +
@@ -454,10 +449,11 @@ const AUDIT_PURGE_INSERT_SQL =
   "jsonb_build_object(" +
   "'cutoff', now() - interval '1 year', " +
   "'count', $1::int, " +
-  "'role', 'audit_purge'" +
+  "'role', current_user" +
   "), now())";
 const AUDIT_PURGE_STALE_SQL =
-  "SELECT created_at < now() - interval '30 days' AS stale " +
+  "SELECT created_at < now() - interval '30 days' AS stale, " +
+  "current_user AS role " +
   "FROM audit_events WHERE action = 'audit.purge' " +
   "ORDER BY created_at DESC LIMIT 1";
 
@@ -481,31 +477,19 @@ async function warnIfAuditPurgeStale(client) {
   const { rows } = await client.query(AUDIT_PURGE_STALE_SQL);
   if (rows.length === 0 || rows[0].stale !== true) return;
   console.warn(
-    JSON.stringify({ event: "audit_purge_stale", role: AUDIT_PURGE_ROLE }),
+    JSON.stringify({ event: "audit_purge_stale", role: rows[0].role }),
   );
 }
 
-// Own transaction. SET LOCAL ROLE drops the migrator to SELECT/DELETE
-// for the deletes. RESET ROLE before the audit insert so the
-// audit.purge row is written as the migrator. audit_purge has no
-// INSERT. $1 is the row count from those deletes, not a retention input.
-function skipMissingAuditPurgeRole() {
-  console.warn(
-    JSON.stringify({ event: "audit_purge_skipped", reason: "missing_role" }),
-  );
-  return { deleted: 0, failed: false, skipped: true };
-}
-
+// Own transaction, as the connected migrator (table owner). No SET ROLE.
+// $1 is the row count from those deletes, not a retention input. The
+// recorded role is current_user, written by the INSERT itself.
 async function executeAuditPurge(client) {
-  const existing = await client.query(AUDIT_PURGE_ROLE_SQL);
-  if (existing.rows.length === 0) {
-    return skipMissingAuditPurgeRole();
-  }
-
   await client.query("BEGIN");
   try {
     await client.query("SET LOCAL statement_timeout = '10s'");
-    await client.query("SET LOCAL ROLE audit_purge");
+    const who = await client.query("SELECT current_user AS role");
+    const role = who.rows[0]?.role ?? "";
     const started = Date.now();
     let deleted = 0;
     let lastBatch = 0;
@@ -520,21 +504,20 @@ async function executeAuditPurge(client) {
         JSON.stringify({
           event: "audit_purge_budget",
           count: deleted,
-          role: AUDIT_PURGE_ROLE,
+          role,
         }),
       );
     }
-    await client.query("RESET ROLE");
     await client.query(AUDIT_PURGE_INSERT_SQL, [deleted]);
     await client.query("COMMIT");
     console.log(
       JSON.stringify({
         event: "audit.purge",
         count: deleted,
-        role: AUDIT_PURGE_ROLE,
+        role,
       }),
     );
-    return { deleted, failed: false, skipped: false };
+    return { deleted, failed: false };
   } catch (err) {
     try {
       await client.query("ROLLBACK");
@@ -557,7 +540,7 @@ async function startupPurge(client) {
     return await executeAuditPurge(client);
   } catch (err) {
     logPurgeFailure(err);
-    return { deleted: 0, failed: true, skipped: false };
+    return { deleted: 0, failed: true };
   }
 }
 
@@ -659,8 +642,6 @@ export {
   AUDIT_PURGE_BUDGET_MS,
   AUDIT_PURGE_DELETE_SQL,
   AUDIT_PURGE_INSERT_SQL,
-  AUDIT_PURGE_ROLE,
-  AUDIT_PURGE_ROLE_SQL,
   AUDIT_PURGE_STALE_SQL,
   AZURE_POSTGRES_SCOPE,
   CLOCKINOFF_APP_TABLES,

@@ -683,50 +683,31 @@ No `DELETE`, no `TRUNCATE`, and no table-level `UPDATE`. `id` is
 Table INSERT covers them; they are not in the
 column UPDATE grant, so the app writes them only on the pending or
 closed insert.
-`drizzle/0011_audit_events_retention.sql` (#237, #242) never runs
-`CREATE ROLE`. The migrator on Azure Postgres flexible server has no
-`CREATEROLE`, and a failed `CREATE ROLE` would 503 boot. If
-`audit_purge` is missing, the migration raises and names the
-out-of-band statements. If it exists, the file grants only
-`SELECT, DELETE` on `audit_events`, then requires the role to be
-`NOLOGIN` and to have exactly one member: `CURRENT_USER` (the
-migrator applying the file). `clockinoff-prod` is not a member and is
-not granted `DELETE`. The index is a plain `CREATE INDEX` because
-`scripts/migrate.mjs` runs each file inside a transaction
-(`CREATE INDEX CONCURRENTLY` cannot). The same file pre-checks
-`method`, then adds
+`drizzle/0011_audit_events_retention.sql` (#237, #242) adds
+`audit_events_created_at_idx` and the `method` check. It does not
+create a role and does not `GRANT`. The index is a plain
+`CREATE INDEX` because `scripts/migrate.mjs` runs each file inside a
+transaction (`CREATE INDEX CONCURRENTLY` cannot). The same file
+pre-checks `method`, then adds
 `CHECK (method IS NULL OR method IN ('password', 'google')) NOT VALID`
-and `VALIDATE`s it.
-
-Nati pre-creates the role before this migration can apply:
-
-```sql
-CREATE ROLE audit_purge NOLOGIN;
-GRANT audit_purge TO "<PG_MIGRATOR_PG_USER>";
-```
-
-Local and CI do that in `scripts/ensure-app-role.mjs` and
-`tests/setup.ts`, not in the migration. `\du audit_purge` is
-`NOLOGIN`. `\dp audit_events` shows `audit_purge` as `SELECT, DELETE`
-only, and `clockinoff-prod` still has no `DELETE` or `TRUNCATE`.
+and `VALIDATE`s it. `clockinoff-prod` is still not granted `DELETE`.
 
 After the migrations and before `server.js`, `scripts/migrate.mjs`
-purges in its own transaction. `SET LOCAL ROLE audit_purge` covers
-the deletes (`created_at < now() - interval '1 year'`, a SQL literal).
-`RESET ROLE` runs before the `audit.purge` insert, so that row is
-written as the migrator. `audit_purge` is not granted `INSERT`.
-If the role is missing at purge time, startup logs
-`{ event: "audit_purge_skipped", reason: "missing_role" }` and does
-not delete. Batches are 10k by primary key, with a total budget of
-about 10s (`statement_timeout` 10s per statement). A statement timeout
-rolls the transaction back. Hitting the budget between batches commits
-the rows already deleted. A purge error is one JSON line
-`{ event: "audit_purge_failed", error_class }` with no message body.
-Skip and failure both leave the process exiting 0 so `node server.js`
+purges in its own transaction as the migrator, which owns
+`audit_events`. There is no `SET ROLE`. The delete is
+`created_at < now() - interval '1 year'`, a SQL literal. Batches are
+10k by primary key, with a total budget of about 10s
+(`statement_timeout` 10s per statement). A statement timeout rolls
+the transaction back. Hitting the budget between batches commits the
+rows already deleted and logs
+`{ event: "audit_purge_budget", count, role }`. A purge error is one
+JSON line `{ event: "audit_purge_failed", error_class }` with no
+message body, and the process still exits 0 so `node server.js`
 starts. Each successful run inserts one `audit.purge` row: `result`
-is `{ cutoff, count, role }`, `actor_email` is `''`, `targets` is
-`[]`. If the previous `audit.purge` row is older than 30 days,
-startup logs `{ event: "audit_purge_stale", role: "audit_purge" }`.
+is `{ cutoff, count, role }` where `role` is `current_user`,
+`actor_email` is `''`, `targets` is `[]`. If the previous
+`audit.purge` row is older than 30 days, startup logs
+`{ event: "audit_purge_stale", role }` with that same session role.
 A fresh `audit.purge` row has `count` 0 and `cutoff` equal to
 `now() - interval '1 year'` when nothing is older than a year.
 If role `clockinoff-prod` is missing, the migration raises and does
