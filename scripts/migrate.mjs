@@ -54,7 +54,8 @@
 // `audit_purge` (SELECT, DELETE only). The interval, table, role, and
 // batch size are constants in this file. The `audit.purge` insert runs
 // after RESET ROLE, as the migrator — audit_purge is not granted
-// INSERT. Failure logs `error_class` only and does not fail the
+// INSERT. If the role is missing, the purge is logged and skipped.
+// Any other failure logs `error_class` only. Neither path fails the
 // process — CD runs `node scripts/migrate.mjs && node server.js`.
 //
 // This file mirrors `src/server/db/azure-ad.ts` on purpose: both the
@@ -436,6 +437,8 @@ async function gatePendingMigrations(client, { useAzureAd, pendingCount }) {
 const AUDIT_PURGE_BATCH = 10000;
 const AUDIT_PURGE_BUDGET_MS = 10_000;
 const AUDIT_PURGE_ROLE = "audit_purge";
+const AUDIT_PURGE_ROLE_SQL =
+  "SELECT 1 FROM pg_roles WHERE rolname = 'audit_purge'";
 const AUDIT_PURGE_DELETE_SQL =
   "DELETE FROM audit_events WHERE id IN (" +
   "SELECT id FROM audit_events " +
@@ -486,7 +489,19 @@ async function warnIfAuditPurgeStale(client) {
 // for the deletes. RESET ROLE before the audit insert so the
 // audit.purge row is written as the migrator. audit_purge has no
 // INSERT. $1 is the row count from those deletes, not a retention input.
+function skipMissingAuditPurgeRole() {
+  console.warn(
+    JSON.stringify({ event: "audit_purge_skipped", reason: "missing_role" }),
+  );
+  return { deleted: 0, failed: false, skipped: true };
+}
+
 async function executeAuditPurge(client) {
+  const existing = await client.query(AUDIT_PURGE_ROLE_SQL);
+  if (existing.rows.length === 0) {
+    return skipMissingAuditPurgeRole();
+  }
+
   await client.query("BEGIN");
   try {
     await client.query("SET LOCAL statement_timeout = '10s'");
@@ -519,7 +534,7 @@ async function executeAuditPurge(client) {
         role: AUDIT_PURGE_ROLE,
       }),
     );
-    return { deleted, failed: false };
+    return { deleted, failed: false, skipped: false };
   } catch (err) {
     try {
       await client.query("ROLLBACK");
@@ -542,7 +557,7 @@ async function startupPurge(client) {
     return await executeAuditPurge(client);
   } catch (err) {
     logPurgeFailure(err);
-    return { deleted: 0, failed: true };
+    return { deleted: 0, failed: true, skipped: false };
   }
 }
 
@@ -645,6 +660,7 @@ export {
   AUDIT_PURGE_DELETE_SQL,
   AUDIT_PURGE_INSERT_SQL,
   AUDIT_PURGE_ROLE,
+  AUDIT_PURGE_ROLE_SQL,
   AUDIT_PURGE_STALE_SQL,
   AZURE_POSTGRES_SCOPE,
   CLOCKINOFF_APP_TABLES,

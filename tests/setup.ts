@@ -22,6 +22,17 @@ async function ensureAppRole(): Promise<void> {
     if (rows.length === 0) {
       await client.query('CREATE ROLE "clockinoff-prod" NOLOGIN');
     }
+    // 0011 does not create audit_purge. Local and CI create it here,
+    // NOLOGIN, with the migrator as its only member.
+    const purge = await client.query(
+      "SELECT 1 FROM pg_roles WHERE rolname = 'audit_purge'",
+    );
+    if (purge.rows.length === 0) {
+      await client.query("CREATE ROLE audit_purge NOLOGIN");
+    } else {
+      await client.query("ALTER ROLE audit_purge NOLOGIN");
+    }
+    await client.query("GRANT audit_purge TO CURRENT_USER");
   } finally {
     client.release();
   }

@@ -4,48 +4,53 @@
 -- transaction, so the index is a plain CREATE INDEX.
 --
 -- audit_purge is NOLOGIN and has only SELECT, DELETE on audit_events.
--- Membership goes to the migrator (CURRENT_USER while this file runs)
--- so startup can SET LOCAL ROLE audit_purge. The runtime role
+-- This file never runs CREATE ROLE. On Azure PG flexible server the
+-- migrator has no CREATEROLE, and a failed CREATE ROLE would 503 boot.
+-- The role must already exist, be NOLOGIN, and have exactly one member:
+-- the migrator (CURRENT_USER while this file runs). The runtime role
 -- clockinoff-prod is not a member and is not granted DELETE.
---
--- Azure PG flexible server: the migrator may lack CREATEROLE. If
--- audit_purge already exists, creation is a no-op. If it does not and
--- CREATE ROLE is denied, this raises a clear pre-create error instead
--- of a bare permission failure.
 DO $$
 DECLARE
   migrator_name text := current_user;
+  member_count integer;
+  migrator_is_member boolean;
+  can_login boolean;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'audit_purge') THEN
-    BEGIN
-      CREATE ROLE audit_purge NOLOGIN;
-    EXCEPTION
-      WHEN insufficient_privilege THEN
-        RAISE EXCEPTION
-          'audit_purge does not exist and role "%" has no CREATEROLE. Pre-create it out of band before migrating: CREATE ROLE audit_purge NOLOGIN; GRANT audit_purge TO "%";',
-          migrator_name, migrator_name;
-    END;
+    RAISE EXCEPTION
+      'audit_purge does not exist. Pre-create it out of band before migrating: CREATE ROLE audit_purge NOLOGIN; GRANT audit_purge TO "%";',
+      migrator_name;
   END IF;
 
   EXECUTE 'REVOKE ALL ON TABLE audit_events FROM audit_purge';
   EXECUTE 'GRANT SELECT, DELETE ON TABLE audit_events TO audit_purge';
 
-  IF NOT EXISTS (
+  SELECT rolcanlogin INTO can_login
+    FROM pg_roles
+   WHERE rolname = 'audit_purge';
+  IF can_login THEN
+    RAISE EXCEPTION
+      'audit_purge must be NOLOGIN. Out of band: ALTER ROLE audit_purge NOLOGIN;';
+  END IF;
+
+  SELECT count(*) INTO member_count
+    FROM pg_auth_members m
+    JOIN pg_roles granted ON granted.oid = m.roleid
+   WHERE granted.rolname = 'audit_purge';
+
+  SELECT EXISTS (
     SELECT 1
       FROM pg_auth_members m
       JOIN pg_roles granted ON granted.oid = m.roleid
       JOIN pg_roles member ON member.oid = m.member
      WHERE granted.rolname = 'audit_purge'
        AND member.rolname = migrator_name
-  ) THEN
-    BEGIN
-      EXECUTE format('GRANT audit_purge TO %I', migrator_name);
-    EXCEPTION
-      WHEN insufficient_privilege THEN
-        RAISE EXCEPTION
-          'audit_purge exists but role "%" cannot grant it to itself. Pre-create membership out of band: GRANT audit_purge TO "%";',
-          migrator_name, migrator_name;
-    END;
+  ) INTO migrator_is_member;
+
+  IF member_count <> 1 OR NOT migrator_is_member THEN
+    RAISE EXCEPTION
+      'audit_purge must have exactly one member, the migrator "%". Out of band: revoke other members, then GRANT audit_purge TO "%";',
+      migrator_name, migrator_name;
   END IF;
 END $$;
 --> statement-breakpoint

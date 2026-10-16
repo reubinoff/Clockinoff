@@ -12,6 +12,7 @@ const { Client } = pg;
 interface PurgeResult {
   deleted: number;
   failed: boolean;
+  skipped: boolean;
 }
 
 interface QueryClient {
@@ -174,8 +175,11 @@ describe("audit_events retention (#237, #242)", () => {
       .filter((line) => !line.trim().startsWith("--"))
       .join("\n");
     expect(executable).not.toMatch(/CONCURRENTLY/i);
-    expect(executable).toContain("IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'audit_purge')");
-    expect(executable).toContain("no CREATEROLE");
+    expect(executable).toContain("audit_purge does not exist");
+    expect(executable).toContain("Pre-create it out of band");
+    expect(executable).toContain("must be NOLOGIN");
+    expect(executable).toContain("exactly one member");
+    expect(executable.replace(/'[^']*'/g, "''")).not.toMatch(/CREATE\s+ROLE/i);
     expect(executable).not.toMatch(/GRANT\s+INSERT/i);
     expect(executable).toContain("GRANT SELECT, DELETE ON TABLE audit_events TO audit_purge");
 
@@ -265,7 +269,7 @@ describe("audit_events retention (#237, #242)", () => {
       };
       vi.spyOn(console, "log").mockImplementation(() => {});
       const result = await migrate.executeAuditPurge(wrapped);
-      expect(result).toEqual({ deleted: 1, failed: false });
+      expect(result).toEqual({ deleted: 1, failed: false, skipped: false });
 
       const setAt = seen.indexOf("SET LOCAL ROLE audit_purge");
       const deleteAt = seen.findIndex((sql) => sql === DELETE_SQL);
@@ -313,7 +317,7 @@ describe("audit_events retention (#237, #242)", () => {
       await admin.query("REVOKE DELETE ON TABLE audit_events FROM audit_purge");
       await withTestMigrator(async (migrator) => {
         const result = await migrate.startupPurge(migrator);
-        expect(result).toEqual({ deleted: 0, failed: true });
+        expect(result).toEqual({ deleted: 0, failed: true, skipped: false });
       });
       const still = await admin.query(
         "SELECT actor_email FROM audit_events WHERE actor_email = $1",
@@ -349,7 +353,7 @@ describe("audit_events retention (#237, #242)", () => {
     expect(logged).not.toMatch(/@/);
   });
 
-  it("pre-created audit_purge does not require CREATEROLE", async () => {
+  it("reapplies grants when audit_purge is already the migrator's only role", async () => {
     const client = await getPool().connect();
     try {
       await client.query("BEGIN");
@@ -357,6 +361,20 @@ describe("audit_events retention (#237, #242)", () => {
         `CREATE ROLE owner_nocreate NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`,
       );
       await client.query("ALTER TABLE audit_events OWNER TO owner_nocreate");
+      await client.query(`
+        DO $$ DECLARE r text;
+        BEGIN
+          FOR r IN
+            SELECT member.rolname
+              FROM pg_auth_members m
+              JOIN pg_roles granted ON granted.oid = m.roleid
+              JOIN pg_roles member ON member.oid = m.member
+             WHERE granted.rolname = 'audit_purge'
+          LOOP
+            EXECUTE format('REVOKE audit_purge FROM %I', r);
+          END LOOP;
+        END $$
+      `);
       await client.query("GRANT audit_purge TO owner_nocreate");
       await client.query("SET LOCAL ROLE owner_nocreate");
       await client.query(migrationRoleSql());
@@ -372,7 +390,7 @@ describe("audit_events retention (#237, #242)", () => {
     }
   });
 
-  it("missing audit_purge without CREATEROLE raises a pre-create error", async () => {
+  it("missing audit_purge raises out-of-band instructions and does not create the role", async () => {
     const client = await getPool().connect();
     try {
       await client.query("BEGIN");
@@ -392,8 +410,15 @@ describe("audit_events retention (#237, #242)", () => {
       `);
       await client.query("REVOKE ALL ON TABLE audit_events FROM audit_purge");
       await client.query("DROP ROLE audit_purge");
-      await client.query(`SET LOCAL ROLE ${MIG_ROLE}`);
-      await expect(client.query(migrationRoleSql())).rejects.toThrow(/no CREATEROLE/);
+      await client.query("SAVEPOINT before_missing_role");
+      await expect(client.query(migrationRoleSql())).rejects.toThrow(
+        /Pre-create it out of band/,
+      );
+      await client.query("ROLLBACK TO SAVEPOINT before_missing_role");
+      const still = await client.query(
+        "SELECT 1 FROM pg_roles WHERE rolname = 'audit_purge'",
+      );
+      expect(still.rows).toHaveLength(0);
       await client.query("ROLLBACK");
     } finally {
       await client.query("ROLLBACK").catch(() => {});
@@ -403,6 +428,47 @@ describe("audit_events retention (#237, #242)", () => {
       expect(rows).toHaveLength(1);
       client.release();
     }
+  });
+
+  it("a missing audit_purge role skips the purge and does not block startup", async () => {
+    await insertAged(OLD_EMAIL, 366);
+    const client = await getPool().connect();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await client.query("BEGIN");
+      await client.query(`
+        DO $$ DECLARE r text;
+        BEGIN
+          FOR r IN
+            SELECT member.rolname
+              FROM pg_auth_members m
+              JOIN pg_roles granted ON granted.oid = m.roleid
+              JOIN pg_roles member ON member.oid = m.member
+             WHERE granted.rolname = 'audit_purge'
+          LOOP
+            EXECUTE format('REVOKE audit_purge FROM %I', r);
+          END LOOP;
+        END $$
+      `);
+      await client.query("REVOKE ALL ON TABLE audit_events FROM audit_purge");
+      await client.query("DROP ROLE audit_purge");
+      const result = await migrate.startupPurge(client);
+      expect(result).toEqual({ deleted: 0, failed: false, skipped: true });
+      const still = await client.query(
+        "SELECT actor_email FROM audit_events WHERE actor_email = $1",
+        [OLD_EMAIL],
+      );
+      expect(still.rows).toHaveLength(1);
+      await client.query("ROLLBACK");
+    } finally {
+      await client.query("ROLLBACK").catch(() => {});
+      client.release();
+    }
+    const logged = warn.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain("audit_purge_skipped");
+    expect(logged).toContain("missing_role");
+    expect(logged).not.toContain(OLD_EMAIL);
+    expect(logged).not.toMatch(/@/);
   });
 
   it("warns when the last audit.purge row is older than 30 days", async () => {
