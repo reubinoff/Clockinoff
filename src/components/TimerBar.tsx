@@ -443,7 +443,7 @@ export default function TimerBar({
           md+ (desktop keeps the one-baseline band from #64). */}
       <div
         className={
-          "md:hidden mx-auto max-w-6xl px-4 pb-2 items-center gap-1 " +
+          "md:hidden mx-auto max-w-6xl px-2 pb-2 items-center gap-px " +
           (detailsOpen ? "hidden" : "flex")
         }
         data-timer-mobile-collapsed="true"
@@ -451,7 +451,7 @@ export default function TimerBar({
         <button
           type="button"
           onClick={() => setDetailsOpen(true)}
-          className="flex-1 min-w-[125px] inline-flex items-center min-h-[44px] text-left text-body transition-colors hover:text-ink"
+          className="flex-1 min-w-0 inline-flex items-center min-h-[44px] text-left text-body transition-colors hover:text-ink"
           aria-label={
             hasDescription
               ? "Edit timer description"
