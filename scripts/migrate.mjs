@@ -52,11 +52,10 @@
 // Audit retention (#237): after migrations succeed, `main` purges
 // `audit_events` older than the literal `interval '1 year'` as role
 // `audit_purge` (SELECT, DELETE only). The interval, table, role, and
-// batch size are constants in this file. A retention env var, the GUC
-// `clockinoff.audit_retention`, or a setting argument refuses the
-// delete instead of changing it. Failure logs `error_class` only and
-// does not fail the process — CD runs `node scripts/migrate.mjs &&
-// node server.js`.
+// batch size are constants in this file. The `audit.purge` insert runs
+// after RESET ROLE, as the migrator — audit_purge is not granted
+// INSERT. Failure logs `error_class` only and does not fail the
+// process — CD runs `node scripts/migrate.mjs && node server.js`.
 //
 // This file mirrors `src/server/db/azure-ad.ts` on purpose: both the
 // runtime and the migration runner must build the AAD pool config with
@@ -433,19 +432,10 @@ async function gatePendingMigrations(client, { useAzureAd, pendingCount }) {
 }
 
 // #237. These strings are the purge. Do not build them from env, argv,
-// GUCs, or function arguments. A setting may only refuse the delete.
+// GUCs, or function arguments.
 const AUDIT_PURGE_BATCH = 10000;
 const AUDIT_PURGE_BUDGET_MS = 10_000;
 const AUDIT_PURGE_ROLE = "audit_purge";
-const AUDIT_PURGE_SETTING_KEYS = [
-  "AUDIT_RETENTION",
-  "AUDIT_RETENTION_DAYS",
-  "AUDIT_PURGE_INTERVAL",
-  "AUDIT_PURGE_TABLE",
-  "AUDIT_PURGE_CUTOFF",
-];
-const AUDIT_PURGE_SETTING_SQL =
-  "SELECT current_setting('clockinoff.audit_retention', true) AS value";
 const AUDIT_PURGE_DELETE_SQL =
   "DELETE FROM audit_events WHERE id IN (" +
   "SELECT id FROM audit_events " +
@@ -484,24 +474,6 @@ function logPurgeFailure(err) {
   );
 }
 
-// True when something tried to configure retention. Missing, blank, and
-// malformed values are the same outcome: do not delete. Production calls
-// purge with no options object and with none of these env keys set.
-function purgeSettingBlocksDelete(env, options) {
-  if (options !== undefined) return true;
-  for (const key of AUDIT_PURGE_SETTING_KEYS) {
-    if (Object.prototype.hasOwnProperty.call(env, key)) return true;
-  }
-  return false;
-}
-
-function refusePurgeSetting() {
-  console.warn(
-    JSON.stringify({ event: "audit_purge_refused", reason: "setting" }),
-  );
-  return { deleted: 0, blocked: true, failed: false };
-}
-
 async function warnIfAuditPurgeStale(client) {
   const { rows } = await client.query(AUDIT_PURGE_STALE_SQL);
   if (rows.length === 0 || rows[0].stale !== true) return;
@@ -510,28 +482,11 @@ async function warnIfAuditPurgeStale(client) {
   );
 }
 
-// NULL and '' mean the GUC was never set. RESET and set_config(..., NULL)
-// both leave '' on that session, so a blank value must not block the
-// hardcoded purge. Any other value is an attempt to configure retention.
-function gucBlocksPurge(value) {
-  if (value === null || value === undefined || value === "") return false;
-  return true;
-}
-
-// Own transaction. SET LOCAL ROLE drops the migrator (table owner) to
-// SELECT/DELETE for the deletes. RESET ROLE before the audit insert
-// because audit_purge cannot INSERT. $1 on the insert is the row count
-// from those deletes, not a retention input.
-async function executeAuditPurge(client, options) {
-  if (purgeSettingBlocksDelete(process.env, options)) {
-    return refusePurgeSetting();
-  }
-  const setting = await client.query(AUDIT_PURGE_SETTING_SQL);
-  const value = setting.rows[0] ? setting.rows[0].value : null;
-  if (gucBlocksPurge(value)) {
-    return refusePurgeSetting();
-  }
-
+// Own transaction. SET LOCAL ROLE drops the migrator to SELECT/DELETE
+// for the deletes. RESET ROLE before the audit insert so the
+// audit.purge row is written as the migrator. audit_purge has no
+// INSERT. $1 is the row count from those deletes, not a retention input.
+async function executeAuditPurge(client) {
   await client.query("BEGIN");
   try {
     await client.query("SET LOCAL statement_timeout = '10s'");
@@ -564,7 +519,7 @@ async function executeAuditPurge(client, options) {
         role: AUDIT_PURGE_ROLE,
       }),
     );
-    return { deleted, blocked: false, failed: false };
+    return { deleted, failed: false };
   } catch (err) {
     try {
       await client.query("ROLLBACK");
@@ -587,7 +542,7 @@ async function startupPurge(client) {
     return await executeAuditPurge(client);
   } catch (err) {
     logPurgeFailure(err);
-    return { deleted: 0, blocked: false, failed: true };
+    return { deleted: 0, failed: true };
   }
 }
 
@@ -690,8 +645,6 @@ export {
   AUDIT_PURGE_DELETE_SQL,
   AUDIT_PURGE_INSERT_SQL,
   AUDIT_PURGE_ROLE,
-  AUDIT_PURGE_SETTING_KEYS,
-  AUDIT_PURGE_SETTING_SQL,
   AUDIT_PURGE_STALE_SQL,
   AZURE_POSTGRES_SCOPE,
   CLOCKINOFF_APP_TABLES,
@@ -708,7 +661,6 @@ export {
   gatePendingMigrations,
   isPasswordlessPostgresUrl,
   parsePostgresUrl,
-  purgeSettingBlocksDelete,
   resolveMigratorClientId,
   resolveMigratorPgUser,
   runStartupAuditPurge,
