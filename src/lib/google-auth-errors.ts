@@ -9,7 +9,7 @@
 export type GoogleAuthErrorCode = "cancelled" | "unverified" | "network" | "unavailable";
 
 export const GOOGLE_AUTH_ERROR_COPY: Record<GoogleAuthErrorCode, string> = {
-  cancelled: "Google sign-in was cancelled.",
+  cancelled: "Google sign-in was canceled.",
   unverified: "Google email isn't verified.",
   network: "Couldn't connect to Google. Try again.",
   unavailable:

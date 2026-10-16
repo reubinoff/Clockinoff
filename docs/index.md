@@ -20,7 +20,7 @@ You get:
 - **Manual entries** when you forgot the timer — a quiet
   Timer / Manual toggle in the dock lets you type start / end times and
   pick a date (desktop + mobile, see [Using the timer]({{ '/timer' | relative_url }}#add-a-manual-entry)).
-- **Projects, clients, and tags** to organise entries.
+- **Projects, clients, and tags** to organize entries.
 - **Billable flag** with an optional rate on each project.
 - **CSV and PDF export** over a date range of up to 366 days (and up
   to 10,000 closed entries per download).
@@ -81,4 +81,4 @@ will feel while using it:
 Docs live in [`/docs`](https://github.com/reubinoff/Clockinoff/tree/main/docs).
 Open an issue in the [GitHub repo](https://github.com/reubinoff/Clockinoff/issues)
 if something on the site does not match what the product actually does — the
-docs are meant to describe real behaviour, not aspirations.
+docs are meant to describe real behavior, not aspirations.

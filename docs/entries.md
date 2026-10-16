@@ -48,7 +48,7 @@ Saving an edit on an existing entry shows a **Saved** toast.
 
 While the page is still loading entries from the server (first paint, or
 when you navigate back to `/app` from another page) you'll see 3–5 soft
-grey skeleton rows under a day header instead of a blank screen. If your
+gray skeleton rows under a day header instead of a blank screen. If your
 system has **reduce motion** turned on the skeletons stay as a static
 soft wash rather than pulsing.
 
@@ -101,7 +101,7 @@ so the week boundary never shifts when you switch regions.
 
 On a phone each entry renders as a card scanned top-to-bottom:
 
-- **Top row** — the **project chip** on the left (small coloured dot
+- **Top row** — the **project chip** on the left (small colored dot
   plus the project name so you can tell projects apart at a glance;
   a long name truncates inside the chip). The chip is a label, not a
   button: hovering it does not highlight it, and it does not filter
@@ -132,7 +132,7 @@ On tablets and desktops (`md+`, ≥ 768 px wide) the same data renders
 as a **real table** — one continuous table per week, with a header row
 showing column labels, a row per day-group heading, and one row per
 entry underneath. The columns, left to right, are **Project** (chip
-with the coloured dot), **Description** (truncates to one line; hover
+with the colored dot), **Description** (truncates to one line; hover
 to see the full text), **Tags / Billed / $** (meta column — tag pills
 plus a muted `$` for billable entries and a **Billed** pill when
 the row has been invoiced), **Time** (start–end in your timezone),
@@ -318,7 +318,7 @@ entries at once.
 1. Tap **Select** on the toolbar (right of the Unbilled chip).
 2. The per-row Edit, **⋯**, and Delete buttons are hidden; a 44 × 44 px
    checkbox appears on the left of every **billable, closed** entry.
-   Non-billable rows show a locked, greyed-out checkbox and a *Not
+   Non-billable rows show a locked, grayed-out checkbox and a *Not
    billable — not selectable* note; the running timer is never
    selectable.
 3. Tap the rows you want. A sticky action bar appears at the bottom of

@@ -106,9 +106,10 @@ it is not running. Focus starts on **Cancel**.
 Admins see the zone with the button off and the line “Admins can’t
 delete their own account.”
 
-After a successful delete, the login page shows: “Your account has
-been deleted. Thanks for trying Clockinoff.” That sentence does not
-name the account.
+After a successful delete, the login page heading is “Your account is
+gone” and the subtitle is “Thanks for trying Clockinoff. You can
+create a new account anytime.” There is no separate banner. That
+copy does not name the account.
 
 ---
 
@@ -189,7 +190,7 @@ and the choice applies immediately.
 
 The options are:
 
-- **System** — follows your device's colour scheme and switches
+- **System** — follows your device's color scheme and switches
   automatically when you flip between light and dark in the OS. Labelled
   *Matches your device*.
 - **Light** — always the light Quiet Pulse palette.
@@ -198,7 +199,7 @@ The options are:
 The pref is stored in your browser (`localStorage`) and applied on both
 the app and the sign-in / register screens. The account menu is the
 only Appearance control, and the timer dock (including the `00:00:00`
-digits) picks up the new colours immediately. Because it is
+digits) picks up the new colors immediately. Because it is
 browser-local there is no server profile field for it — each browser
 you sign in from keeps its own choice.
 

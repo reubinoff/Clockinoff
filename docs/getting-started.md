@@ -85,7 +85,7 @@ What happens behind the scenes depends on your Google email:
   account, then try again.
 - **You cancel at Google's screen.** You come back to `/login` with a
   red message under **Continue with Google**: *"Google sign-in was
-  cancelled."* No account change, no session.
+  canceled."* No account change, no session.
 - **Network / other failure.** You come back to `/login` with a red
   message under **Continue with Google**: *"Couldn't connect to
   Google. Try again."* A Google start or callback that is retried

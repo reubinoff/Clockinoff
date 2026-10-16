@@ -894,6 +894,13 @@
     padding-top: 1rem;
     border-top: 1px solid var(--color-border);
   }
+  /* Markdown `---` is already a rule. The heading border stacked a
+     second line above "Start here". */
+  .docs-prose hr + h2 {
+    border-top: 0;
+    margin-top: 0;
+    padding-top: 0;
+  }
   .docs-prose h3 {
     font-size: 1.125rem;
     margin: 1.5rem 0 0.5rem;
@@ -912,6 +919,14 @@
   }
   .docs-prose a:hover {
     color: var(--color-accent-hover);
+  }
+  /* Dark accent (#7c3aed) on the docs surface (#1c1924) is 3.04:1.
+     A lighter violet clears 4.5:1; hover stays lighter, not darker. */
+  html[data-theme="dark"] .docs-prose a {
+    color: #a78bfa;
+  }
+  html[data-theme="dark"] .docs-prose a:hover {
+    color: #c4b5fd;
   }
   .docs-prose strong {
     color: var(--color-ink);
@@ -1034,4 +1049,15 @@ html[data-theme="dark"] .library-segment-active:hover {
   color: var(--color-ink);
   background-color: color-mix(in srgb, var(--color-accent) 42%, var(--color-surface));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, white);
+}
+
+/* #231 signed-out muted copy that sits on the canvas wash, outside the
+   white card. Light muted (#64748b) is 4.76:1 on surface and 4.34:1 on
+   the bottom of the auth gradient (#f6f4f4). #5c6b7c is 4.98:1 there.
+   Dark muted (#a1a1aa) is 7.65:1 on canvas, so this override is light-only. */
+.auth-canvas-copy {
+  color: #5c6b7c;
+}
+html[data-theme="dark"] .auth-canvas-copy {
+  color: var(--color-muted);
 }

@@ -9,7 +9,7 @@ import { AuthDivider } from "@/components/auth/AuthDivider";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { GooglePasswordAccountBanner } from "@/components/auth/GooglePasswordAccountBanner";
 import { GoogleUnavailableBanner } from "@/components/auth/GoogleUnavailableBanner";
-import { IconAlert, IconInfo } from "@/components/icons";
+import { IconAlert } from "@/components/icons";
 import {
   googleAuthErrorMessage,
   isGooglePasswordAccountError,
@@ -34,7 +34,7 @@ function LoginForm(): JSX.Element {
   const params = useSearchParams();
   const next = params.get("next") || "/app";
   const errorCode = params.get("error");
-  const showDeletedBanner = params.get("deleted") === "1";
+  const accountDeleted = params.get("deleted") === "1";
   const showPasswordAccountBanner = isGooglePasswordAccountError(errorCode);
   const showUnavailableBanner = isGoogleUnavailableError(errorCode);
   const googleErrorFromQuery = googleAuthErrorMessage(errorCode);
@@ -85,8 +85,12 @@ function LoginForm(): JSX.Element {
 
   return (
     <AuthShell
-      title="Welcome back"
-      subtitle="Sign in to keep your pulse going."
+      title={accountDeleted ? "Your account is gone" : "Welcome back"}
+      subtitle={
+        accountDeleted
+          ? "Thanks for trying Clockinoff. You can create a new account anytime."
+          : "Sign in to keep your pulse going."
+      }
       footer={
         <>
           New here?{" "}
@@ -96,17 +100,6 @@ function LoginForm(): JSX.Element {
         </>
       }
     >
-      {showDeletedBanner ? (
-        <div
-          role="status"
-          className="flex items-start gap-2 rounded-xl border border-border bg-canvas-2 px-3 py-3"
-        >
-          <IconInfo size={16} className="mt-0.5 shrink-0 text-ink-2" />
-          <p className="text-sm text-ink-2">
-            Your account has been deleted. Thanks for trying Clockinoff.
-          </p>
-        </div>
-      ) : null}
       {showPasswordAccountBanner ? (
         <GooglePasswordAccountBanner onSignInWithPassword={focusEmail} />
       ) : showUnavailableBanner ? (

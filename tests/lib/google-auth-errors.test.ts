@@ -14,7 +14,7 @@ import {
 
 describe("googleAuthErrorMessage", () => {
   it("maps the locked user-fault codes to Dana's exact copy", () => {
-    expect(googleAuthErrorMessage("cancelled")).toBe("Google sign-in was cancelled.");
+    expect(googleAuthErrorMessage("cancelled")).toBe("Google sign-in was canceled.");
     expect(googleAuthErrorMessage("unverified")).toBe("Google email isn't verified.");
     expect(googleAuthErrorMessage("network")).toBe("Couldn't connect to Google. Try again.");
     expect(GOOGLE_AUTH_ERROR_COPY.unavailable).toBe(

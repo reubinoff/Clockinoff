@@ -49,9 +49,9 @@ export function AuthShell({
           {children}
         </div>
         {footer ? (
-          <p className="mt-4 text-center text-sm text-muted">{footer}</p>
+          <p className="auth-canvas-copy mt-4 text-center text-sm">{footer}</p>
         ) : null}
-        <p className="mt-3 text-center text-xs text-muted">
+        <p className="auth-canvas-copy mt-3 text-center text-xs">
           <a
             className="hover:text-ink underline underline-offset-2"
             href={DOCS_URL}

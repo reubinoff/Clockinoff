@@ -75,7 +75,7 @@ filter see [What's not in v1](#whats-not-in-v1).
 Clockinoff does not track currency. The `default_rate` on a project and
 the `rate` on an entry are plain numbers, and `amount` is `hours ×
 effective_rate`. Pick a currency and stick to it per instance; the
-export columns are labelled `rate` and `amount` without a currency
+export columns are labeled `rate` and `amount` without a currency
 symbol.
 
 ## Timezones
@@ -145,7 +145,7 @@ in with Google again, then types the email. Admins see the zone
 turned off (“Admins can’t delete their own account.”).
 
 There is no control that wipes the data and keeps the login. After
-a delete, the login page says the account was deleted and does not
+a delete, the login page says your account is gone and does not
 name whose it was.
 
 If you self-host, deleting rows from the `time_entries`, `projects`,
@@ -161,7 +161,7 @@ existing sessions, so everyone signs in once more.
 **Does Clockinoff have a dark mode?**
 
 Yes. **Appearance** in the account menu offers *System*, *Light*, and
-*Dark* on desktop, tablet, and phone. *System* follows your device's colour
+*Dark* on desktop, tablet, and phone. *System* follows your device's color
 scheme; *Light* and *Dark* force one palette regardless of the OS. The
 timer dock updates as soon as you change the setting. See
 [Account & timezone]({{ '/account' | relative_url }}#appearance)

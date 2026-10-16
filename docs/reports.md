@@ -111,7 +111,7 @@ first.
 The **Export this range** button in the top-right of the Reports page
 hands your current **From** / **To** off to the Export page, which uses
 the same `/api/export/csv` and `/api/export/pdf` endpoints that the
-Export form uses. The exported CSV/PDF are the authoritative artefact
+Export form uses. The exported CSV/PDF are the authoritative artifact
 for invoicing — the Reports page is intentionally read-only chrome, not
 a replacement.
 
