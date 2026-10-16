@@ -683,6 +683,43 @@ No `DELETE`, no `TRUNCATE`, and no table-level `UPDATE`. `id` is
 Table INSERT covers them; they are not in the
 column UPDATE grant, so the app writes them only on the pending or
 closed insert.
+`drizzle/0011_audit_events_retention.sql` (#237, #242) creates
+`audit_purge NOLOGIN` with only `SELECT, DELETE` on `audit_events` and
+`GRANT audit_purge TO CURRENT_USER` (the migrator applying the file).
+It adds `audit_events_created_at_idx` with a plain `CREATE INDEX`.
+`scripts/migrate.mjs` runs each file inside a transaction, so
+`CREATE INDEX CONCURRENTLY` is not used. The same file pre-checks
+`method`, then adds
+`CHECK (method IS NULL OR method IN ('password', 'google')) NOT VALID`
+and `VALIDATE`s it. `clockinoff-prod` is not granted `DELETE`.
+
+After the migrations and before `server.js`, `scripts/migrate.mjs`
+purges in its own transaction: `SET LOCAL ROLE audit_purge`, then
+`created_at < now() - interval '1 year'`. That interval is a SQL
+literal. No env var, GUC, or argument is interpolated into it. If
+`AUDIT_RETENTION`, `AUDIT_RETENTION_DAYS`, `AUDIT_PURGE_INTERVAL`,
+`AUDIT_PURGE_TABLE`, or `AUDIT_PURGE_CUTOFF` is present (including
+blank), or if `clockinoff.audit_retention` is set to anything, or if
+a setting argument is passed, the purge deletes nothing. Do not set
+those. Batches are 10k by primary key, with a total budget of about
+10s (`statement_timeout` 10s per statement). A statement timeout rolls
+the transaction back. Hitting the budget between batches commits the
+rows already deleted. Either way a failure is one JSON line
+`{ event: "audit_purge_failed", error_class }` with no message body,
+and the process still exits 0 so `node server.js` starts. Each
+successful run inserts one `audit.purge` row: `result` is
+`{ cutoff, count, role }`, `actor_email` is `''`, `targets` is `[]`.
+If the previous `audit.purge` row is older than 30 days, startup logs
+`{ event: "audit_purge_stale", role: "audit_purge" }`.
+
+0011 needs `CREATEROLE` on the migrator (it creates `audit_purge` and
+grants that role to itself). Nati: `\du audit_purge` is `NOLOGIN`;
+`\dp audit_events` shows `audit_purge` as `SELECT, DELETE` only and
+`clockinoff-prod` still has no `DELETE` or `TRUNCATE`. A fresh
+`audit.purge` row has `count` 0 and `cutoff` equal to
+`now() - interval '1 year'` when the table has nothing older than a
+year. The migrator must not gain a path that lets the runtime role
+delete.
 If role `clockinoff-prod` is missing, the migration raises and does
 not skip the grants, unless
 `current_setting('clockinoff.allow_missing_app_role', true) = 'on'`.
