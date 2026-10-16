@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Creates the NOLOGIN role the audit_events migration grants to.
+// Creates the NOLOGIN role local and CI migrations expect.
 // Cluster-wide: run once per Postgres instance, before db:migrate.
-// Production already has this role (Entra); do not run this there.
+// Production already has clockinoff-prod (Entra).
+// Do not run this script against production.
 import pg from "pg";
 
 const url = process.env.DATABASE_URL;

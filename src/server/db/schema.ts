@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   jsonb,
   numeric,
@@ -182,32 +183,42 @@ export const timeEntryTags = pgTable(
   }),
 );
 
-export const auditEvents = pgTable("audit_events", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
-  // Snapshot so the actor survives ON DELETE SET NULL on actor_user_id.
-  actorEmail: text("actor_email").notNull(),
-  action: text("action").notNull(),
-  // Each target's id and email. Written once; the app role cannot update it.
-  targets: jsonb("targets").$type<AuditTarget[]>().notNull(),
-  requestId: text("request_id").notNull(),
-  clientIp: text("client_ip"),
-  forwardedFor: text("forwarded_for"),
-  // Request metadata written on INSERT. Not in the column UPDATE grant.
-  userAgent: text("user_agent"),
-  // sha256 of the timely_session cookie (sessions.id). Never the raw token.
-  sessionIdHash: text("session_id_hash"),
-  // password | google on login success and failure. Null for every other
-  // action. Written on INSERT only; not in the 0008 column UPDATE grant.
-  method: text("method").$type<"password" | "google" | null>(),
-  // The runtime role may UPDATE only these three columns (0008 grants).
-  status: text("status").notNull().default("pending"),
-  result: jsonb("result").$type<AuditResultBody>(),
-  completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
-    .notNull()
-    .defaultNow(),
-});
+export const auditEvents = pgTable(
+  "audit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    // Snapshot so the actor survives ON DELETE SET NULL on actor_user_id.
+    actorEmail: text("actor_email").notNull(),
+    action: text("action").notNull(),
+    // Each target's id and email. Written once; the app role cannot update it.
+    targets: jsonb("targets").$type<AuditTarget[]>().notNull(),
+    requestId: text("request_id").notNull(),
+    clientIp: text("client_ip"),
+    forwardedFor: text("forwarded_for"),
+    // Request metadata written on INSERT. Not in the column UPDATE grant.
+    userAgent: text("user_agent"),
+    // sha256 of the timely_session cookie (sessions.id). Never the raw token.
+    sessionIdHash: text("session_id_hash"),
+    // password | google on login success and failure. Null for every other
+    // action. 0011 rejects anything else. Written on INSERT only.
+    method: text("method").$type<"password" | "google" | null>(),
+    // The runtime role may UPDATE only these three columns (0008 grants).
+    status: text("status").notNull().default("pending"),
+    result: jsonb("result").$type<AuditResultBody>(),
+    completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("audit_events_created_at_idx").on(t.createdAt),
+    check(
+      "audit_events_method_check",
+      sql`${t.method} IS NULL OR ${t.method} IN ('password', 'google')`,
+    ),
+  ],
+);
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;

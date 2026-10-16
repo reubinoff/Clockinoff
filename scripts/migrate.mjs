@@ -49,6 +49,13 @@
 // and missing (loopback exempt). Prod should use `sslmode=verify-full`.
 // Mirror of `src/server/db/pg-ssl.ts`.
 //
+// Audit retention (#237): after migrations succeed, `main` purges
+// `audit_events` older than the literal `interval '1 year'` as the
+// migrator, which owns the table. The interval, table, and batch size
+// are constants in this file. The `audit.purge` row records cutoff,
+// count, and current_user. A failure logs `error_class` only and does
+// not fail the process — CD runs `node scripts/migrate.mjs && node server.js`.
+//
 // This file mirrors `src/server/db/azure-ad.ts` on purpose: both the
 // runtime and the migration runner must build the AAD pool config with
 // discrete fields (never `connectionString` + `password` together), and
@@ -423,6 +430,144 @@ async function gatePendingMigrations(client, { useAzureAd, pendingCount }) {
   await assertMigratorOwnsAppTables(client);
 }
 
+// #237. These strings are the purge. Do not build them from env, argv,
+// GUCs, or function arguments.
+const AUDIT_PURGE_BATCH = 10000;
+const AUDIT_PURGE_BUDGET_MS = 10_000;
+const AUDIT_PURGE_DELETE_SQL =
+  "DELETE FROM audit_events WHERE id IN (" +
+  "SELECT id FROM audit_events " +
+  "WHERE created_at < now() - interval '1 year' " +
+  "ORDER BY id LIMIT " +
+  String(AUDIT_PURGE_BATCH) +
+  ")";
+const AUDIT_PURGE_INSERT_SQL =
+  "INSERT INTO audit_events (" +
+  "actor_email, action, targets, request_id, status, result, completed_at" +
+  ") VALUES (" +
+  "'', 'audit.purge', '[]'::jsonb, 'startup', 'completed', " +
+  "jsonb_build_object(" +
+  "'cutoff', now() - interval '1 year', " +
+  "'count', $1::int, " +
+  "'role', current_user" +
+  "), now())";
+const AUDIT_PURGE_STALE_SQL =
+  "SELECT created_at < now() - interval '30 days' AS stale, " +
+  "current_user AS role " +
+  "FROM audit_events WHERE action = 'audit.purge' " +
+  "ORDER BY created_at DESC LIMIT 1";
+
+const PURGE_ERROR_CLASS = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+
+function purgeErrorClass(err) {
+  const name = err instanceof Error ? err.name : "";
+  return PURGE_ERROR_CLASS.test(name) ? name : "Error";
+}
+
+function logPurgeFailure(err) {
+  console.error(
+    JSON.stringify({
+      event: "audit_purge_failed",
+      error_class: purgeErrorClass(err),
+    }),
+  );
+}
+
+async function warnIfAuditPurgeStale(client) {
+  const { rows } = await client.query(AUDIT_PURGE_STALE_SQL);
+  if (rows.length === 0 || rows[0].stale !== true) return;
+  console.warn(
+    JSON.stringify({ event: "audit_purge_stale", role: rows[0].role }),
+  );
+}
+
+// Own transaction, as the connected migrator (table owner). No SET ROLE.
+// $1 is the row count from those deletes, not a retention input. The
+// recorded role is current_user, written by the INSERT itself.
+async function executeAuditPurge(client) {
+  await client.query("BEGIN");
+  try {
+    await client.query("SET LOCAL statement_timeout = '10s'");
+    const who = await client.query("SELECT current_user AS role");
+    const role = who.rows[0]?.role ?? "";
+    const started = Date.now();
+    let deleted = 0;
+    let lastBatch = 0;
+    while (Date.now() - started < AUDIT_PURGE_BUDGET_MS) {
+      const result = await client.query(AUDIT_PURGE_DELETE_SQL);
+      lastBatch = typeof result.rowCount === "number" ? result.rowCount : 0;
+      deleted += lastBatch;
+      if (lastBatch < AUDIT_PURGE_BATCH) break;
+    }
+    if (lastBatch >= AUDIT_PURGE_BATCH) {
+      console.warn(
+        JSON.stringify({
+          event: "audit_purge_budget",
+          count: deleted,
+          role,
+        }),
+      );
+    }
+    await client.query(AUDIT_PURGE_INSERT_SQL, [deleted]);
+    await client.query("COMMIT");
+    console.log(
+      JSON.stringify({
+        event: "audit.purge",
+        count: deleted,
+        role,
+      }),
+    );
+    return { deleted, failed: false };
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // The backend may already have aborted the connection.
+    }
+    throw err;
+  }
+}
+
+// Never throws. migrate.mjs must still exit 0 when the purge fails so
+// the Web App can boot.
+async function startupPurge(client) {
+  try {
+    await warnIfAuditPurgeStale(client);
+  } catch (err) {
+    logPurgeFailure(err);
+  }
+  try {
+    return await executeAuditPurge(client);
+  } catch (err) {
+    logPurgeFailure(err);
+    return { deleted: 0, failed: true };
+  }
+}
+
+async function runStartupAuditPurge() {
+  let pool = null;
+  let client = null;
+  try {
+    const url = resolveDatabaseUrl();
+    pool = new Pool(await buildPoolConfig(url));
+    client = await pool.connect();
+    await startupPurge(client);
+  } catch (err) {
+    logPurgeFailure(err);
+  } finally {
+    try {
+      if (client) client.release();
+    } catch (err) {
+      logPurgeFailure(err);
+    }
+    try {
+      if (pool) await pool.end();
+    } catch (err) {
+      logPurgeFailure(err);
+    }
+  }
+}
+
 async function runMigrations() {
   const dir = resolveMigrationsDir();
   const url = resolveDatabaseUrl();
@@ -485,6 +630,7 @@ async function main() {
   } else {
     console.log(`Applied migrations:\n  - ${applied.join("\n  - ")}`);
   }
+  await runStartupAuditPurge();
 }
 
 // Export the pure helpers so vitest can exercise the migrator-vs-runtime
@@ -492,6 +638,11 @@ async function main() {
 // still runs this file as `node scripts/migrate.mjs`, which hits the
 // bottom-of-file entry point below.
 export {
+  AUDIT_PURGE_BATCH,
+  AUDIT_PURGE_BUDGET_MS,
+  AUDIT_PURGE_DELETE_SQL,
+  AUDIT_PURGE_INSERT_SQL,
+  AUDIT_PURGE_STALE_SQL,
   AZURE_POSTGRES_SCOPE,
   CLOCKINOFF_APP_TABLES,
   DEFAULT_MIGRATOR_PG_USER,
@@ -502,14 +653,18 @@ export {
   assertProductionDatabaseSslMode,
   buildPoolConfig,
   createAzurePasswordProvider,
+  executeAuditPurge,
   formatOwnershipFailure,
   gatePendingMigrations,
   isPasswordlessPostgresUrl,
   parsePostgresUrl,
   resolveMigratorClientId,
   resolveMigratorPgUser,
+  runStartupAuditPurge,
   shouldAssertTableOwnership,
   shouldUseAzureAdAuth,
+  startupPurge,
+  warnIfAuditPurgeStale,
 };
 
 const invokedDirectly =

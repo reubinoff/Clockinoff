@@ -683,6 +683,33 @@ No `DELETE`, no `TRUNCATE`, and no table-level `UPDATE`. `id` is
 Table INSERT covers them; they are not in the
 column UPDATE grant, so the app writes them only on the pending or
 closed insert.
+`drizzle/0011_audit_events_retention.sql` (#237, #242) adds
+`audit_events_created_at_idx` and the `method` check. It does not
+create a role and does not `GRANT`. The index is a plain
+`CREATE INDEX` because `scripts/migrate.mjs` runs each file inside a
+transaction (`CREATE INDEX CONCURRENTLY` cannot). The same file
+pre-checks `method`, then adds
+`CHECK (method IS NULL OR method IN ('password', 'google')) NOT VALID`
+and `VALIDATE`s it. `clockinoff-prod` is still not granted `DELETE`.
+
+After the migrations and before `server.js`, `scripts/migrate.mjs`
+purges in its own transaction as the migrator, which owns
+`audit_events`. There is no `SET ROLE`. The delete is
+`created_at < now() - interval '1 year'`, a SQL literal. Batches are
+10k by primary key, with a total budget of about 10s
+(`statement_timeout` 10s per statement). A statement timeout rolls
+the transaction back. Hitting the budget between batches commits the
+rows already deleted and logs
+`{ event: "audit_purge_budget", count, role }`. A purge error is one
+JSON line `{ event: "audit_purge_failed", error_class }` with no
+message body, and the process still exits 0 so `node server.js`
+starts. Each successful run inserts one `audit.purge` row: `result`
+is `{ cutoff, count, role }` where `role` is `current_user`,
+`actor_email` is `''`, `targets` is `[]`. If the previous
+`audit.purge` row is older than 30 days, startup logs
+`{ event: "audit_purge_stale", role }` with that same session role.
+A fresh `audit.purge` row has `count` 0 and `cutoff` equal to
+`now() - interval '1 year'` when nothing is older than a year.
 If role `clockinoff-prod` is missing, the migration raises and does
 not skip the grants, unless
 `current_setting('clockinoff.allow_missing_app_role', true) = 'on'`.
