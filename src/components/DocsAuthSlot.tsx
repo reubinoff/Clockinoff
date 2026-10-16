@@ -48,7 +48,7 @@ function SignedOutLinks(): JSX.Element {
       </Link>
       <Link
         href="/register"
-        className="whitespace-nowrap text-ink hover:text-accent underline underline-offset-2"
+        className="whitespace-nowrap text-ink hover:text-link-accent underline underline-offset-2"
       >
         Create account
       </Link>

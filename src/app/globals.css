@@ -5,6 +5,7 @@
    @theme inline only publishes the utility names. */
 @theme inline {
   --color-accent: var(--color-accent);
+  --color-link-accent: var(--color-link-accent);
   --color-accent-hover: var(--color-accent-hover);
   --color-accent-fg: var(--color-accent-fg);
   --color-accent-soft: var(--color-accent-soft);
@@ -86,6 +87,8 @@
     color-scheme: light;
 
     --color-accent: #6d28d9;
+    /* Same hex as accent. Light link text stays 6.57:1 on canvas. */
+    --color-link-accent: #6d28d9;
     --color-accent-hover: #5b21b6;
     --color-accent-fg: #ffffff;
     --color-accent-soft: #ede9fe;
@@ -125,6 +128,9 @@
     /* Locked Quiet Pulse dark map. CTA fill and hover both hit ≥ 4.5:1 on
        white text; hover is darker than fill (§HOLD fix). */
     --color-accent: #7c3aed;
+    /* #7c3aed as text on canvas is 3.44:1. The fill stays put: white on
+       it is 5.70:1, and a lighter fill would drop the Log in label. */
+    --color-link-accent: #a78bfa;
     --color-accent-hover: #6d28d9;
     --color-accent-fg: #ffffff;
     --color-accent-soft: #2e1065;
@@ -397,7 +403,7 @@
            focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:ring-inset;
   }
   .tab-link-active {
-    @apply text-accent;
+    @apply text-link-accent;
   }
   /* V2-1: mono timer digits with tabular-nums so ticking doesn't jitter */
   .timer-digits {
@@ -854,7 +860,7 @@
 .entry-resume-btn:disabled:hover,
 .entry-resume-btn:disabled:active {
   background-color: transparent;
-  color: var(--color-accent);
+  color: var(--color-link-accent);
   border-color: transparent;
   transform: none;
   box-shadow: none;

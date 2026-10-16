@@ -94,7 +94,7 @@ function LoginForm(): JSX.Element {
       footer={
         <>
           New here?{" "}
-          <Link className="text-accent hover:underline" href="/register">
+          <Link className="text-link-accent hover:underline" href="/register">
             Create an account
           </Link>
         </>

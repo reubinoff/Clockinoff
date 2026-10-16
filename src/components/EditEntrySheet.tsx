@@ -611,7 +611,7 @@ export default function EditEntrySheet({
           <div className="flex-1" />
           {savedFlash && (
             <span
-              className="inline-flex items-center gap-1 text-sm text-accent"
+              className="inline-flex items-center gap-1 text-sm text-link-accent"
               aria-live="polite"
             >
               <IconCheck size={16} aria-hidden />

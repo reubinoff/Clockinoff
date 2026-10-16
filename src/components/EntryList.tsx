@@ -1650,8 +1650,8 @@ function ResumeButton({
     <button
       type="button"
       className={
-        "entry-resume-btn btn btn-ghost text-accent px-0 " +
-        "enabled:hover:text-accent enabled:hover:bg-accent-soft " +
+        "entry-resume-btn btn btn-ghost text-link-accent px-0 " +
+        "enabled:hover:text-link-accent enabled:hover:bg-accent-soft " +
         sizeClass
       }
       onClick={onResume}

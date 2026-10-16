@@ -189,7 +189,7 @@ export function TimezoneSelect({
                     >
                       <span className="truncate">{z}</span>
                       {selected ? (
-                        <span className="text-xs text-accent">selected</span>
+                        <span className="text-xs text-link-accent">selected</span>
                       ) : null}
                     </li>
                   );

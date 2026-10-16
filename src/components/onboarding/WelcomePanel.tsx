@@ -111,15 +111,15 @@ export default function WelcomePanel({
           </div>
           <ul className="pt-2 space-y-1.5 text-sm text-muted">
             <li className="flex items-center gap-2">
-              <IconCheck size={16} className="text-accent" aria-hidden />
+              <IconCheck size={16} className="text-link-accent" aria-hidden />
               Start your first timer
             </li>
             <li className="flex items-center gap-2">
-              <IconCheck size={16} className="text-accent/40" aria-hidden />
+              <IconCheck size={16} className="text-link-accent/40" aria-hidden />
               Add a project (optional)
             </li>
             <li className="flex items-center gap-2">
-              <IconCheck size={16} className="text-accent/40" aria-hidden />
+              <IconCheck size={16} className="text-link-accent/40" aria-hidden />
               Export a CSV when you&rsquo;re ready
             </li>
           </ul>

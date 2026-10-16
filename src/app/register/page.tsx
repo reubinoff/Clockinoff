@@ -110,7 +110,7 @@ function RegisterForm(): JSX.Element {
       footer={
         <>
           Already tracking?{" "}
-          <Link className="text-accent hover:underline" href="/login">
+          <Link className="text-link-accent hover:underline" href="/login">
             Sign in
           </Link>
         </>
