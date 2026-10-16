@@ -21,17 +21,24 @@ import ManualEntryForm from "@/components/ManualEntryForm";
 import ManualEntrySheet from "@/components/ManualEntrySheet";
 
 const NARROW_TIMER_QUERY = "(max-width: 767px)";
+// Dana: below 400 the collapsed primary is a 44px round icon so the
+// invitation can use the width the "Start" label used to take.
+const ICON_TIMER_QUERY = "(max-width: 399px)";
 const TIMER_PLACEHOLDER = "What are you working on?";
 const TIMER_PLACEHOLDER_NARROW = "What are you on?";
+const COLLAPSED_ICON_BTN =
+  "btn btn-primary press-scale shrink-0 !h-11 !w-11 !min-h-[44px] !min-w-[44px] !p-0 !rounded-full";
 
-function subscribeNarrowTimer(onStoreChange: () => void): () => void {
-  const mq = window.matchMedia(NARROW_TIMER_QUERY);
-  mq.addEventListener("change", onStoreChange);
-  return () => mq.removeEventListener("change", onStoreChange);
+function subscribeMedia(query: string): (onStoreChange: () => void) => () => void {
+  return (onStoreChange) => {
+    const mq = window.matchMedia(query);
+    mq.addEventListener("change", onStoreChange);
+    return () => mq.removeEventListener("change", onStoreChange);
+  };
 }
 
-function narrowTimerSnapshot(): boolean {
-  return window.matchMedia(NARROW_TIMER_QUERY).matches;
+function mediaSnapshot(query: string): () => boolean {
+  return () => window.matchMedia(query).matches;
 }
 
 interface Entry {
@@ -128,8 +135,13 @@ export default function TimerBar({
   // 390 collapsed band and the expanded input share the short invitation.
   // The description control's accessible name stays the full sentence.
   const narrowTimer = useSyncExternalStore(
-    subscribeNarrowTimer,
-    narrowTimerSnapshot,
+    subscribeMedia(NARROW_TIMER_QUERY),
+    mediaSnapshot(NARROW_TIMER_QUERY),
+    () => false,
+  );
+  const iconTimer = useSyncExternalStore(
+    subscribeMedia(ICON_TIMER_QUERY),
+    mediaSnapshot(ICON_TIMER_QUERY),
     () => false,
   );
   const timerPlaceholder = narrowTimer ? TIMER_PLACEHOLDER_NARROW : TIMER_PLACEHOLDER;
@@ -443,7 +455,7 @@ export default function TimerBar({
           md+ (desktop keeps the one-baseline band from #64). */}
       <div
         className={
-          "md:hidden mx-auto max-w-6xl px-2 pb-2 items-center gap-px " +
+          "md:hidden mx-auto max-w-6xl px-4 pb-2 items-center gap-2 " +
           (detailsOpen ? "hidden" : "flex")
         }
         data-timer-mobile-collapsed="true"
@@ -470,7 +482,14 @@ export default function TimerBar({
         </button>
         <span
           className={
-            "timer-digits text-timer-md shrink-0 text-right text-ink min-w-[76px]" +
+            // Below 400 the 44px circle is still a few pixels short of the
+            // invitation at 360 if the clock keeps its natural mono width.
+            // Pin it to the desktop dock's 92px slot, and tighten tracking
+            // just enough that the eight glyphs stay inside that slot.
+            "timer-digits text-timer-md shrink-0 text-right text-ink " +
+            (iconTimer
+              ? "w-[92px] min-w-[92px] max-w-[92px] tracking-[-0.03em]"
+              : "min-w-[76px]") +
             (running ? " timer-running-pulse" : "")
           }
           aria-live="polite"
@@ -480,7 +499,11 @@ export default function TimerBar({
         </span>
         {running ? (
           <button
-            className="btn btn-primary press-scale shrink-0 min-h-[44px] !px-4"
+            className={
+              iconTimer
+                ? COLLAPSED_ICON_BTN
+                : "btn btn-primary press-scale shrink-0 min-h-[44px] !px-4"
+            }
             disabled={pending}
             onClick={stop}
             aria-label="Stop timer"
@@ -488,7 +511,7 @@ export default function TimerBar({
             data-timer-stop-btn="true"
           >
             <IconStop size={16} aria-hidden />
-            <span>Stop</span>
+            {iconTimer ? null : <span>Stop</span>}
           </button>
         ) : (
           <>
@@ -505,7 +528,11 @@ export default function TimerBar({
               </button>
             )}
             <button
-              className="btn btn-primary timer-start-idle press-scale shrink-0 min-h-[44px] !px-2"
+              className={
+                iconTimer
+                  ? `${COLLAPSED_ICON_BTN} timer-start-idle`
+                  : "btn btn-primary timer-start-idle press-scale shrink-0 min-h-[44px] !px-4"
+              }
               disabled={pending}
               onClick={start}
               aria-label="Start timer"
@@ -513,7 +540,7 @@ export default function TimerBar({
               data-timer-start-btn="true"
             >
               <IconPlay size={16} aria-hidden />
-              <span>Start</span>
+              {iconTimer ? null : <span>Start</span>}
             </button>
           </>
         )}

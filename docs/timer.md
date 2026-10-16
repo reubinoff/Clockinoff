@@ -89,7 +89,10 @@ on narrow screens):
 - **Elapsed time** — `HH:MM:SS`, updates every second while a timer is
   running.
 - **Buttons** — **Start** when idle, or **Stop** while a timer is
-  running. **Start** is the sole solid-purple primary. On
+  running. **Start** is the sole solid-purple primary. On a window
+  narrower than 400px the collapsed band's primary is a round 44×44
+  button with the same ▶ / ■ icons as elsewhere and no text label.
+  From 400px up those buttons show **Start** and **Stop** again. On
   tablet/desktop a quiet **Discard** ghost button sits next to **Stop**
   while running; on phones **Discard** lives in the expanded panel so
   the collapsed band stays focused on the primary action.
