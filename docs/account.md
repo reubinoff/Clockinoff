@@ -31,9 +31,9 @@ initial, and on a phone it is the overflow button (`⋯`). Opening it
 shows **Account**, **Docs**, **Appearance**, and **Log out**.
 
 The user docs (`/docs`) use that same control while you are signed in.
-Signed out, the docs header shows **Sign in** and **Create account**.
-Until the sign-in check finishes, that corner is a blank block the
-same size as the account control, so the header does not jump.
+Signed out, the docs header shows **Sign in** and **Create account**
+on one line. Until the sign-in check finishes, that corner keeps the
+width of those links, so the header does not jump.
 
 Open **Account** from that menu to see your sign-in methods. The timer dock is
 hidden on this page. A running timer still shows as a small elapsed

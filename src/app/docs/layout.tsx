@@ -28,7 +28,7 @@ export default function DocsLayout({
             <span className="text-sm">Clockinoff</span>
           </Link>
           <span
-            className="text-xs uppercase tracking-wide text-muted border-l border-border pl-4"
+            className="whitespace-nowrap border-l border-border pl-2 text-xs uppercase tracking-wide text-muted sm:pl-4"
             aria-hidden="true"
           >
             User docs

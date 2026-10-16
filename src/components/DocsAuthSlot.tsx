@@ -12,11 +12,13 @@ type Phase =
   | { status: "signed-in"; email: string; isAdmin: boolean };
 
 /**
- * Reserved width of the account trigger at xl (the trigger's max-w).
- * Pending, signed-in, and signed-out all use it so the header slot does
- * not change size when `/api/auth/me` resolves (#232).
+ * Below xl the signed-out links are 163.5px (Sign in + gap-4 + Create
+ * account at 390). The placeholder and the account trigger are narrower,
+ * so the slot reserves this width and nothing grows when the links appear.
+ * At xl the slot stays the account trigger's max width.
  */
-const SLOT_CLASS = "flex shrink-0 items-center justify-end xl:w-[11.25rem]";
+const SLOT_CLASS =
+  "flex shrink-0 items-center justify-end min-w-[10.21875rem] xl:min-w-0 xl:w-[11.25rem]";
 
 const PLACEHOLDER_CLASS =
   "skeleton-pulse inline-block shrink-0 rounded-xl md:rounded-full " +
@@ -114,8 +116,12 @@ export default function DocsAuthSlot(): JSX.Element {
   }
 
   return (
-    <div data-docs-auth="pending" className={SLOT_CLASS} aria-busy="true">
-      <span className="sr-only">Loading account</span>
+    <div
+      data-docs-auth="pending"
+      className={SLOT_CLASS}
+      aria-busy="true"
+      aria-label="Loading account"
+    >
       <span
         data-docs-auth-placeholder="true"
         aria-hidden="true"

@@ -31,9 +31,12 @@ export function proxy(req: NextRequest): NextResponse {
   if (hasCookie) return NextResponse.next();
 
   if (pathname.startsWith("/api/")) {
+    // This 401 is returned before any route handler. A missing session
+    // cookie never reaches a route-level Cache-Control, so set it here
+    // for every protected /api/* path.
     return NextResponse.json(
       { error: { code: "UNAUTHORIZED", message: "Unauthorized" } },
-      { status: 401 },
+      { status: 401, headers: { "Cache-Control": "private, no-store" } },
     );
   }
   // Same bug class as the Google OAuth NXDOMAIN incident: `req.nextUrl`

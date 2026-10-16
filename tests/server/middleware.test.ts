@@ -43,10 +43,20 @@ describe("middleware /app guard", () => {
     expect(parsed.searchParams.get("next")).toBe("/app");
   });
 
-  it("returns 401 JSON for unauth protected API routes instead of redirecting", () => {
+  it("returns a private no-store 401 for /api/auth/me when the session cookie is absent", async () => {
+    const res = middleware(nextRequest("http://localhost:3000/api/auth/me"));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    await expect(res.json()).resolves.toEqual({
+      error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+    });
+  });
+
+  it("returns a private no-store 401 for /api/entries when the session cookie is absent", () => {
     const res = middleware(nextRequest("http://e0a475862be8:3000/api/entries"));
     expect(res.status).toBe(401);
     expect(res.headers.get("location")).toBeNull();
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
   });
 
   it("redirects an unauthenticated /admin visit to login", () => {

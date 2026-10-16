@@ -210,10 +210,10 @@ lets you switch between the three. **Account**, **Docs**,
 the top header. Admins also see **Admin** there.
 
 The user docs (`/docs`) stay a public page. Signed out, the header shows
-**Sign in** and **Create account**. Signed in, that corner is the same
-account control as on `/app/*` (email, initial, or `⋯`). While the
-sign-in check is still running, the corner is a blank block the same
-size as that control.
+**Sign in** and **Create account** on one line. Signed in, that corner is
+the same account control as on `/app/*` (email, initial, or `⋯`). While
+the sign-in check is still running, that corner keeps the width those
+links use, so the header does not jump and **User docs** stays on one line.
 
 The main area shows recent time entries, which are populated once you start
 using the timer.

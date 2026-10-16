@@ -71,6 +71,8 @@ describe("static /docs header", () => {
     expect(withSession).toBe(anonymous);
     expect(otherSession).toBe(anonymous);
     expect(anonymous).toContain('data-docs-auth="pending"');
+    expect(anonymous).toContain("min-w-[10.21875rem]");
+    expect(anonymous).toContain("whitespace-nowrap");
     expect(anonymous).toContain("Loading account");
     expect(anonymous).not.toContain("Sign in");
     expect(anonymous).not.toContain("Create account");
@@ -103,6 +105,10 @@ describe("DocsAuthSlot", () => {
       expect(box?.className.split(/\s+/)).toContain(token);
     }
     expect(box?.className).toContain("xl:w-[11.25rem]");
+    const slot = document.querySelector("[data-docs-auth='pending']");
+    expect(slot?.className).toContain("min-w-[10.21875rem]");
+    expect(slot?.className).toContain("xl:min-w-0");
+    expect(slot?.className).toContain("xl:w-[11.25rem]");
     expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Account menu/ })).toBeNull();
     expect(document.body.textContent).not.toContain("@");
@@ -155,8 +161,12 @@ describe("DocsAuthSlot", () => {
     const create = screen.getByRole("link", { name: "Create account" });
     expect(create.getAttribute("href")).toBe("/register");
     expect(screen.queryByRole("button", { name: /Account menu/ })).toBeNull();
-    expect(document.querySelector("[data-docs-auth]")?.getAttribute("data-docs-auth")).toBe(
-      "signed-out",
+    const slot = document.querySelector("[data-docs-auth='signed-out']");
+    expect(slot?.className).toContain("min-w-[10.21875rem]");
+    expect(slot?.className).toContain("xl:w-[11.25rem]");
+    expect(screen.getByRole("link", { name: "Sign in" }).className).toContain("whitespace-nowrap");
+    expect(screen.getByRole("link", { name: "Create account" }).className).toContain(
+      "whitespace-nowrap",
     );
   });
 
