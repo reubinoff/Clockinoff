@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Mark } from "@/components/brand/Mark";
+import DocsAuthSlot from "@/components/DocsAuthSlot";
 import { listDocPages } from "@/lib/docs-content";
 
 export const metadata = {
@@ -32,19 +33,10 @@ export default function DocsLayout({
           >
             User docs
           </span>
-          <div className="ml-auto flex items-center gap-4 text-sm">
-            <Link
-              href="/login"
-              className="text-muted hover:text-ink underline underline-offset-2"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/register"
-              className="text-ink hover:text-accent underline underline-offset-2"
-            >
-              Create account
-            </Link>
+          {/* Static for every visitor. The slot fetches /api/auth/me in the
+              browser so a session never lands in the Front Door or ISR HTML. */}
+          <div className="ml-auto flex items-center">
+            <DocsAuthSlot />
           </div>
         </div>
       </header>

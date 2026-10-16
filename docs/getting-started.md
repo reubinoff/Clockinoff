@@ -170,8 +170,8 @@ whether the email is registered.
   or devices at once; signing in somewhere new beyond that signs out
   the oldest session.
 - To end the session, use the **Log out** control in the top right of
-  `/app/*` — this deletes the row in the sessions table and clears the
-  cookie.
+  `/app/*` or `/docs` — this deletes the row in the sessions table and
+  clears the cookie.
 
 ---
 
@@ -208,6 +208,12 @@ clients, and tags pages and defaults to projects. Inside Library, a
 lets you switch between the three. **Account**, **Docs**,
 **Appearance**, and **Log out** live in the overflow menu (`⋯`) in
 the top header. Admins also see **Admin** there.
+
+The user docs (`/docs`) stay a public page. Signed out, the header shows
+**Sign in** and **Create account**. Signed in, that corner is the same
+account control as on `/app/*` (email, initial, or `⋯`). While the
+sign-in check is still running, the corner is a blank block the same
+size as that control.
 
 The main area shows recent time entries, which are populated once you start
 using the timer.

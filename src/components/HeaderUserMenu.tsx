@@ -19,6 +19,14 @@ function initialFromEmail(email: string): string {
 }
 
 /**
+ * Fixed box of the account trigger at each breakpoint (#190 / #232).
+ * The docs header placeholder uses the same tokens so the row does not
+ * jump when the signed-in check resolves.
+ */
+export const ACCOUNT_TRIGGER_SIZE_CLASS =
+  "min-h-[44px] min-w-[44px] md:h-8 md:w-8 md:min-h-8 md:min-w-8 xl:h-8";
+
+/**
  * One account trigger for every width (#190).
  * ≥1280 shows a truncated email, 768–1279 an initial, and below that
  * the existing ⋯. The menu is the same at each width: Account, Docs,
@@ -78,12 +86,13 @@ export default function HeaderUserMenu({
         title={email}
         className={
           "inline-flex shrink-0 items-center justify-center border border-transparent " +
-          "min-h-[44px] min-w-[44px] rounded-xl bg-transparent px-2 text-muted " +
+          ACCOUNT_TRIGGER_SIZE_CLASS +
+          " rounded-xl bg-transparent px-2 text-muted " +
           "hover:bg-canvas-2 hover:text-ink " +
           "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-ring " +
-          "md:h-8 md:w-8 md:min-h-8 md:min-w-8 md:rounded-full md:bg-canvas-2 md:px-0 " +
+          "md:rounded-full md:bg-canvas-2 md:px-0 " +
           "md:text-body-sm md:font-medium md:text-ink md:hover:bg-border " +
-          "xl:h-8 xl:w-auto xl:max-w-[11.25rem] xl:min-w-0 xl:shrink xl:overflow-hidden " +
+          "xl:w-auto xl:max-w-[11.25rem] xl:min-w-0 xl:shrink xl:overflow-hidden " +
           "xl:rounded-lg xl:bg-transparent xl:px-2 xl:font-normal xl:text-muted " +
           "xl:hover:bg-canvas-2 xl:hover:text-ink"
         }
