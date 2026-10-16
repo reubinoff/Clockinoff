@@ -124,6 +124,21 @@ describe("DELETE /api/auth/me", () => {
     cookieValue = undefined;
   });
 
+  it("GET /api/auth/me is private and not stored", async () => {
+    const account = await makeRegisteredUser();
+    cookieValue = account.token;
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    const body = (await res.json()) as { email: string };
+    expect(body.email).toBe(account.email);
+
+    cookieValue = undefined;
+    const anon = await GET();
+    expect(anon.status).toBe(401);
+    expect(anon.headers.get("cache-control")).toBe("private, no-store");
+  });
+
   it("deletes the signed-in user, cascades rows, clears the cookie, and audits", async () => {
     const account = await makeRegisteredUser();
     cookieValue = account.token;

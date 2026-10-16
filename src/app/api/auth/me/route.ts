@@ -29,9 +29,15 @@ export async function GET(): Promise<Response> {
   try {
     const user = await requireUser();
     const methods = await getSignInMethods(user.id);
-    return ok({ ...user, ...methods });
+    const res = ok({ ...user, ...methods });
+    // The docs header reads this in the browser. Keep the body out of any
+    // shared cache (Front Door / ISR); the static /docs HTML stays anonymous.
+    res.headers.set("Cache-Control", "private, no-store");
+    return res;
   } catch (err) {
-    return jsonError(err);
+    const res = jsonError(err);
+    res.headers.set("Cache-Control", "private, no-store");
+    return res;
   }
 }
 
