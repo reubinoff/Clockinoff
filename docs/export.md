@@ -39,11 +39,11 @@ Go to `/app/export`. You will see:
   From the small-screen breakpoint up, **From** and **To** sit in two
   columns. On a phone they stack.
 - **Download CSV** / **Download PDF** — one button per format, sharing
-  one row (the same baseline). On a window **1280px or wider** that
-  pair lines up with the bottom of the From and To fields, across the
-  full width of the page. While a download is being prepared the
-  button label reads **Preparing…** and both buttons disable to
-  prevent a double-fire.
+  one row (the same baseline) and the same height. On a window
+  **1280px or wider** that pair lines up with the bottom of the From
+  and To fields, across the full width of the page. While a download
+  is being prepared the button label reads **Preparing…** and both
+  buttons disable to prevent a double-fire.
 
 Defaults: the page opens on **This month** (from the 1st of the current
 month through today). Both dates are interpreted in your account

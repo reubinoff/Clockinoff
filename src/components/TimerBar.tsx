@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { formatDurationHms } from "@/lib/tz";
 import {
   emitEntryAdded,
@@ -19,6 +19,20 @@ import {
 } from "@/components/icons";
 import ManualEntryForm from "@/components/ManualEntryForm";
 import ManualEntrySheet from "@/components/ManualEntrySheet";
+
+const NARROW_TIMER_QUERY = "(max-width: 767px)";
+const TIMER_PLACEHOLDER = "What are you working on?";
+const TIMER_PLACEHOLDER_NARROW = "What are you on?";
+
+function subscribeNarrowTimer(onStoreChange: () => void): () => void {
+  const mq = window.matchMedia(NARROW_TIMER_QUERY);
+  mq.addEventListener("change", onStoreChange);
+  return () => mq.removeEventListener("change", onStoreChange);
+}
+
+function narrowTimerSnapshot(): boolean {
+  return window.matchMedia(NARROW_TIMER_QUERY).matches;
+}
 
 interface Entry {
   id: string;
@@ -111,6 +125,14 @@ export default function TimerBar({
   const [billable, setBillable] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [pending, setPending] = useState(false);
+  // 390 collapsed band and the expanded input share the short invitation.
+  // The description control's accessible name stays the full sentence.
+  const narrowTimer = useSyncExternalStore(
+    subscribeNarrowTimer,
+    narrowTimerSnapshot,
+    () => false,
+  );
+  const timerPlaceholder = narrowTimer ? TIMER_PLACEHOLDER_NARROW : TIMER_PLACEHOLDER;
   // Mobile-only: the grabber expands the description editor. Project and
   // Billable stay visible without that expand (#101).
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -368,9 +390,10 @@ export default function TimerBar({
     });
   };
   // #82 mobile collapsed band preview: show the typed/running description
-  // if there is one, otherwise fall back to the same placeholder the input
-  // uses so the band reads as an invitation to tap in. We trim so a stray
-  // leading space doesn't suppress the placeholder.
+  // if there is one, otherwise the same invitation the input uses. Below
+  // the md breakpoint that invitation is the short phone string. The
+  // button's accessible name stays the full sentence. We trim so a stray
+  // leading space doesn't suppress the invitation.
   const hasDescription = description.trim().length > 0;
 
   return (
@@ -432,7 +455,7 @@ export default function TimerBar({
           aria-label={
             hasDescription
               ? "Edit timer description"
-              : "What are you working on?"
+              : TIMER_PLACEHOLDER
           }
           data-timer-mobile-desc-trigger="true"
         >
@@ -442,7 +465,7 @@ export default function TimerBar({
               (hasDescription ? "text-ink" : "text-muted")
             }
           >
-            {hasDescription ? description : "What are you working on?"}
+            {hasDescription ? description : timerPlaceholder}
           </span>
         </button>
         <span
@@ -570,7 +593,7 @@ export default function TimerBar({
             always-visible row. */}
         <input
           className="input w-full md:flex-1 md:w-auto md:min-w-0 md:order-1"
-          placeholder="What are you working on?"
+          placeholder={timerPlaceholder}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           data-timer-description="true"

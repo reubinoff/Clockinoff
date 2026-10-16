@@ -114,13 +114,13 @@ export default function ProjectsPanel({
 
       <form
         onSubmit={create}
-        className="card p-4 grid grid-cols-1 md:grid-cols-5 gap-3 md:items-end"
+        className="card p-4 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end"
       >
-        <div className="md:col-span-2">
+        <div className="min-w-0">
           <label className="label">Name</label>
           <input className="input" required value={name} onChange={(e) => setName(e.target.value)} />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="label">Client</label>
           <select
             className="input"
@@ -137,7 +137,7 @@ export default function ProjectsPanel({
               ))}
           </select>
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="label">Default rate</label>
           <input
             className="input"
@@ -148,7 +148,7 @@ export default function ProjectsPanel({
             onChange={(e) => setRate(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -157,11 +157,11 @@ export default function ProjectsPanel({
             />
             Billable
           </label>
-          <button type="submit" className="btn btn-primary ml-auto w-full sm:w-auto">
+          <button type="submit" className="btn btn-primary w-full sm:w-auto">
             Add
           </button>
         </div>
-        {error && <p className="text-sm text-red-700 md:col-span-5">{error}</p>}
+        {error && <p className="text-sm text-red-700 md:col-span-4">{error}</p>}
       </form>
 
       {/* Mobile: card rows */}

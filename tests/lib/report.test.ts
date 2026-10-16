@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   _internal,
+  X_AXIS_LABEL_MIN_GAP_PX,
   donutArcs,
   enumerateDayKeys,
   hoursFromSeconds,
   niceAxisTopCount,
   niceAxisTopHours,
   summarize,
+  xAxisLabelIndices,
   type ProjectGroup,
   type ReportEntry,
 } from "@/lib/report";
@@ -257,6 +259,51 @@ describe("summarize", () => {
       TZ,
     );
     expect(s.projects.map((p) => p.name)).toEqual(["Apple", "Zed"]);
+  });
+});
+
+function labelGaps(indices: number[], count: number, plotWidth: number): number[] {
+  const slot = plotWidth / count;
+  const gaps: number[] = [];
+  for (let i = 1; i < indices.length; i += 1) {
+    gaps.push((indices[i]! - indices[i - 1]!) * slot);
+  }
+  return gaps;
+}
+
+describe("xAxisLabelIndices", () => {
+  it("returns nothing for an empty series and one tick for a single day", () => {
+    expect(xAxisLabelIndices(0, 640)).toEqual([]);
+    expect(xAxisLabelIndices(1, 640)).toEqual([0]);
+  });
+
+  it("keeps the first and last day when a zero-width plot has no room to measure", () => {
+    expect(xAxisLabelIndices(16, 0)).toEqual([0, 15]);
+  });
+
+  // Tablet Reports card (~768) and the chart beside the total (~1280).
+  // A month-to-date of 16 days used to force the last label next to the
+  // previous stride tick, so "Oct 15" and "Oct 16" overlapped.
+  it.each([
+    ["768", 636],
+    ["1280", 804],
+  ])("spaces a 16-day axis at %s without rotating labels", (_width, plotWidth) => {
+    const indices = xAxisLabelIndices(16, plotWidth);
+    expect(indices[0]).toBe(0);
+    expect(indices[indices.length - 1]).toBe(15);
+    for (const gap of labelGaps(indices, 16, plotWidth)) {
+      expect(gap).toBeGreaterThanOrEqual(X_AXIS_LABEL_MIN_GAP_PX);
+    }
+    expect(indices).not.toContain(14);
+  });
+
+  it("thins a full month so the closing day does not sit on the previous tick", () => {
+    const indices = xAxisLabelIndices(31, 636);
+    expect(indices[0]).toBe(0);
+    expect(indices[indices.length - 1]).toBe(30);
+    for (const gap of labelGaps(indices, 31, 636)) {
+      expect(gap).toBeGreaterThanOrEqual(X_AXIS_LABEL_MIN_GAP_PX);
+    }
   });
 });
 

@@ -178,6 +178,29 @@ export function niceAxisTopHours(peakSeconds: number): number {
   return Math.ceil(peakHours / 4) * 4;
 }
 
+// "Mmm d" at 10px, centered on the bar. Neighbouring labels collide when
+// their centers sit closer than this. The Reports chart keeps labels
+// horizontal and drops ticks instead of rotating them.
+export const X_AXIS_LABEL_MIN_GAP_PX = 56;
+
+export function xAxisLabelIndices(count: number, plotWidth: number): number[] {
+  if (count <= 0) return [];
+  if (count === 1) return [0];
+  const last = count - 1;
+  const width = Number.isFinite(plotWidth) && plotWidth > 0 ? plotWidth : 0;
+  if (width === 0) return [0, last];
+  const slot = width / count;
+  const stride = Math.max(1, Math.ceil(X_AXIS_LABEL_MIN_GAP_PX / slot));
+  const indices: number[] = [];
+  for (let i = 0; i < last; i += stride) indices.push(i);
+  const minSlots = X_AXIS_LABEL_MIN_GAP_PX / slot;
+  while (indices.length > 0 && last - indices[indices.length - 1]! < minSlots) {
+    indices.pop();
+  }
+  indices.push(last);
+  return indices;
+}
+
 // Donut uses a single-segment ring when there is exactly one project with
 // time, so SVG arcs don't degenerate. Returns the cumulative start/end
 // angles in radians starting at 12 o'clock, clockwise.

@@ -50,7 +50,9 @@ Fill in the form at the top of the Projects page:
   this per-project flag only matters if you want a specific project's
   entries to default the other way.
 
-Click **Add**. The new project appears at the top of the table.
+Click **Add**. On a tablet-width window the name, client, rate, and
+**Add** button share one row, and **Add** stays inside the card. The
+new project appears at the top of the table.
 
 ---
 

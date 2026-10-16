@@ -83,9 +83,13 @@ Height is decimal hours. Days with zero tracked time render as a thin
 baseline tick — not a gap — so you can tell "I didn't track anything on
 Tue Sep 15" apart from "there's no bar at all".
 
-The y-axis snaps to a readable round-hours top (1h minimum). Hover (or
-tap) a bar to see the full `Weekday Mon dd: X.XXh` tooltip. The chart
-uses the Quiet Pulse accent purple on both light and dark themes.
+The y-axis snaps to a readable round-hours top (1h minimum). Date
+labels on the x-axis stay horizontal. When the range is long enough
+that neighbouring dates would collide — including the last day of the
+range — Clockinoff drops ticks so the labels that remain have room.
+Hover (or tap) a bar to see the full `Weekday Mon dd: X.XXh` tooltip.
+The chart uses the Quiet Pulse accent purple on both light and dark
+themes.
 
 ### By project
 

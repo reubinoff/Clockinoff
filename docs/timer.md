@@ -66,7 +66,9 @@ digits to match light or dark.
 The dock stays compact and contains, left to right (or top to bottom
 on narrow screens):
 
-- **Description** — free text for "What are you working on?".
+- **Description** — free text. On tablet and desktop the field
+  placeholder is "What are you working on?". On a phone the collapsed
+  band and the expanded field both invite you with "What are you on?".
   On tablet/desktop this is an inline input you can type into right in
   the dock. On phones the collapsed band shows the description as a
   tappable label — tap it (or the grabber above the band) to open the

@@ -12,6 +12,7 @@ import {
   hoursFromSeconds,
   niceAxisTopCount,
   niceAxisTopHours,
+  xAxisLabelIndices,
   type DayBucket,
 } from "@/lib/report";
 
@@ -71,14 +72,6 @@ function countTicks(top: number): number[] {
   const ticks = new Set<number>();
   for (let i = 0; i <= 4; i += 1) ticks.add(Math.round((peak / 4) * i));
   return [...ticks].sort((a, b) => a - b);
-}
-
-function tickStride(count: number): number {
-  if (count <= 10) return 1;
-  if (count <= 16) return 2;
-  if (count <= 24) return 3;
-  if (count <= 40) return 5;
-  return Math.ceil(count / 10);
 }
 
 // useLayoutEffect runs before paint, so the first-measure render lands
@@ -193,7 +186,7 @@ export default function RangeBarChart({
     unit === "count"
       ? countTicks(axisTop)
       : Array.from({ length: gridLines + 1 }, (_, i) => (axisTop / gridLines) * i);
-  const stride = tickStride(data.length);
+  const labelIndices = xAxisLabelIndices(data.length, plotWidth);
 
   return (
     <figure
@@ -276,11 +269,12 @@ export default function RangeBarChart({
             </g>
           );
         })}
-        {/* X-axis labels. Thinned to `stride` so the longest range still
-            lays out cleanly. The last label is always drawn so the chart
-            reads as "range ends here". */}
-        {data.map((d, i) => {
-          if (i % stride !== 0 && i !== data.length - 1) return null;
+        {/* X-axis labels stay horizontal. Ticks are thinned to the measured
+            plot width, and the forced end label drops the tick beside it
+            when the two would overlap. */}
+        {labelIndices.map((i) => {
+          const d = data[i];
+          if (!d) return null;
           const slotX = plotLeft + i * slotWidth;
           const centerX = slotX + slotWidth / 2;
           return (

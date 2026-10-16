@@ -202,7 +202,7 @@ export default function ExportPage(): JSX.Element {
           </div>
           <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:items-end xl:col-auto xl:shrink-0">
             <button
-              className="btn btn-primary w-full sm:w-auto"
+              className="btn btn-primary min-h-[48px] w-full sm:w-auto"
               onClick={() => download("csv")}
               disabled={!from || !to || pending !== null}
             >
@@ -210,7 +210,7 @@ export default function ExportPage(): JSX.Element {
               <span>{pending === "csv" ? "Preparing…" : "Download CSV"}</span>
             </button>
             <button
-              className="btn w-full sm:w-auto"
+              className="btn min-h-[48px] w-full sm:w-auto"
               onClick={() => download("pdf")}
               disabled={!from || !to || pending !== null}
             >
