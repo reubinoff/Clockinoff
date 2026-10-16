@@ -113,6 +113,19 @@ describe("timer placeholder at 390", () => {
     expect(field).toHaveAttribute("aria-label", "Timer description");
   });
 
+  it("shrinks only the collapsed label below 390", async () => {
+    installMatchMedia(360);
+    idleFetch();
+    render(<TimerBar timezone="Asia/Jerusalem" />);
+    const invitation = await screen.findByRole("button", {
+      name: "What are you working on?",
+    });
+    const label = invitation.querySelector("span");
+    expect(classTokens(label?.className ?? "").has("max-[389px]:text-[14px]")).toBe(true);
+    const field = screen.getByRole("textbox", { name: "Timer description" });
+    expect(field.className).not.toContain("text-[14px]");
+  });
+
   it("keeps the longer placeholder from the md breakpoint up", async () => {
     installMatchMedia(768);
     idleFetch();

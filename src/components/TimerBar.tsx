@@ -480,7 +480,7 @@ export default function TimerBar({
         >
           <span
             className={
-              "min-w-0 flex-1 truncate " +
+              "min-w-0 flex-1 truncate max-[389px]:text-[14px] " +
               (hasDescription ? "text-ink" : "text-muted")
             }
           >
